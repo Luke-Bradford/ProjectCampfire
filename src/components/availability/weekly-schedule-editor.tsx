@@ -3,206 +3,165 @@
 /**
  * WeeklyScheduleEditor
  *
- * Key design decisions:
- * - The grid is rendered once as static HTML. Cell background colours are
- *   updated by mutating classList directly (no React state during drag).
- *   React state is only written on pointerup, keeping drag smooth.
- * - Pointer capture is NOT used because it prevents the container from
- *   scrolling mid-drag. Instead we listen on window for pointermove/up.
- * - The scroll container has a fixed height and the grid never re-renders
- *   during painting, so there are no layout shifts.
+ * Uses FullCalendar's timeGridWeek view on a fixed "template week"
+ * (2024-01-01 Mon → 2024-01-07 Sun) with no navigation.
+ *
+ * The user drags to create green "available" blocks. FullCalendar handles
+ * all pointer logic natively — drag-to-create, resize, drag-to-move, and
+ * auto-scroll when dragging near the container edge. We just convert between
+ * FullCalendar events ↔ WeeklySlots on load/save.
  */
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import FullCalendar from "@fullcalendar/react";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import interactionPlugin from "@fullcalendar/interaction";
+import type { DateSelectArg, EventClickArg, EventChangeArg, EventInput } from "@fullcalendar/core";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
-import { cellsToSlots, slotsToCell } from "@/lib/availability-utils";
 import type { WeeklySlots } from "@/server/db/schema/availability";
 import { toast } from "sonner";
 
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const TOTAL_CELLS = 48;        // 30 min × 48 = 24 h
-const DEFAULT_SCROLL_CELL = 38; // show 19:00 on load
-const CELL_H = 18;              // px per row — must match CSS
-const HEADER_H = 32;            // px for sticky header row
+// ── Template week ─────────────────────────────────────────────────────────────
+// We point FullCalendar at a fixed week. The displayed "date" doesn't matter
+// to the user — only the day-of-week and time range matter.
+// firstDay=1 (Mon), so the week renders Mon 1 Jan → Sun 7 Jan.
+const TEMPLATE_START = "2024-01-01"; // Monday
 
-// Module-level timezone list (computed once, not on render)
+// JS getDay() → template date string
+const DAY_TO_DATE: Record<number, string> = {
+  1: "2024-01-01",
+  2: "2024-01-02",
+  3: "2024-01-03",
+  4: "2024-01-04",
+  5: "2024-01-05",
+  6: "2024-01-06",
+  0: "2024-01-07",
+};
+
+// Reverse lookup
+const DATE_TO_DAY = Object.fromEntries(
+  Object.entries(DAY_TO_DATE).map(([day, date]) => [date, Number(day)])
+) as Record<string, number>;
+
+// ── Conversion helpers ────────────────────────────────────────────────────────
+
+function localHHmm(d: Date): string {
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function localYYYYMMDD(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** WeeklySlots → FullCalendar EventInput[] on the template week */
+function slotsToEvents(slots: WeeklySlots): EventInput[] {
+  const events: EventInput[] = [];
+  for (const [dayStr, daySlots] of Object.entries(slots)) {
+    const day = Number(dayStr);
+    const date = DAY_TO_DATE[day];
+    if (!date) continue;
+    for (const slot of daySlots ?? []) {
+      events.push({
+        id: `${day}-${slot.start}`,
+        start: `${date}T${slot.start}:00`,
+        end:   `${date}T${slot.end}:00`,
+      });
+    }
+  }
+  return events;
+}
+
+/** FullCalendar EventInput[] → WeeklySlots */
+function eventsToSlots(events: EventInput[]): Record<string, Array<{ start: string; end: string }>> {
+  const slots: Record<string, Array<{ start: string; end: string }>> = {};
+  for (const ev of events) {
+    if (!ev.start || !ev.end) continue;
+    // We always store events as ISO strings — see handleSelect / handleEventChange
+    if (typeof ev.start !== "string" || typeof ev.end !== "string") continue;
+    const dateStr   = ev.start.slice(0, 10);
+    const startTime = ev.start.slice(11, 16);
+    const endTime   = ev.end.slice(11, 16);
+    const day = DATE_TO_DAY[dateStr];
+    if (day === undefined) continue;
+    const key = String(day);
+    if (!slots[key]) slots[key] = [];
+    slots[key]!.push({ start: startTime, end: endTime });
+  }
+  return slots;
+}
+
+// ── Timezone list ─────────────────────────────────────────────────────────────
 const ALL_TIMEZONES: string[] = (() => {
   try { return Intl.supportedValuesOf("timeZone"); }
   catch { return ["UTC", "Europe/London", "America/New_York", "America/Los_Angeles"]; }
 })();
 
-function toTimeLabel(cell: number) {
-  const h = Math.floor(cell / 2);
-  const m = (cell % 2) * 30;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
-
-// ── Cell ref helpers ─────────────────────────────────────────────────────────
-// Each cell has id="cell-{day}-{cell}" so we can reach it without React state.
-function cellId(day: number, cell: number) { return `cell-${day}-${cell}`; }
-
-function setCellSelected(day: number, cell: number, selected: boolean) {
-  const el = document.getElementById(cellId(day, cell));
-  if (!el) return;
-  el.classList.toggle("bg-emerald-400/80", selected);
-  el.classList.toggle("dark:bg-emerald-600/80", selected);
-}
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function WeeklyScheduleEditor() {
   const utils = api.useUtils();
-  const { data: schedule, isLoading } = api.availability.getSchedule.useQuery();
+  const { data: schedule, error: scheduleError } = api.availability.getSchedule.useQuery();
 
   const [timezone, setTimezone] = useState<string>(() => {
     try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return "UTC"; }
   });
-
-  // The committed grid state — only updated on pointerup or when schedule loads
-  const committedRef = useRef<Map<number, Set<number>>>(new Map());
+  const [events, setEvents] = useState<EventInput[]>([]);
   const [isDirty, setIsDirty] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const calRef = useRef<FullCalendar>(null);
 
-  // Painting state — stored in refs so we don't re-render during drag
-  const paintingRef = useRef(false);
-  const paintModeRef = useRef(true); // true = add, false = remove
-  // Tracks cells painted this stroke so we don't double-toggle
-  const strokeRef = useRef<Set<string>>(new Set());
-
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const gridRef = useRef<HTMLDivElement>(null);
-
-  // ── Load schedule into DOM and committedRef ─────────────────────────────
+  // Populate from saved schedule
   useEffect(() => {
-    if (!schedule) return;
-    setTimezone(schedule.timezone);
-    const newGrid = new Map<number, Set<number>>();
-    const slots = schedule.slots as WeeklySlots;
-    for (let day = 0; day < 7; day++) {
-      newGrid.set(day, slotsToCell(slots[day] ?? []));
-    }
-    committedRef.current = newGrid;
-    setIsDirty(false);
-
-    // Sync DOM to loaded state
-    for (let day = 0; day < 7; day++) {
-      const cells = newGrid.get(day) ?? new Set<number>();
-      for (let cell = 0; cell < TOTAL_CELLS; cell++) {
-        setCellSelected(day, cell, cells.has(cell));
-      }
+    if (schedule) {
+      setTimezone(schedule.timezone);
+      setEvents(slotsToEvents(schedule.slots as WeeklySlots));
+      setIsDirty(false);
     }
   }, [schedule]);
 
-  // ── Pre-scroll to 19:00 once grid has rendered ──────────────────────────
-  useEffect(() => {
-    if (!isLoading && scrollRef.current) {
-      // +HEADER_H because the header is sticky inside the scroll container
-      scrollRef.current.scrollTop = DEFAULT_SCROLL_CELL * CELL_H;
-    }
-  }, [isLoading]);
-
-  // ── Coordinate → (day, cell) from pointer event ─────────────────────────
-  function hitTest(clientX: number, clientY: number): { day: number; cell: number } | null {
-    const scroll = scrollRef.current;
-    if (!scroll) return null;
-    const rect = scroll.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top + scroll.scrollTop;
-    if (x < 60) return null;
-    const colW = (rect.width - 60) / 7;
-    const day = Math.floor((x - 60) / colW);
-    const cell = Math.floor((y - HEADER_H) / CELL_H);
-    if (day < 0 || day > 6 || cell < 0 || cell >= TOTAL_CELLS) return null;
-    return { day, cell };
-  }
-
-  // ── Pointer handlers (no React state during drag) ───────────────────────
-  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    if (e.button !== 0) return;
-    const hit = hitTest(e.clientX, e.clientY);
-    if (!hit) return;
-    const { day, cell } = hit;
-
-    // Determine paint mode from current cell state in committedRef
-    const cells = committedRef.current.get(day) ?? new Set<number>();
-    paintModeRef.current = !cells.has(cell);
-    paintingRef.current = true;
-    strokeRef.current = new Set();
-
-    paintCell(day, cell);
-  }
-
-  function paintCell(day: number, cell: number) {
-    const key = `${day}-${cell}`;
-    if (strokeRef.current.has(key)) return; // already painted this stroke
-    strokeRef.current.add(key);
-
-    const cells = committedRef.current.get(day) ?? new Set<number>();
-    const adding = paintModeRef.current;
-
-    if (adding) cells.add(cell);
-    else cells.delete(cell);
-    committedRef.current.set(day, cells);
-
-    setCellSelected(day, cell, adding);
+  // Drag-to-create
+  const handleSelect = useCallback((info: DateSelectArg) => {
+    const dateStr   = localYYYYMMDD(info.start);
+    const startTime = localHHmm(info.start);
+    const endTime   = localHHmm(info.end);
+    setEvents(prev => [
+      ...prev,
+      { id: `slot-${Date.now()}`, start: `${dateStr}T${startTime}:00`, end: `${dateStr}T${endTime}:00` },
+    ]);
     setIsDirty(true);
-  }
+    info.view.calendar.unselect();
+  }, []);
 
-  // Attach global listeners so drag works outside the scroll container
-  useEffect(() => {
-    function onMove(e: PointerEvent) {
-      if (!paintingRef.current) return;
-      const hit = hitTest(e.clientX, e.clientY);
-      if (hit) paintCell(hit.day, hit.cell);
-    }
-    function onUp() {
-      paintingRef.current = false;
-      strokeRef.current = new Set();
-    }
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-  }, []); // refs only, no reactive deps needed
+  // Click to delete
+  const handleEventClick = useCallback((info: EventClickArg) => {
+    setEvents(prev => prev.filter(e => e.id !== info.event.id));
+    setIsDirty(true);
+  }, []);
 
-  // ── Save ────────────────────────────────────────────────────────────────
+  // Resize or drag-to-move
+  const handleEventChange = useCallback((info: EventChangeArg) => {
+    if (!info.event.start || !info.event.end) return;
+    const dateStr   = localYYYYMMDD(info.event.start);
+    const startTime = localHHmm(info.event.start);
+    const endTime   = localHHmm(info.event.end);
+    setEvents(prev => prev.map(e =>
+      e.id !== info.event.id ? e : { ...e, start: `${dateStr}T${startTime}:00`, end: `${dateStr}T${endTime}:00` }
+    ));
+    setIsDirty(true);
+  }, []);
+
   const upsert = api.availability.upsertSchedule.useMutation({
     onSuccess: () => {
       setIsDirty(false);
-      setSaveError(null);
       void utils.availability.getSchedule.invalidate();
       void utils.availability.computed.invalidate();
       toast.success("Schedule saved");
     },
-    onError: (e) => {
-      setSaveError(e.message);
-      toast.error(`Save failed: ${e.message}`);
-    },
+    onError: (e) => toast.error(`Save failed: ${e.message}`),
   });
 
   function handleSave() {
-    setSaveError(null);
-    const slots: Record<string, Array<{ start: string; end: string }>> = {};
-    for (let day = 0; day < 7; day++) {
-      const dayCells = committedRef.current.get(day) ?? new Set<number>();
-      if (dayCells.size > 0) slots[String(day)] = cellsToSlots(dayCells);
-    }
-    upsert.mutate({ timezone, slots });
-  }
-
-  function handleClear() {
-    committedRef.current = new Map();
-    for (let day = 0; day < 7; day++) {
-      for (let cell = 0; cell < TOTAL_CELLS; cell++) {
-        setCellSelected(day, cell, false);
-      }
-    }
-    setIsDirty(true);
-  }
-
-  if (isLoading) {
-    return <div className="py-8 text-center text-muted-foreground">Loading schedule...</div>;
+    upsert.mutate({ timezone, slots: eventsToSlots(events) });
   }
 
   return (
@@ -225,8 +184,13 @@ export function WeeklyScheduleEditor() {
             {ALL_TIMEZONES.map((tz) => <option key={tz} value={tz} />)}
           </datalist>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleClear}>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { setEvents([]); setIsDirty(true); }}
+            disabled={events.length === 0 && !isDirty}
+          >
             Clear all
           </Button>
           <Button size="sm" onClick={handleSave} disabled={!isDirty || upsert.isPending}>
@@ -235,70 +199,57 @@ export function WeeklyScheduleEditor() {
         </div>
       </div>
 
-      {saveError && (
+      {scheduleError && (
         <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {saveError}
+          {scheduleError.message}
         </p>
       )}
 
-      {!schedule && !isDirty && (
-        <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-          Drag across the grid to paint your free hours. Repeats every week — adjust specific dates on the Calendar tab.
-        </div>
-      )}
-
-      {/* Grid — static HTML, colours updated via direct DOM */}
-      <div
-        ref={scrollRef}
-        className="overflow-y-auto rounded-lg border select-none"
-        style={{ height: "420px" }}
-        onPointerDown={handlePointerDown}
-        onContextMenu={(e) => e.preventDefault()}
-      >
-        <div ref={gridRef}>
-          {/* Sticky header */}
-          <div
-            className="sticky top-0 z-10 grid bg-background"
-            style={{ gridTemplateColumns: "60px repeat(7, 1fr)", height: `${HEADER_H}px` }}
-          >
-            <div className="border-b border-r bg-muted/50" />
-            {DAYS.map((d) => (
-              <div key={d} className="flex items-center justify-center border-b bg-muted/50 text-xs font-medium">
-                {d}
-              </div>
-            ))}
-          </div>
-
-          {/* Time rows */}
-          {Array.from({ length: TOTAL_CELLS }, (_, cell) => {
-            const isHour = cell % 2 === 0;
-            return (
-              <div
-                key={cell}
-                className="grid"
-                style={{ gridTemplateColumns: "60px repeat(7, 1fr)", height: `${CELL_H}px` }}
-              >
-                <div
-                  className={`border-r px-1 text-right text-[10px] leading-none text-muted-foreground${isHour ? " border-t pt-0.5" : ""}`}
-                >
-                  {isHour ? toTimeLabel(cell) : ""}
-                </div>
-                {DAYS.map((_, dayIdx) => (
-                  <div
-                    key={dayIdx}
-                    id={cellId(dayIdx, cell)}
-                    className={`border-r${isHour ? " border-t border-t-border/50" : ""}`}
-                    style={{ height: `${CELL_H}px` }}
-                  />
-                ))}
-              </div>
-            );
-          })}
-        </div>
+      <div className="fc-wrapper rounded-lg border overflow-hidden">
+        <FullCalendar
+          ref={calRef}
+          plugins={[timeGridPlugin, interactionPlugin]}
+          initialView="timeGridWeek"
+          initialDate={TEMPLATE_START}
+          // No navigation — this is a template, not a real calendar
+          headerToolbar={false}
+          // Show day names only, no dates
+          dayHeaderContent={({ date }) =>
+            ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.getDay()] ?? ""
+          }
+          firstDay={1}
+          // Restrict interaction to template week only
+          validRange={{ start: "2024-01-01", end: "2024-01-08" }}
+          // Full 24 h, scrolled to evening
+          slotMinTime="00:00:00"
+          slotMaxTime="24:00:00"
+          scrollTime="19:00:00"
+          slotDuration="00:30:00"
+          snapDuration="00:30:00"
+          allDaySlot={false}
+          nowIndicator={false}
+          // Interactions
+          selectable={true}
+          selectMirror={true}
+          editable={true}
+          selectOverlap={false}
+          eventOverlap={false}
+          // Data
+          events={events}
+          select={handleSelect}
+          eventClick={handleEventClick}
+          eventChange={handleEventChange}
+          // Appearance
+          height={520}
+          eventColor="#22c55e"
+          eventBorderColor="#16a34a"
+          eventTimeFormat={{ hour: "2-digit", minute: "2-digit", hour12: false }}
+        />
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Click or drag to paint free hours. These repeat every week — use the Calendar tab to adjust individual dates.
+        Drag to add free time. Drag edges to resize. Drag a block to move it. Click to remove.
+        Repeats every week — use the Calendar tab to adjust individual dates.
       </p>
     </div>
   );

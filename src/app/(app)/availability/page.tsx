@@ -2,15 +2,21 @@
 
 import dynamic from "next/dynamic";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { WeeklyScheduleEditor } from "@/components/availability/weekly-schedule-editor";
 
-// FullCalendar doesn't support SSR — dynamically import with ssr: false
+// FullCalendar accesses browser APIs on import — both components need ssr: false.
+// The skeleton div matches the calendar height so there's no layout shift.
+const CalendarSkeleton = () => (
+  <div className="rounded-lg border bg-muted/10 animate-pulse" style={{ height: "560px" }} />
+);
+
+const WeeklyScheduleEditor = dynamic(
+  () => import("@/components/availability/weekly-schedule-editor").then((m) => m.WeeklyScheduleEditor),
+  { ssr: false, loading: CalendarSkeleton }
+);
+
 const AvailabilityCalendar = dynamic(
-  () =>
-    import("@/components/availability/availability-calendar").then(
-      (m) => m.AvailabilityCalendar
-    ),
-  { ssr: false, loading: () => <div className="py-8 text-center text-muted-foreground">Loading calendar...</div> }
+  () => import("@/components/availability/availability-calendar").then((m) => m.AvailabilityCalendar),
+  { ssr: false, loading: CalendarSkeleton }
 );
 
 export default function AvailabilityPage() {

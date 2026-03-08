@@ -13,6 +13,7 @@ function makeQueryClient() {
     defaultOptions: {
       queries: {
         staleTime: 60 * 1000,
+        refetchOnWindowFocus: false, // don't re-fetch (and re-render) on alt-tab
       },
     },
   });
