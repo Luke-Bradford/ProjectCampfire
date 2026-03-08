@@ -1,6 +1,6 @@
 /**
  * Seed script for local development.
- * Creates test accounts, friendships, and a group.
+ * Creates test accounts, friendships, groups, posts, and games.
  *
  * Run: pnpm db:seed
  *
@@ -15,7 +15,7 @@ import * as schema from "./schema";
 
 config({ path: ".env" });
 
-const { user, account, friendships, groups, groupMemberships } = schema;
+const { user, account, friendships, groups, groupMemberships, posts, comments, games, gameOwnerships } = schema;
 
 const db = drizzle(postgres(process.env.DATABASE_URL!), { schema });
 
@@ -54,6 +54,33 @@ const SEED_GROUP = {
   description: "The usual crew for Friday sessions.",
   inviteToken: "seed-invite-friday",
 };
+
+const SEED_GAMES = [
+  {
+    id: "seed-game-baldurs-gate",
+    title: "Baldur's Gate 3",
+    description: "An epic RPG with deep co-op multiplayer.",
+    minPlayers: 1,
+    maxPlayers: 4,
+    genres: ["RPG", "Strategy"],
+  },
+  {
+    id: "seed-game-among-us",
+    title: "Among Us",
+    description: "Social deduction game in space.",
+    minPlayers: 4,
+    maxPlayers: 15,
+    genres: ["Social", "Party"],
+  },
+  {
+    id: "seed-game-rocket-league",
+    title: "Rocket League",
+    description: "Soccer with rocket-powered cars.",
+    minPlayers: 2,
+    maxPlayers: 8,
+    genres: ["Sports", "Action"],
+  },
+];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -140,7 +167,6 @@ async function main() {
     await db.insert(groups).values(SEED_GROUP);
     log(`create group "${SEED_GROUP.name}"`);
 
-    // Add all three users to the group
     const memberships = SEED_USERS.map((u, i) => ({
       groupId: SEED_GROUP.id,
       userId: u.id,
@@ -150,6 +176,100 @@ async function main() {
     log(`create group memberships (alice=owner, bob+carol=member)`);
   } else {
     log(`skip  group "${SEED_GROUP.name}" (already exists)`);
+  }
+
+  // Games
+  for (const g of SEED_GAMES) {
+    const existing = await db.query.games.findFirst({
+      where: (t, { eq }) => eq(t.id, g.id),
+      columns: { id: true },
+    });
+    if (existing) {
+      log(`skip  game "${g.title}"`);
+      continue;
+    }
+    await db.insert(games).values({
+      id: g.id,
+      title: g.title,
+      description: g.description,
+      minPlayers: g.minPlayers,
+      maxPlayers: g.maxPlayers,
+      genres: g.genres,
+      externalSource: "manual",
+    });
+    log(`create game "${g.title}"`);
+  }
+
+  // Game ownerships: alice owns all three, bob owns Rocket League
+  const ownerships: { userId: string; gameId: string; platform: "pc" }[] = [
+    ...SEED_GAMES.map((g) => ({ userId: "seed-user-alice", gameId: g.id, platform: "pc" as const })),
+    { userId: "seed-user-bob", gameId: "seed-game-rocket-league", platform: "pc" as const },
+  ];
+
+  for (const o of ownerships) {
+    const existing = await db.query.gameOwnerships.findFirst({
+      where: (t, { eq, and }) =>
+        and(eq(t.userId, o.userId), eq(t.gameId, o.gameId), eq(t.platform, o.platform)),
+      columns: { userId: true },
+    });
+    if (existing) {
+      log(`skip  ownership ${o.userId} → ${o.gameId}`);
+      continue;
+    }
+    await db.insert(gameOwnerships).values({ ...o, source: "manual" });
+    log(`create ownership ${o.userId} → ${o.gameId}`);
+  }
+
+  // Posts: a few from alice and bob
+  const SEED_POSTS = [
+    {
+      id: "seed-post-1",
+      authorId: "seed-user-alice",
+      body: "Just finished Baldur's Gate 3 — Act 3 is incredible. Who's up for a co-op run?",
+      groupId: null as string | null,
+    },
+    {
+      id: "seed-post-2",
+      authorId: "seed-user-bob",
+      body: "Anyone free Friday evening for some Rocket League? 🚗",
+      groupId: null as string | null,
+    },
+    {
+      id: "seed-post-3",
+      authorId: "seed-user-carol",
+      body: "Among Us tonight? Need at least 5 people.",
+      groupId: SEED_GROUP.id,
+    },
+  ];
+
+  for (const p of SEED_POSTS) {
+    const existing = await db.query.posts.findFirst({
+      where: (t, { eq }) => eq(t.id, p.id),
+      columns: { id: true },
+    });
+    if (existing) {
+      log(`skip  post ${p.id}`);
+      continue;
+    }
+    await db.insert(posts).values(p);
+    log(`create post ${p.id}`);
+  }
+
+  // Comments on post 1
+  const existingComment = await db.query.comments.findFirst({
+    where: (t, { eq }) => eq(t.id, "seed-comment-1"),
+    columns: { id: true },
+  });
+  if (!existingComment) {
+    await db.insert(comments).values({
+      id: "seed-comment-1",
+      postId: "seed-post-1",
+      authorId: "seed-user-bob",
+      body: "I'm in! What time works for you?",
+    });
+    log(`create comment seed-comment-1`);
+  } else {
+    log(`skip  comment seed-comment-1`);
   }
 
   console.log("\nDone.\n");
