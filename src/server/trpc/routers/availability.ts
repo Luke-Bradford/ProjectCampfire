@@ -12,6 +12,9 @@ import { expandAvailability, isValidTimeSlot, hasNoOverlaps } from "@/lib/availa
 const timeSlotSchema = z.object({
   start: z.string().regex(/^\d{2}:\d{2}$/, "Must be HH:mm format"),
   end: z.string().regex(/^\d{2}:\d{2}$/, "Must be HH:mm format"),
+  endDayOffset: z.number().int().min(0).max(1).optional(),
+  type: z.enum(["available", "busy"]).optional(),
+  label: z.string().max(100).optional(),
 });
 
 const weeklySlotsSchema = z.record(

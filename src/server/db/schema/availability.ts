@@ -3,8 +3,14 @@ import { user } from "./auth";
 
 export const overrideTypeEnum = pgEnum("override_type", ["available", "busy"]);
 
-/** A time range within a day, in "HH:mm" format */
-export type TimeSlot = { start: string; end: string };
+/** A time range, optionally spanning midnight into the next day */
+export type TimeSlot = {
+  start: string;            // HH:mm
+  end: string;              // HH:mm (on the day indicated by endDayOffset)
+  endDayOffset?: number;    // 0 = same day (default), 1 = next day (overnight)
+  type?: "available" | "busy"; // defaults to "available"
+  label?: string;
+};
 
 /** Weekly template: keys are day-of-week (0=Sun ... 6=Sat), values are arrays of time slots */
 export type WeeklySlots = Partial<Record<number, TimeSlot[]>>;

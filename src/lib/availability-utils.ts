@@ -73,7 +73,8 @@ export function expandAvailability(
           start,
           end: slotEnd,
           source: "schedule",
-          type: "available",
+          type: slot.type ?? "available",
+          label: slot.label ?? undefined,
         });
       }
     }
@@ -86,6 +87,7 @@ export function expandAvailability(
 
 /**
  * Convert a HH:mm time slot on a specific date + timezone to ISO strings.
+ * Handles overnight slots via endDayOffset (end time is on a later day).
  */
 function slotToISO(
   dateStr: string,
@@ -105,10 +107,16 @@ function slotToISO(
     timezone
   );
 
+  // Determine which date the end time falls on
+  const endOffset = slot.endDayOffset ?? 0;
+  const endDateStr = endOffset > 0
+    ? format(addDays(parseISO(dateStr), endOffset), "yyyy-MM-dd")
+    : dateStr;
+
   const endDate = new TZDate(
-    Number(dateStr.slice(0, 4)),
-    Number(dateStr.slice(5, 7)) - 1,
-    Number(dateStr.slice(8, 10)),
+    Number(endDateStr.slice(0, 4)),
+    Number(endDateStr.slice(5, 7)) - 1,
+    Number(endDateStr.slice(8, 10)),
     eh,
     em,
     0,
@@ -122,24 +130,33 @@ function slotToISO(
 }
 
 /**
- * Validate that a TimeSlot has valid HH:mm format and end > start.
+ * Validate that a TimeSlot has valid HH:mm format and (for same-day slots) end > start.
+ * Overnight slots (endDayOffset=1) are valid as long as times are well-formed.
  */
 export function isValidTimeSlot(slot: TimeSlot): boolean {
   const pattern = /^\d{2}:\d{2}$/;
   if (!pattern.test(slot.start) || !pattern.test(slot.end)) return false;
   const [sh, sm] = slot.start.split(":").map(Number);
   const [eh, em] = slot.end.split(":").map(Number);
-  if (sh > 23 || sm > 59 || eh > 23 || em > 59) return false;
-  return sh * 60 + sm < eh * 60 + em;
+  if (sh! > 23 || sm! > 59 || eh! > 23 || em! > 59) return false;
+  if ((slot.endDayOffset ?? 0) > 0) return true; // overnight: end is on next day, always after start
+  return sh! * 60 + sm! < eh! * 60 + em!;
+}
+
+/** Convert a slot to a [startMinute, endMinute] range, where endMinute may exceed 1440 for overnight slots. */
+function slotToMinuteRange(slot: TimeSlot): [number, number] {
+  const [sh, sm] = slot.start.split(":").map(Number);
+  const [eh, em] = slot.end.split(":").map(Number);
+  return [sh! * 60 + sm!, eh! * 60 + em! + (slot.endDayOffset ?? 0) * 1440];
 }
 
 /**
- * Check that no slots overlap within a day.
+ * Check that no slots overlap within a day (handles overnight slots via endDayOffset).
  */
 export function hasNoOverlaps(slots: TimeSlot[]): boolean {
-  const sorted = [...slots].sort((a, b) => a.start.localeCompare(b.start));
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i].start < sorted[i - 1].end) return false;
+  const ranges = slots.map(slotToMinuteRange).sort((a, b) => a[0] - b[0]);
+  for (let i = 1; i < ranges.length; i++) {
+    if (ranges[i]![0] < ranges[i - 1]![1]) return false;
   }
   return true;
 }
