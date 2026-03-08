@@ -8,13 +8,14 @@
 | API layer | tRPC v11 | Type-safe end-to-end with no schema maintenance; REST adapter available if needed later |
 | Database | PostgreSQL 16 | Relational model fits the domain exactly; JSONB for flexible metadata; full-text search built-in; trivially self-hostable |
 | ORM | Drizzle ORM | Type-safe; SQL-close; migrations output inspectable SQL files |
-| Auth | better-auth | Self-hostable; no third-party auth service dependency; email/password now, OAuth later |
+| Auth | [better-auth](https://www.better-auth.com/) | Self-hostable; no third-party auth service dependency; email/password now, OAuth later. Replaced Lucia Auth (deprecated) |
 | Background jobs | BullMQ + Redis | Email delivery, OG tag fetching, image processing, poll auto-close, Steam sync (Phase 2) |
 | Sessions / cache | Redis (Valkey) | Fast session store; BullMQ queue backend |
 | Object storage | MinIO | S3-compatible; self-hostable; swap to real S3 with one env var change |
 | Image processing | Sharp (Node.js) | Resize and optimise images before MinIO storage; runs in the worker, not the request path |
 | Email | Nodemailer + SMTP | Mailhog in dev; Resend/Postmark/SES in production via env var |
 | Reverse proxy | Caddy | Automatic HTTPS via Let's Encrypt; minimal config |
+| Calendar | FullCalendar (MIT) | @fullcalendar/react + daygrid + timegrid + interaction; month/week/day views, drag-to-create, background events for availability |
 | UI components | shadcn/ui + Tailwind CSS | Copy-owned components; Radix UI accessibility primitives; Tailwind for utility styling |
 | Icons | Lucide React | Used natively by shadcn |
 | Containers | Docker Compose | Self-hosting; portable to Swarm/K8s if needed |
