@@ -1,0 +1,229 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { api } from "@/trpc/react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { format } from "date-fns";
+
+// ── Status badge ──────────────────────────────────────────────────────────────
+
+const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+  draft: "secondary",
+  open: "default",
+  confirmed: "default",
+  cancelled: "destructive",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  draft: "Draft",
+  open: "Open",
+  confirmed: "Confirmed",
+  cancelled: "Cancelled",
+};
+
+// ── Create event dialog ───────────────────────────────────────────────────────
+
+function CreateEventDialog({
+  groupId,
+  onCreated,
+}: {
+  groupId: string;
+  onCreated: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [error, setError] = useState("");
+
+  const create = api.events.create.useMutation({
+    onSuccess: () => {
+      setOpen(false);
+      setTitle("");
+      setDescription("");
+      onCreated();
+    },
+    onError: (e) => setError(e.message),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button>New event</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create event</DialogTitle>
+        </DialogHeader>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            setError("");
+            create.mutate({ groupId, title, description: description || undefined });
+          }}
+          className="space-y-4"
+        >
+          {error && (
+            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
+            </p>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="event-title">Title</Label>
+            <Input
+              id="event-title"
+              placeholder="e.g. Friday Night Session"
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="event-desc">Description (optional)</Label>
+            <Input
+              id="event-desc"
+              placeholder="What are you planning?"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!title.trim() || create.isPending}>
+              {create.isPending ? "Creating…" : "Create"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Events list for a group ───────────────────────────────────────────────────
+
+function GroupEvents({ groupId, groupName }: { groupId: string; groupName: string }) {
+  const { data: eventList = [], refetch } = api.events.list.useQuery({ groupId });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold">{groupName}</h2>
+        <CreateEventDialog groupId={groupId} onCreated={() => void refetch()} />
+      </div>
+      {eventList.length === 0 ? (
+        <div className="rounded-lg border border-dashed p-6 text-center">
+          <p className="text-sm text-muted-foreground">No events yet. Create one to get started.</p>
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {eventList.map((ev) => {
+            const myRsvp = ev.rsvps.find((r) => r.status === "yes")?.status;
+            return (
+              <li key={ev.id}>
+                <Link
+                  href={`/events/${ev.id}`}
+                  className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 transition-colors"
+                >
+                  <div className="space-y-1">
+                    <p className="font-medium">{ev.title}</p>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={STATUS_VARIANT[ev.status]} className="text-xs">
+                        {STATUS_LABEL[ev.status]}
+                      </Badge>
+                      {ev.confirmedStartsAt && (
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(ev.confirmedStartsAt), "d MMM, HH:mm")}
+                        </span>
+                      )}
+                      {ev.polls.length > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          {ev.polls.length} poll{ev.polls.length === 1 ? "" : "s"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground">
+                      {ev.rsvps.length} RSVP{ev.rsvps.length === 1 ? "" : "s"}
+                    </span>
+                    {myRsvp && (
+                      <Badge variant="outline" className="text-xs">
+                        Going
+                      </Badge>
+                    )}
+                  </div>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
+export default function EventsPage() {
+  const { data: groups = [] } = api.groups.list.useQuery();
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+
+  const activeGroupId = selectedGroupId ?? groups[0]?.id ?? null;
+
+  if (groups.length === 0) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-bold">Events</h1>
+        <div className="rounded-lg border border-dashed p-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            Join or create a group to start planning events.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Events</h1>
+
+      {/* Group tabs */}
+      {groups.length > 1 && (
+        <div className="flex flex-wrap gap-2">
+          {groups.map((g) => (
+            <button
+              key={g.id}
+              onClick={() => setSelectedGroupId(g.id)}
+              className={`rounded-md border px-3 py-1 text-sm transition-colors ${
+                activeGroupId === g.id
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "hover:bg-muted"
+              }`}
+            >
+              {g.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {activeGroupId && (
+        <GroupEvents
+          groupId={activeGroupId}
+          groupName={groups.find((g) => g.id === activeGroupId)?.name ?? ""}
+        />
+      )}
+    </div>
+  );
+}
