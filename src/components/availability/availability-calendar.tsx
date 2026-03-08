@@ -103,8 +103,9 @@ export function AvailabilityCalendar() {
             right: "dayGridMonth,timeGridWeek,timeGridDay",
           }}
           firstDay={1}
-          slotMinTime="06:00:00"
+          slotMinTime="00:00:00"
           slotMaxTime="24:00:00"
+          scrollTime="19:00:00"
           slotDuration="00:30:00"
           allDaySlot={false}
           selectable={true}

@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { TimeSlot } from "@/server/db/schema/availability";
+import { toast } from "sonner";
 
 type OverrideDialogProps = {
   open: boolean;
@@ -44,6 +45,7 @@ export function OverrideDialog({
     onSuccess: () => {
       onOpenChange(false);
       onSaved();
+      toast.success("Override saved");
     },
     onError: (e) => setError(e.message),
   });
@@ -52,6 +54,7 @@ export function OverrideDialog({
     onSuccess: () => {
       onOpenChange(false);
       onSaved();
+      toast.success("Override removed");
     },
   });
 
