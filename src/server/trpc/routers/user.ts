@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
 import { user, type NotificationPrefs } from "@/server/db/schema";
@@ -33,9 +34,29 @@ export const userRouter = createTRPCRouter({
         bio: true,
         profileVisibility: true,
         notificationPrefs: true,
+        inviteToken: true,
         createdAt: true,
       },
     });
+  }),
+
+  // Returns the user's invite token, generating one if it doesn't exist yet.
+  getInviteToken: protectedProcedure.query(async ({ ctx }) => {
+    const row = await db.query.user.findFirst({
+      where: eq(user.id, ctx.user.id),
+      columns: { inviteToken: true },
+    });
+    if (row?.inviteToken) return { token: row.inviteToken };
+    const token = createId();
+    await db.update(user).set({ inviteToken: token }).where(eq(user.id, ctx.user.id));
+    return { token };
+  }),
+
+  // Generates a new invite token, invalidating the old one.
+  regenerateInviteToken: protectedProcedure.mutation(async ({ ctx }) => {
+    const token = createId();
+    await db.update(user).set({ inviteToken: token }).where(eq(user.id, ctx.user.id));
+    return { token };
   }),
 
   updateNotificationPrefs: protectedProcedure

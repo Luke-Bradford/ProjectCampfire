@@ -67,6 +67,63 @@ function mergePrefs(saved: NotificationPrefs | undefined): Required<Notification
   return { ...PREF_DEFAULTS, ...(saved ?? {}) };
 }
 
+// ── Invite section ────────────────────────────────────────────────────────────
+
+function InviteSection() {
+  const { data, refetch } = api.user.getInviteToken.useQuery();
+  const regenerate = api.user.regenerateInviteToken.useMutation({
+    onSuccess: () => void refetch(),
+  });
+  const [copied, setCopied] = useState(false);
+
+  const inviteUrl = typeof window !== "undefined" && data?.token
+    ? `${window.location.origin}/invite/${data.token}`
+    : "";
+
+  function handleCopy() {
+    if (!inviteUrl) return;
+    void navigator.clipboard.writeText(inviteUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <section className="space-y-4">
+      <h2 className="text-base font-semibold border-b pb-2">Invite a friend</h2>
+      <p className="text-sm text-muted-foreground">
+        Share your personal invite link. Anyone who visits it can send you a friend request.
+        Regenerating the link invalidates the old one.
+      </p>
+      {data?.token ? (
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <Input readOnly value={inviteUrl} className="font-mono text-xs" />
+            <Button variant="outline" onClick={handleCopy} className="shrink-0">
+              {copied ? "Copied!" : "Copy"}
+            </Button>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs text-muted-foreground"
+            disabled={regenerate.isPending}
+            onClick={() => {
+              if (window.confirm("Regenerate your invite link? The old link will stop working.")) {
+                regenerate.mutate();
+              }
+            }}
+          >
+            {regenerate.isPending ? "Regenerating…" : "Regenerate link"}
+          </Button>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">Generating link…</p>
+      )}
+    </section>
+  );
+}
+
 // ── Settings page ─────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -155,6 +212,9 @@ export default function SettingsPage() {
           <p className="text-sm text-muted-foreground">{me?.email ?? "—"}</p>
         </div>
       </section>
+
+      {/* ── Invite a friend ──────────────────────────────────────────────────── */}
+      <InviteSection />
 
       {/* ── Notifications ────────────────────────────────────────────────────── */}
       <section className="space-y-1">
