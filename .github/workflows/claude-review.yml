@@ -7,7 +7,6 @@ on:
 
 jobs:
   review:
-    # Skip draft PRs
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
@@ -19,35 +18,42 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Claude code review
-        uses: anthropics/claude-code-action@beta
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          direct_prompt: |
-            You are a strict senior code reviewer. Your job is to find real problems — not to be encouraging.
+      - name: Get PR diff
+        id: diff
+        run: |
+          git diff origin/main...HEAD > pr.diff
+          echo "size=$(wc -c < pr.diff)" >> $GITHUB_OUTPUT
 
-            Review this pull request. The diff is below.
+      - name: Run Claude review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          DIFF=$(cat pr.diff)
 
-            **What to check:**
-            1. **Correctness** — Does the logic do what the description claims? Off-by-one errors, wrong conditions, missing edge cases?
-            2. **Security** — Missing auth checks, exposed data, unvalidated input reaching the DB?
-            3. **tRPC / data layer** — Input validated with Zod? Business logic in server, not component?
-            4. **Type safety** — Any `any`, unchecked casts, or suppressed errors?
-            5. **Scope creep** — Does this do more than the ticket requires? Check against docs/MVP_BOUNDARIES.md if available.
-            6. **Regressions** — Anything removed that other code still depends on?
+          REVIEW=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "$(jq -n \
+              --arg diff "$DIFF" \
+              '{
+                model: "claude-opus-4-6",
+                max_tokens: 2048,
+                messages: [{
+                  role: "user",
+                  content: ("You are a strict senior code reviewer. Your job is to find real problems — not to be encouraging.\n\nReview this pull request diff:\n\n```diff\n" + $diff + "\n```\n\n**What to check:**\n1. **Correctness** — Does the logic do what the description claims? Off-by-one errors, wrong conditions, missing edge cases?\n2. **Security** — Missing auth checks, exposed data, unvalidated input reaching the DB?\n3. **tRPC / data layer** — Input validated with Zod? Business logic in server, not component?\n4. **Type safety** — Any `any`, unchecked casts, or suppressed errors?\n5. **Scope creep** — Does this do more than the ticket requires?\n6. **Regressions** — Anything removed that other code still depends on?\n\n**Format your response as:**\n\n### [BLOCKING] — must fix before merge\n- Each issue with file:line reference and explanation. If none, write \"None.\"\n\n### [WARNING] — should fix, not blocking\n- Each issue with file:line reference. If none, write \"None.\"\n\n### [NITPICK] — optional / style\n- Each issue with file:line reference. If none, write \"None.\"\n\n### Verdict\nOne of: **APPROVE**, **REQUEST CHANGES**, or **NEEDS DISCUSSION**.\n\nBe direct. If the code is fine, say so briefly. Do not pad the review with praise.")
+                }]
+              }')" \
+            | jq -r '.content[0].text')
 
-            **Format your response as:**
+          COMMENT="## Claude Code Review
 
-            ### [BLOCKING] — must fix before merge
-            - Each issue with file:line reference and explanation. If none, write "None."
+          $REVIEW
 
-            ### [WARNING] — should fix, not blocking
-            - Each issue with file:line reference. If none, write "None."
+          ---
+          *Automated review by [Claude](https://claude.ai)*"
 
-            ### [NITPICK] — optional / style
-            - Each issue with file:line reference. If none, write "None."
-
-            ### Verdict
-            One of: **APPROVE**, **REQUEST CHANGES**, or **NEEDS DISCUSSION**.
-
-            Be direct. If the code is fine, say so briefly. Do not pad the review with praise.
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$COMMENT"
