@@ -5,7 +5,6 @@ import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -15,11 +14,14 @@ import {
 import type { TimeSlot } from "@/server/db/schema/availability";
 import { toast } from "sonner";
 
+type OverrideType = "available" | "busy";
+
 type OverrideDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   date: string; // YYYY-MM-DD
   existingSlots?: TimeSlot[];
+  existingType?: OverrideType;
   existingLabel?: string;
   onSaved: () => void;
 };
@@ -29,12 +31,11 @@ export function OverrideDialog({
   onOpenChange,
   date,
   existingSlots,
+  existingType,
   existingLabel,
   onSaved,
 }: OverrideDialogProps) {
-  const [unavailableAllDay, setUnavailableAllDay] = useState(
-    existingSlots !== undefined && existingSlots.length === 0
-  );
+  const [overrideType, setOverrideType] = useState<OverrideType>(existingType ?? "available");
   const [slots, setSlots] = useState<TimeSlot[]>(
     existingSlots && existingSlots.length > 0 ? existingSlots : [{ start: "19:00", end: "23:00" }]
   );
@@ -75,7 +76,9 @@ export function OverrideDialog({
     setError("");
     setOverride.mutate({
       date,
-      slots: unavailableAllDay ? [] : slots,
+      type: overrideType,
+      // Busy with no slots = blocked all day; busy with slots = blocked during those times
+      slots: overrideType === "busy" ? slots : slots,
       label: label.trim() || undefined,
     });
   }
@@ -91,7 +94,7 @@ export function OverrideDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Override — {displayDate}</DialogTitle>
+          <DialogTitle>{displayDate}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
@@ -100,56 +103,73 @@ export function OverrideDialog({
             </p>
           )}
 
-          <div className="flex items-center gap-3">
-            <Switch
-              id="unavailable"
-              checked={unavailableAllDay}
-              onCheckedChange={setUnavailableAllDay}
-            />
-            <Label htmlFor="unavailable">Unavailable all day</Label>
+          {/* Available / Busy toggle */}
+          <div className="flex rounded-md border overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setOverrideType("available")}
+              className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                overrideType === "available"
+                  ? "bg-emerald-500 text-white"
+                  : "bg-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Available
+            </button>
+            <button
+              type="button"
+              onClick={() => setOverrideType("busy")}
+              className={`flex-1 py-2 text-sm font-medium transition-colors border-l ${
+                overrideType === "busy"
+                  ? "bg-red-500 text-white"
+                  : "bg-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Busy
+            </button>
           </div>
 
-          {!unavailableAllDay && (
-            <div className="space-y-3">
-              <Label>Available times</Label>
-              {slots.map((slot, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <Input
-                    type="time"
-                    value={slot.start}
-                    onChange={(e) => updateSlot(idx, "start", e.target.value)}
-                    className="w-[120px]"
-                  />
-                  <span className="text-muted-foreground">to</span>
-                  <Input
-                    type="time"
-                    value={slot.end}
-                    onChange={(e) => updateSlot(idx, "end", e.target.value)}
-                    className="w-[120px]"
-                  />
-                  {slots.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeSlot(idx)}
-                    >
-                      Remove
-                    </Button>
-                  )}
-                </div>
-              ))}
-              <Button type="button" variant="outline" size="sm" onClick={addSlot}>
-                + Add time slot
-              </Button>
-            </div>
-          )}
+          <p className="text-xs text-muted-foreground">
+            {overrideType === "available"
+              ? "You're free during these hours. They'll show as available for scheduling."
+              : "You're not available during these hours. They'll be blocked from scheduling."}
+          </p>
+
+          {/* Time slots */}
+          <div className="space-y-3">
+            <Label>{overrideType === "available" ? "Available times" : "Busy times"}</Label>
+            {slots.map((slot, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <Input
+                  type="time"
+                  value={slot.start}
+                  onChange={(e) => updateSlot(idx, "start", e.target.value)}
+                  className="w-[120px]"
+                />
+                <span className="text-muted-foreground">to</span>
+                <Input
+                  type="time"
+                  value={slot.end}
+                  onChange={(e) => updateSlot(idx, "end", e.target.value)}
+                  className="w-[120px]"
+                />
+                {slots.length > 1 && (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => removeSlot(idx)}>
+                    Remove
+                  </Button>
+                )}
+              </div>
+            ))}
+            <Button type="button" variant="outline" size="sm" onClick={addSlot}>
+              + Add time slot
+            </Button>
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="override-label">Label (optional)</Label>
             <Input
               id="override-label"
-              placeholder="e.g. Holiday, Extra free time"
+              placeholder="e.g. Holiday, LAN party, Extra free time"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
             />
@@ -174,7 +194,7 @@ export function OverrideDialog({
                 Cancel
               </Button>
               <Button type="submit" disabled={setOverride.isPending}>
-                {setOverride.isPending ? "Saving..." : "Save override"}
+                {setOverride.isPending ? "Saving..." : "Save"}
               </Button>
             </div>
           </div>

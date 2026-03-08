@@ -11,6 +11,8 @@ import { format, startOfMonth, endOfMonth, addMonths } from "date-fns";
 import { OverrideDialog } from "./override-dialog";
 import type { TimeSlot } from "@/server/db/schema/availability";
 
+type OverrideType = "available" | "busy";
+
 export function AvailabilityCalendar() {
   const [dateRange, setDateRange] = useState(() => ({
     from: format(startOfMonth(new Date()), "yyyy-MM-dd"),
@@ -21,61 +23,70 @@ export function AvailabilityCalendar() {
   const { data: overrides = [] } = api.availability.listOverrides.useQuery(dateRange);
   const utils = api.useUtils();
 
-  // Override dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogDate, setDialogDate] = useState("");
   const [dialogSlots, setDialogSlots] = useState<TimeSlot[] | undefined>(undefined);
+  const [dialogType, setDialogType] = useState<OverrideType | undefined>(undefined);
   const [dialogLabel, setDialogLabel] = useState<string | undefined>(undefined);
   const calendarRef = useRef<FullCalendar>(null);
 
-  const events: EventInput[] = computed.map((slot, i) => ({
-    id: `${slot.source}-${slot.date}-${i}`,
-    start: slot.start,
-    end: slot.end,
-    title: slot.label || (slot.source === "override" ? "Override" : "Available"),
-    backgroundColor: slot.source === "override" ? "#f59e0b" : "#22c55e",
-    borderColor: slot.source === "override" ? "#d97706" : "#16a34a",
-    display: "block",
-    extendedProps: { source: slot.source, date: slot.date },
-  }));
+  const events: EventInput[] = computed.map((slot, i) => {
+    const isBusy = slot.type === "busy";
+    const isOverride = slot.source === "override";
+    let bg = "#22c55e"; // schedule available: green
+    let border = "#16a34a";
+    if (isOverride && !isBusy) { bg = "#f59e0b"; border = "#d97706"; } // override available: amber
+    if (isBusy) { bg = "#ef4444"; border = "#dc2626"; }               // busy: red
 
-  const handleDateSelect = useCallback(
-    (info: DateSelectArg) => {
-      const dateStr = format(info.start, "yyyy-MM-dd");
+    return {
+      id: `${slot.source}-${slot.date}-${i}`,
+      start: slot.start,
+      end: slot.end,
+      title: slot.label || (isBusy ? "Busy" : isOverride ? "Override" : "Available"),
+      backgroundColor: bg,
+      borderColor: border,
+      display: "block",
+      extendedProps: { source: slot.source, type: slot.type, date: slot.date },
+    };
+  });
+
+  const openDialog = useCallback(
+    (dateStr: string, prefillSlots?: TimeSlot[]) => {
       const existing = overrides.find((o) => o.date === dateStr);
-
       if (existing) {
         setDialogSlots(existing.slots as TimeSlot[]);
+        setDialogType((existing.type as OverrideType) ?? "available");
         setDialogLabel(existing.label ?? undefined);
       } else {
-        // Pre-fill with selected time range
-        const startTime = format(info.start, "HH:mm");
-        const endTime = format(info.end, "HH:mm");
-        if (startTime !== "00:00" || endTime !== "00:00") {
-          setDialogSlots([{ start: startTime, end: endTime }]);
-        } else {
-          setDialogSlots(undefined);
-        }
+        setDialogSlots(prefillSlots);
+        setDialogType(undefined);
         setDialogLabel(undefined);
       }
-
       setDialogDate(dateStr);
       setDialogOpen(true);
     },
     [overrides]
   );
 
+  const handleDateSelect = useCallback(
+    (info: DateSelectArg) => {
+      const dateStr = format(info.start, "yyyy-MM-dd");
+      const startTime = format(info.start, "HH:mm");
+      const endTime = format(info.end, "HH:mm");
+      const prefill =
+        startTime !== "00:00" || endTime !== "00:00"
+          ? [{ start: startTime, end: endTime }]
+          : undefined;
+      openDialog(dateStr, prefill);
+    },
+    [openDialog]
+  );
+
   const handleEventClick = useCallback(
     (info: EventClickArg) => {
-      const dateStr = info.event.extendedProps.date as string;
-      const existing = overrides.find((o) => o.date === dateStr);
-
-      setDialogDate(dateStr);
-      setDialogSlots(existing ? (existing.slots as TimeSlot[]) : undefined);
-      setDialogLabel(existing?.label ?? undefined);
-      setDialogOpen(true);
+      openDialog(info.event.extendedProps.date as string);
     },
-    [overrides]
+    [openDialog]
   );
 
   const handleDatesSet = useCallback((info: DatesSetArg) => {
@@ -131,6 +142,7 @@ export function AvailabilityCalendar() {
           onOpenChange={setDialogOpen}
           date={dialogDate}
           existingSlots={dialogSlots}
+          existingType={dialogType}
           existingLabel={dialogLabel}
           onSaved={handleSaved}
         />

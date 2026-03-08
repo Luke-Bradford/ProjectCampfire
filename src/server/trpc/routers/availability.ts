@@ -107,22 +107,25 @@ export const availabilityRouter = createTRPCRouter({
     .input(
       z.object({
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        type: z.enum(["available", "busy"]).default("available"),
         slots: z.array(timeSlotSchema),
         label: z.string().max(100).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Validate slots
-      for (const slot of input.slots) {
-        if (!isValidTimeSlot(slot)) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: `Invalid time slot: ${slot.start}-${slot.end}`,
-          });
+      // Validate slots (only meaningful for "available" type)
+      if (input.type === "available") {
+        for (const slot of input.slots) {
+          if (!isValidTimeSlot(slot)) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Invalid time slot: ${slot.start}-${slot.end}`,
+            });
+          }
         }
-      }
-      if (!hasNoOverlaps(input.slots)) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Overlapping slots" });
+        if (!hasNoOverlaps(input.slots)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Overlapping slots" });
+        }
       }
 
       const existing = await db.query.availabilityOverrides.findFirst({
@@ -136,6 +139,7 @@ export const availabilityRouter = createTRPCRouter({
         await db
           .update(availabilityOverrides)
           .set({
+            type: input.type,
             slots: input.slots,
             label: input.label ?? null,
           })
@@ -148,6 +152,7 @@ export const availabilityRouter = createTRPCRouter({
         id,
         userId: ctx.user.id,
         date: input.date,
+        type: input.type,
         slots: input.slots,
         label: input.label ?? null,
       });

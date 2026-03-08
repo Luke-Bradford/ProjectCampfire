@@ -7,6 +7,7 @@ export type ComputedSlot = {
   start: string; // ISO datetime
   end: string; // ISO datetime
   source: "schedule" | "override";
+  type: "available" | "busy";
   label?: string;
 };
 
@@ -20,7 +21,7 @@ export type ComputedSlot = {
  */
 export function expandAvailability(
   schedule: { slots: WeeklySlots; timezone: string } | null,
-  overrides: Array<{ date: string; slots: TimeSlot[]; label?: string | null }>,
+  overrides: Array<{ date: string; slots: TimeSlot[]; type?: string | null; label?: string | null }>,
   from: string,
   to: string
 ): ComputedSlot[] {
@@ -35,20 +36,34 @@ export function expandAvailability(
     const override = overrideMap.get(dateStr);
 
     if (override) {
-      // Use override slots (empty array = unavailable all day)
-      for (const slot of override.slots) {
-        const tz = schedule?.timezone ?? "UTC";
-        const { start, end: slotEnd } = slotToISO(dateStr, slot, tz);
+      const overrideType = override.type === "busy" ? "busy" : "available";
+      // For a "busy" override we still record it so the calendar can show the block
+      // even with empty slots (meaning busy all day — no available times)
+      if (overrideType === "busy" && override.slots.length === 0) {
+        // Represent a full-day busy block with a single synthetic all-day marker
         result.push({
           date: dateStr,
-          start,
-          end: slotEnd,
+          start: `${dateStr}T00:00:00.000Z`,
+          end: `${dateStr}T23:59:59.000Z`,
           source: "override",
+          type: "busy",
           label: override.label ?? undefined,
         });
+      } else {
+        for (const slot of override.slots) {
+          const tz = schedule?.timezone ?? "UTC";
+          const { start, end: slotEnd } = slotToISO(dateStr, slot, tz);
+          result.push({
+            date: dateStr,
+            start,
+            end: slotEnd,
+            source: "override",
+            type: overrideType,
+            label: override.label ?? undefined,
+          });
+        }
       }
     } else if (schedule) {
-      // Use schedule for this day of week (JS getDay(): 0=Sun, 6=Sat)
       const dow = current.getDay();
       const daySlots = schedule.slots[dow] ?? [];
       for (const slot of daySlots) {
@@ -58,6 +73,7 @@ export function expandAvailability(
           start,
           end: slotEnd,
           source: "schedule",
+          type: "available",
         });
       }
     }

@@ -1,11 +1,7 @@
 import { pgEnum, pgTable, text, timestamp, jsonb, date, unique } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 
-export const availabilityVisibilityEnum = pgEnum("availability_visibility", [
-  "friends",
-  "group",
-  "private",
-]);
+export const overrideTypeEnum = pgEnum("override_type", ["available", "busy"]);
 
 /** A time range within a day, in "HH:mm" format */
 export type TimeSlot = { start: string; end: string };
@@ -33,6 +29,7 @@ export const availabilityOverrides = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     date: date("date", { mode: "string" }).notNull(),
+    type: overrideTypeEnum("type").notNull().default("available"),
     slots: jsonb("slots").$type<TimeSlot[]>().notNull().default([]),
     label: text("label"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
