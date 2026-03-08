@@ -2,7 +2,7 @@ import { z } from "zod";
 import { and, eq, ilike, ne, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
-import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
+import { createTRPCRouter, protectedProcedure, publicProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
 import { user, friendships, notifications } from "@/server/db/schema";
 
@@ -197,5 +197,58 @@ export const friendsRouter = createTRPCRouter({
             eq(friendships.status, "blocked")
           )
         );
+    }),
+
+  // Resolve an invite token to a public profile — no auth required (CAMP-023)
+  resolveInviteToken: publicProcedure
+    .input(z.object({ token: z.string() }))
+    .query(async ({ input }) => {
+      const found = await db.query.user.findFirst({
+        where: eq(user.inviteToken, input.token),
+        columns: { id: true, name: true, username: true, image: true },
+      });
+      if (!found) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Invite link not found or has been regenerated." });
+      }
+      return found;
+    }),
+
+  // Send a friend request via invite token — requires auth (CAMP-022)
+  sendRequestViaToken: protectedProcedure
+    .input(z.object({ token: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const found = await db.query.user.findFirst({
+        where: eq(user.inviteToken, input.token),
+        columns: { id: true },
+      });
+      if (!found) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Invite link not found or has been regenerated." });
+      }
+      if (found.id === ctx.user.id) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot add yourself." });
+      }
+      const existing = await db.query.friendships.findFirst({
+        where: or(
+          and(eq(friendships.requesterId, ctx.user.id), eq(friendships.addresseeId, found.id)),
+          and(eq(friendships.requesterId, found.id), eq(friendships.addresseeId, ctx.user.id))
+        ),
+      });
+      if (existing) {
+        if (existing.status === "blocked") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Action not allowed." });
+        }
+        throw new TRPCError({ code: "CONFLICT", message: "Already friends or request pending." });
+      }
+      await db.insert(friendships).values({
+        requesterId: ctx.user.id,
+        addresseeId: found.id,
+        status: "pending",
+      });
+      await db.insert(notifications).values({
+        id: createId(),
+        userId: found.id,
+        type: "friend_request_received",
+        data: { requesterId: ctx.user.id, requesterName: ctx.user.name },
+      });
     }),
 });
