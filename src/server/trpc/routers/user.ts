@@ -71,6 +71,18 @@ export const userRouter = createTRPCRouter({
       return { ok: true };
     }),
 
+  updateProfile: protectedProcedure
+    .input(z.object({
+      name: z.string().min(1).max(50),
+      bio: z.string().max(300).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await db
+        .update(user)
+        .set({ name: input.name, bio: input.bio ?? null })
+        .where(eq(user.id, ctx.user.id));
+    }),
+
   setUsername: protectedProcedure
     .input(z.object({ username: z.string().regex(USERNAME_RE, "3–20 chars, lowercase letters, numbers and underscores only") }))
     .mutation(async ({ ctx, input }) => {
