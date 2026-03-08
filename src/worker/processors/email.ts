@@ -34,7 +34,17 @@ function pref(prefs: Prefs | null | undefined, key: keyof Required<Prefs>): bool
 // ── HTML escaping ─────────────────────────────────────────────────────────────
 
 function esc(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function safeSubject(str: string): string {
+  // Strip CR/LF to prevent email header injection
+  return str.replace(/[\r\n]+/g, " ");
 }
 
 // ── Simple HTML email template ────────────────────────────────────────────────
@@ -88,7 +98,7 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
         if (!pref(r.notificationPrefs as Prefs, "emailEventConfirmed")) continue;
         await sendEmail({
           to: r.email,
-          subject: `Event confirmed: ${data.eventTitle}`,
+          subject: safeSubject(`Event confirmed: ${data.eventTitle}`),
           text: `Hi ${r.name},\n\n"${data.eventTitle}" in ${data.groupName} has been confirmed for ${dateStr}${endsStr}.\n\nView event: ${appUrl()}/events/${data.eventId}`,
           html: htmlEmail(
             `Event confirmed: ${esc(data.eventTitle)}`,
@@ -107,7 +117,7 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
         if (!pref(r.notificationPrefs as Prefs, "emailEventCancelled")) continue;
         await sendEmail({
           to: r.email,
-          subject: `Event cancelled: ${data.eventTitle}`,
+          subject: safeSubject(`Event cancelled: ${data.eventTitle}`),
           text: `Hi ${r.name},\n\nUnfortunately "${data.eventTitle}" in ${data.groupName} has been cancelled.\n\nView group: ${appUrl()}/groups`,
           html: htmlEmail(
             `Event cancelled: ${esc(data.eventTitle)}`,
@@ -126,7 +136,7 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
         if (!pref(r.notificationPrefs as Prefs, "emailEventRsvpReminder")) continue;
         await sendEmail({
           to: r.email,
-          subject: `RSVP reminder: ${data.eventTitle}`,
+          subject: safeSubject(`RSVP reminder: ${data.eventTitle}`),
           text: `Hi ${r.name},\n\nHave you had a chance to RSVP to "${data.eventTitle}" in ${data.groupName}?\n\nView event: ${appUrl()}/events/${data.eventId}`,
           html: htmlEmail(
             `RSVP reminder: ${esc(data.eventTitle)}`,
@@ -147,7 +157,7 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
         if (!pref(r.notificationPrefs as Prefs, "emailPollOpened")) continue;
         await sendEmail({
           to: r.email,
-          subject: `New poll${context}: ${data.pollQuestion}`,
+          subject: safeSubject(`New poll${context}: ${data.pollQuestion}`),
           text: `Hi ${r.name},\n\nA new poll has been opened in ${data.groupName}${context}:\n\n"${data.pollQuestion}"\n\nCast your vote: ${appUrl()}/events/${data.pollId}`,
           html: htmlEmail(
             `New poll in ${esc(data.groupName)}`,
@@ -166,7 +176,7 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
         if (!pref(r.notificationPrefs as Prefs, "emailPollClosed")) continue;
         await sendEmail({
           to: r.email,
-          subject: `Poll closed: ${data.pollQuestion}`,
+          subject: safeSubject(`Poll closed: ${data.pollQuestion}`),
           text: `Hi ${r.name},\n\nThe poll "${data.pollQuestion}" in ${data.groupName} has been closed. Check the results!\n\nView results: ${appUrl()}/events/${data.pollId}`,
           html: htmlEmail(
             `Poll closed: results are in`,
@@ -185,7 +195,7 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
       if (!pref(r.notificationPrefs as Prefs, "emailGroupInvite")) break;
       await sendEmail({
         to: r.email,
-        subject: `You've been invited to ${data.groupName}`,
+        subject: safeSubject(`You've been invited to ${data.groupName}`),
         text: `Hi ${r.name},\n\n${data.inviterName} has invited you to join "${data.groupName}" on Campfire.\n\nJoin: ${appUrl()}/groups/${data.groupId}`,
         html: htmlEmail(
           `You've been invited to ${esc(data.groupName)}`,
@@ -203,7 +213,7 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
       if (!pref(r.notificationPrefs as Prefs, "emailFriendRequest")) break;
       await sendEmail({
         to: r.email,
-        subject: `${data.requesterName} sent you a friend request`,
+        subject: safeSubject(`${data.requesterName} sent you a friend request`),
         text: `Hi ${r.name},\n\n${data.requesterName} sent you a friend request on Campfire.\n\nRespond: ${appUrl()}/friends`,
         html: htmlEmail(
           `New friend request`,
@@ -221,7 +231,7 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
       if (!pref(r.notificationPrefs as Prefs, "emailFriendRequest")) break;
       await sendEmail({
         to: r.email,
-        subject: `${data.acceptorName} accepted your friend request`,
+        subject: safeSubject(`${data.acceptorName} accepted your friend request`),
         text: `Hi ${r.name},\n\n${data.acceptorName} accepted your friend request on Campfire.\n\nView friends: ${appUrl()}/friends`,
         html: htmlEmail(
           `Friend request accepted`,
