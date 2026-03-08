@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import type { NotificationPrefs } from "@/server/db/schema";
 
 // ── Blocked users section ─────────────────────────────────────────────────────
@@ -182,18 +183,25 @@ export default function SettingsPage() {
 
   // ── Profile ──────────────────────────────────────────────────────────────────
   const [displayName, setDisplayName] = useState("");
+  const [bio, setBio] = useState("");
   const [username, setUsername] = useState("");
   const [profileSaved, setProfileSaved] = useState(false);
-  const [profileError, setProfileError] = useState("");
+  const [usernameError, setUsernameError] = useState("");
+  const [usernameSaved, setUsernameSaved] = useState(false);
+
+  const updateProfile = api.user.updateProfile.useMutation({
+    onSuccess: () => { setProfileSaved(true); setTimeout(() => setProfileSaved(false), 2500); },
+  });
 
   const setUsernameMutation = api.user.setUsername.useMutation({
-    onSuccess: () => { setProfileSaved(true); setTimeout(() => setProfileSaved(false), 2500); },
-    onError: (e) => setProfileError(e.message),
+    onSuccess: () => { setUsernameSaved(true); setTimeout(() => setUsernameSaved(false), 2500); },
+    onError: (e) => setUsernameError(e.message),
   });
 
   useEffect(() => {
     if (me) {
       setDisplayName(me.name ?? "");
+      setBio(me.bio ?? "");
       setUsername(me.username ?? "");
     }
   }, [me]);
@@ -222,7 +230,10 @@ export default function SettingsPage() {
 
       {/* ── Profile ─────────────────────────────────────────────────────────── */}
       <section className="space-y-4">
-        <h2 className="text-base font-semibold border-b pb-2">Profile</h2>
+        <div className="flex items-center justify-between border-b pb-2">
+          <h2 className="text-base font-semibold">Profile</h2>
+          {profileSaved && <span className="text-xs text-green-600">Saved</span>}
+        </div>
 
         <div className="space-y-2">
           <Label htmlFor="display-name">Display name</Label>
@@ -232,33 +243,51 @@ export default function SettingsPage() {
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder="Your name"
           />
-          <p className="text-xs text-muted-foreground">
-            Changing your display name isn&apos;t saved yet — full profile editing coming soon.
-          </p>
         </div>
 
         <div className="space-y-2">
+          <Label htmlFor="bio">Bio</Label>
+          <Textarea
+            id="bio"
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            placeholder="A short bio…"
+            maxLength={300}
+            rows={3}
+            className="resize-none"
+          />
+          <p className="text-xs text-muted-foreground text-right">{bio.length}/300</p>
+        </div>
+
+        <Button
+          onClick={() => updateProfile.mutate({ name: displayName.trim(), bio: bio.trim() || undefined })}
+          disabled={!displayName.trim() || updateProfile.isPending}
+        >
+          {updateProfile.isPending ? "Saving…" : "Save profile"}
+        </Button>
+
+        <div className="space-y-2 pt-2 border-t">
           <Label htmlFor="username">Username</Label>
           <div className="flex gap-2">
             <Input
               id="username"
               value={username}
-              onChange={(e) => { setUsername(e.target.value); setProfileError(""); setProfileSaved(false); }}
+              onChange={(e) => { setUsername(e.target.value); setUsernameError(""); setUsernameSaved(false); }}
               placeholder="your_handle"
             />
             <Button
-              onClick={() => { setProfileError(""); setUsernameMutation.mutate({ username }); }}
+              onClick={() => { setUsernameError(""); setUsernameMutation.mutate({ username }); }}
               disabled={!username.trim() || setUsernameMutation.isPending}
             >
               {setUsernameMutation.isPending ? "Saving…" : "Save"}
             </Button>
           </div>
-          {profileError && <p className="text-xs text-destructive">{profileError}</p>}
-          {profileSaved && <p className="text-xs text-green-600">Username saved!</p>}
+          {usernameError && <p className="text-xs text-destructive">{usernameError}</p>}
+          {usernameSaved && <p className="text-xs text-green-600">Username saved!</p>}
           <p className="text-xs text-muted-foreground">3–20 chars, lowercase letters, numbers and underscores only.</p>
         </div>
 
-        <div className="space-y-1">
+        <div className="space-y-1 pt-2 border-t">
           <Label>Email</Label>
           <p className="text-sm text-muted-foreground">{me?.email ?? "—"}</p>
         </div>
