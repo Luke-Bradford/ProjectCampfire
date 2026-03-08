@@ -186,10 +186,13 @@ function DangerZoneSection() {
   const [error, setError] = useState("");
 
   const deleteAccount = api.user.deleteAccount.useMutation({
-    onSuccess: async () => {
-      // Flush the tRPC cache so stale user data doesn't flash during navigation.
-      await utils.invalidate();
+    onSuccess: () => {
+      // Redirect first — the session is already dead server-side.
+      // We skip cache invalidation here because triggering refetches on a
+      // revoked session would produce 401 errors before navigation completes.
       router.replace("/login");
+      // Clear cache after navigation is initiated so nothing re-fetches.
+      void utils.invalidate();
     },
     onError: (e) => setError(e.message),
   });

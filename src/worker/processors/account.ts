@@ -12,16 +12,33 @@ export async function processAccountJob(job: Job<AccountJobPayload>) {
       const { userId } = data;
 
       await db.transaction(async (tx) => {
-        // Belt-and-suspenders: session and account rows should already be deleted
-        // by the tRPC mutation transaction, but we re-delete here in case of retry
-        // or edge cases. The verification table uses email as identifier, not userId,
-        // so we leave it alone — those rows expire naturally.
+        // Guard: only proceed if deletedAt is set. This prevents the job from
+        // touching a live account if a hypothetical undelete nulls deletedAt
+        // while the job is still queued. Session/account deletion happens here
+        // too so they're inside the same guard — not before it.
+        //
+        // Skip if already scrubbed (name is "[deleted]") to make retries idempotent.
+        const target = await tx.query.user.findFirst({
+          where: and(eq(user.id, userId), isNotNull(user.deletedAt)),
+          columns: { name: true },
+        });
+
+        if (!target) {
+          console.warn(`[account] scrub skipped — user ${userId} not found or not deleted`);
+          return;
+        }
+
+        if (target.name === "[deleted]") {
+          console.warn(`[account] scrub skipped — user ${userId} already scrubbed`);
+          return;
+        }
+
+        // Belt-and-suspenders: session/account rows should already be gone from
+        // the tRPC transaction, but re-delete here to cover retries and edge cases.
         await tx.delete(session).where(eq(session.userId, userId));
         await tx.delete(account).where(eq(account.userId, userId));
 
-        // Guard: only scrub PII if the account is still soft-deleted. Prevents
-        // destroying a live account if a race condition reverses the deletion.
-        const updated = await tx
+        await tx
           .update(user)
           .set({
             name: "[deleted]",
@@ -34,13 +51,7 @@ export async function processAccountJob(job: Job<AccountJobPayload>) {
             inviteToken: null,
             notificationPrefs: {},
           })
-          .where(and(eq(user.id, userId), isNotNull(user.deletedAt)))
-          .returning({ id: user.id });
-
-        if (updated.length === 0) {
-          console.warn(`[account] scrub skipped — user ${userId} not found or not deleted`);
-          return;
-        }
+          .where(eq(user.id, userId));
       });
 
       console.log(`[account] scrubbed PII for user ${userId}`);
