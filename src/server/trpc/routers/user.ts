@@ -74,6 +74,23 @@ export const userRouter = createTRPCRouter({
   setUsername: protectedProcedure
     .input(z.object({ username: z.string().regex(USERNAME_RE, "3–20 chars, lowercase letters, numbers and underscores only") }))
     .mutation(async ({ ctx, input }) => {
+      const current = await db.query.user.findFirst({
+        where: eq(user.id, ctx.user.id),
+        columns: { id: true, username: true, usernameChangedAt: true },
+      });
+
+      // Enforce 30-day cooldown on changes (not on first-time set)
+      if (current?.username && current.username !== input.username && current.usernameChangedAt) {
+        const daysSinceChange = (Date.now() - current.usernameChangedAt.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysSinceChange < 30) {
+          const daysLeft = Math.ceil(30 - daysSinceChange);
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `You can change your username again in ${daysLeft} day${daysLeft === 1 ? "" : "s"}.`,
+          });
+        }
+      }
+
       // Check uniqueness
       const existing = await db.query.user.findFirst({
         where: eq(user.username, input.username),
@@ -82,6 +99,7 @@ export const userRouter = createTRPCRouter({
       if (existing && existing.id !== ctx.user.id) {
         throw new TRPCError({ code: "CONFLICT", message: "That username is already taken." });
       }
+
       await db
         .update(user)
         .set({ username: input.username, usernameChangedAt: new Date() })
