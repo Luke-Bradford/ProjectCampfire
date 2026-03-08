@@ -199,6 +199,31 @@ export const friendsRouter = createTRPCRouter({
         );
     }),
 
+  // Fetch a public profile by username (CAMP-021)
+  // Open profiles return full data; private profiles return name only.
+  getProfile: publicProcedure
+    .input(z.object({ username: z.string() }))
+    .query(async ({ input }) => {
+      const found = await db.query.user.findFirst({
+        where: eq(user.username, input.username),
+        columns: {
+          id: true,
+          name: true,
+          username: true,
+          image: true,
+          bio: true,
+          profileVisibility: true,
+        },
+      });
+      if (!found) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found." });
+      }
+      if (found.profileVisibility === "private") {
+        return { id: found.id, name: found.name, username: found.username, image: null, bio: null, profileVisibility: "private" as const };
+      }
+      return found;
+    }),
+
   // Resolve an invite token to a public profile — no auth required (CAMP-023)
   resolveInviteToken: publicProcedure
     .input(z.object({ token: z.string() }))

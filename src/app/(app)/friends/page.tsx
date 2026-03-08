@@ -50,7 +50,10 @@ export default function FriendsPage() {
         <ul className="space-y-2">
           {friends.map((u) => (
             <li key={u.id} className="flex items-center justify-between rounded-lg border p-3">
-              <div className="flex items-center gap-3">
+              <Link
+                href={u.username ? `/u/${u.username}` : "#"}
+                className="flex items-center gap-3 hover:opacity-80"
+              >
                 <Avatar className="h-9 w-9">
                   <AvatarImage src={u.image ?? undefined} />
                   <AvatarFallback>{initials(u.name)}</AvatarFallback>
@@ -61,7 +64,7 @@ export default function FriendsPage() {
                     <p className="text-xs text-muted-foreground">@{u.username}</p>
                   )}
                 </div>
-              </div>
+              </Link>
               <Button
                 size="sm"
                 variant="ghost"
