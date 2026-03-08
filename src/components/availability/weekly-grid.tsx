@@ -197,7 +197,6 @@ export function WeeklyGrid({ events, onChange }: Props) {
     const el = scrollRef.current;
     if (!el) return;
     requestAnimationFrame(() => { el.scrollTop = minToPx(20 * 60); });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Yellow zone height ───────────────────────────────────────────────────────
