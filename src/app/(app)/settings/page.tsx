@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/trpc/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -181,18 +182,17 @@ function InviteSection() {
 
 function DangerZoneSection() {
   const router = useRouter();
-  const utils = api.useUtils();
+  const queryClient = useQueryClient();
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState("");
 
   const deleteAccount = api.user.deleteAccount.useMutation({
     onSuccess: () => {
-      // Redirect first — the session is already dead server-side.
-      // We skip cache invalidation here because triggering refetches on a
-      // revoked session would produce 401 errors before navigation completes.
+      // Wipe the React Query cache synchronously before redirecting.
+      // Using clear() (not invalidate()) avoids firing refetches against
+      // the now-revoked session which would produce 401 errors.
+      queryClient.clear();
       router.replace("/login");
-      // Clear cache after navigation is initiated so nothing re-fetches.
-      void utils.invalidate();
     },
     onError: (e) => setError(e.message),
   });

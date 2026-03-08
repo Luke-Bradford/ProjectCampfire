@@ -6,7 +6,13 @@ export type ScrubAccountPayload = {
   userId: string;
 };
 
-export type AccountJobPayload = ScrubAccountPayload;
+// Triggered by the hourly sweeper to re-enqueue any scrub jobs that were lost
+// (e.g. Redis was down when deleteAccount fired the original enqueue).
+export type SweepUnscrubedPayload = {
+  type: "sweep_unscrubbed";
+};
+
+export type AccountJobPayload = ScrubAccountPayload | SweepUnscrubedPayload;
 
 export const accountQueue = new Queue<AccountJobPayload>("account", {
   connection: bullmqConnection,

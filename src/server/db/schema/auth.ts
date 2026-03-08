@@ -56,6 +56,9 @@ export const user = pgTable("user", {
     .default({}),
   inviteToken: varchar("invite_token", { length: 64 }).unique(),
   deletedAt: timestamp("deleted_at"),
+  // Set to true once the async PII scrub job completes. Used by the hourly
+  // sweeper to detect accounts whose scrub job was lost (e.g. Redis was down).
+  piiScrubbed: boolean("pii_scrubbed").notNull().default(false),
 });
 
 // better-auth session table

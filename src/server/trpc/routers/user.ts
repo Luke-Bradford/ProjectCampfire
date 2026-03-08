@@ -134,9 +134,11 @@ export const userRouter = createTRPCRouter({
       // partially-deleted state (e.g. sessions revoked but deletedAt not set).
       await db.transaction(async (tx) => {
         // Guard: only proceed if account isn't already soft-deleted.
+        // Email is replaced here atomically so the real address is freed
+        // immediately — the async scrub job handles the remaining PII fields.
         const updated = await tx
           .update(user)
-          .set({ deletedAt: new Date() })
+          .set({ deletedAt: new Date(), email: `deleted-${userId}@invalid` })
           .where(and(eq(user.id, userId), isNull(user.deletedAt)))
           .returning({ id: user.id });
 

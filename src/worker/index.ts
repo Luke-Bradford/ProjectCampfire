@@ -2,6 +2,7 @@ import { Worker, Queue } from "bullmq";
 import { bullmqConnection } from "@/server/redis";
 import { processEmailJob } from "./processors/email";
 import { processAccountJob } from "./processors/account";
+import { accountQueue } from "@/server/jobs/account-jobs";
 import type { EmailJobPayload } from "@/server/jobs/email-jobs";
 import type { AccountJobPayload } from "@/server/jobs/account-jobs";
 
@@ -22,13 +23,22 @@ new Worker<EmailJobPayload>(
   { connection: bullmqConnection }
 );
 
-// Account management worker (soft-delete / PII scrub)
+// Account management worker (soft-delete / PII scrub + hourly sweep)
 new Worker<AccountJobPayload>(
   "account",
   async (job) => {
     await processAccountJob(job);
   },
   { connection: bullmqConnection }
+);
+
+// Hourly sweeper: finds deleted accounts where the scrub job was lost (e.g. Redis
+// was down during deleteAccount) and re-enqueues them. This is the fallback
+// recovery mechanism for the fire-and-forget enqueue in the tRPC mutation.
+void accountQueue.add(
+  "sweep_unscrubbed",
+  { type: "sweep_unscrubbed" },
+  { repeat: { every: 60 * 60 * 1000 }, jobId: "sweep_unscrubbed" },
 );
 
 // Image processing worker

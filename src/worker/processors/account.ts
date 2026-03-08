@@ -2,6 +2,7 @@ import type { Job } from "bullmq";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/server/db";
 import { user, session, account } from "@/server/db/schema";
+import { accountQueue } from "@/server/jobs/account-jobs";
 import type { AccountJobPayload } from "@/server/jobs/account-jobs";
 
 export async function processAccountJob(job: Job<AccountJobPayload>) {
@@ -10,17 +11,15 @@ export async function processAccountJob(job: Job<AccountJobPayload>) {
   switch (data.type) {
     case "scrub_account": {
       const { userId } = data;
+      let didScrub = false;
 
       await db.transaction(async (tx) => {
-        // Guard: only proceed if deletedAt is set. This prevents the job from
-        // touching a live account if a hypothetical undelete nulls deletedAt
-        // while the job is still queued. Session/account deletion happens here
-        // too so they're inside the same guard — not before it.
-        //
-        // Skip if already scrubbed (name is "[deleted]") to make retries idempotent.
+        // Guard: only proceed if deletedAt is set and PII hasn't been scrubbed yet.
+        // piiScrubbed is the robust idempotency sentinel — unlike checking a name
+        // sentinel, it cannot collide with a real user's display name.
         const target = await tx.query.user.findFirst({
           where: and(eq(user.id, userId), isNotNull(user.deletedAt)),
-          columns: { name: true },
+          columns: { piiScrubbed: true },
         });
 
         if (!target) {
@@ -28,7 +27,7 @@ export async function processAccountJob(job: Job<AccountJobPayload>) {
           return;
         }
 
-        if (target.name === "[deleted]") {
+        if (target.piiScrubbed) {
           console.warn(`[account] scrub skipped — user ${userId} already scrubbed`);
           return;
         }
@@ -50,11 +49,35 @@ export async function processAccountJob(job: Job<AccountJobPayload>) {
             usernameChangedAt: null,
             inviteToken: null,
             notificationPrefs: {},
+            piiScrubbed: true,
           })
           .where(eq(user.id, userId));
+
+        didScrub = true;
       });
 
-      console.log(`[account] scrubbed PII for user ${userId}`);
+      if (didScrub) {
+        console.log(`[account] scrubbed PII for user ${userId}`);
+      }
+      break;
+    }
+
+    case "sweep_unscrubbed": {
+      // Find accounts that are soft-deleted but whose scrub job never ran
+      // (e.g. Redis was down when deleteAccount fired). Re-enqueue each one.
+      const unscrubbed = await db.query.user.findMany({
+        where: and(isNotNull(user.deletedAt), eq(user.piiScrubbed, false)),
+        columns: { id: true },
+      });
+
+      if (unscrubbed.length === 0) break;
+
+      await Promise.all(
+        unscrubbed.map((u) =>
+          accountQueue.add("scrub_account", { type: "scrub_account", userId: u.id }),
+        ),
+      );
+      console.log(`[account] sweep re-enqueued ${unscrubbed.length} scrub job(s)`);
       break;
     }
 
