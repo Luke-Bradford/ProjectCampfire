@@ -70,6 +70,12 @@ export type FriendRequestPayload = {
   recipientUserId: string;
 };
 
+export type FriendRequestAcceptedPayload = {
+  type: "friend_request_accepted";
+  acceptorName: string;
+  recipientUserId: string;
+};
+
 export type EmailJobPayload =
   | EventConfirmedPayload
   | EventCancelledPayload
@@ -122,16 +128,6 @@ export function enqueueFriendRequest(payload: Omit<FriendRequestPayload, "type">
   return emailQueue.add("friend_request", { type: "friend_request", ...payload });
 }
 
-export type FriendRequestAcceptedPayload = {
-  type: "friend_request_accepted";
-  acceptorName: string;
-  recipientUserId: string;
-};
-
 export function enqueueFriendRequestAccepted(payload: Omit<FriendRequestAcceptedPayload, "type">) {
   return emailQueue.add("friend_request_accepted", { type: "friend_request_accepted", ...payload });
-}
-
-export function enqueueGroupInvite(payload: Omit<GroupInvitePayload, "type">) {
-  return emailQueue.add("group_invite", { type: "group_invite", ...payload });
 }

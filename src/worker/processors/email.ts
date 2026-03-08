@@ -31,6 +31,12 @@ function pref(prefs: Prefs | null | undefined, key: keyof Required<Prefs>): bool
   return DEFAULTS[key];
 }
 
+// ── HTML escaping ─────────────────────────────────────────────────────────────
+
+function esc(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 // ── Simple HTML email template ────────────────────────────────────────────────
 
 function htmlEmail(title: string, bodyHtml: string, ctaUrl?: string, ctaLabel?: string) {
@@ -85,8 +91,8 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
           subject: `Event confirmed: ${data.eventTitle}`,
           text: `Hi ${r.name},\n\n"${data.eventTitle}" in ${data.groupName} has been confirmed for ${dateStr}${endsStr}.\n\nView event: ${appUrl()}/events/${data.eventId}`,
           html: htmlEmail(
-            `Event confirmed: ${data.eventTitle}`,
-            `<p>Hi ${r.name},</p><p><strong>${data.eventTitle}</strong> in <strong>${data.groupName}</strong> has been confirmed for <strong>${dateStr}${endsStr}</strong>.</p>`,
+            `Event confirmed: ${esc(data.eventTitle)}`,
+            `<p>Hi ${esc(r.name)},</p><p><strong>${esc(data.eventTitle)}</strong> in <strong>${esc(data.groupName)}</strong> has been confirmed for <strong>${esc(dateStr)}${esc(endsStr)}</strong>.</p>`,
             `${appUrl()}/events/${data.eventId}`,
             "View event"
           ),
@@ -104,8 +110,8 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
           subject: `Event cancelled: ${data.eventTitle}`,
           text: `Hi ${r.name},\n\nUnfortunately "${data.eventTitle}" in ${data.groupName} has been cancelled.\n\nView group: ${appUrl()}/groups`,
           html: htmlEmail(
-            `Event cancelled: ${data.eventTitle}`,
-            `<p>Hi ${r.name},</p><p>Unfortunately <strong>${data.eventTitle}</strong> in <strong>${data.groupName}</strong> has been cancelled.</p>`,
+            `Event cancelled: ${esc(data.eventTitle)}`,
+            `<p>Hi ${esc(r.name)},</p><p>Unfortunately <strong>${esc(data.eventTitle)}</strong> in <strong>${esc(data.groupName)}</strong> has been cancelled.</p>`,
             `${appUrl()}/events/${data.eventId}`,
             "View event"
           ),
@@ -123,8 +129,8 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
           subject: `RSVP reminder: ${data.eventTitle}`,
           text: `Hi ${r.name},\n\nHave you had a chance to RSVP to "${data.eventTitle}" in ${data.groupName}?\n\nView event: ${appUrl()}/events/${data.eventId}`,
           html: htmlEmail(
-            `RSVP reminder: ${data.eventTitle}`,
-            `<p>Hi ${r.name},</p><p>Have you had a chance to RSVP to <strong>${data.eventTitle}</strong> in <strong>${data.groupName}</strong>?</p>`,
+            `RSVP reminder: ${esc(data.eventTitle)}`,
+            `<p>Hi ${esc(r.name)},</p><p>Have you had a chance to RSVP to <strong>${esc(data.eventTitle)}</strong> in <strong>${esc(data.groupName)}</strong>?</p>`,
             `${appUrl()}/events/${data.eventId}`,
             "RSVP now"
           ),
@@ -136,6 +142,7 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
     case "poll_opened": {
       const recipients = await getRecipients(data.recipientUserIds);
       const context = data.eventTitle ? ` for "${data.eventTitle}"` : "";
+      const contextHtml = data.eventTitle ? ` for &ldquo;${esc(data.eventTitle)}&rdquo;` : "";
       for (const r of recipients) {
         if (!pref(r.notificationPrefs as Prefs, "emailPollOpened")) continue;
         await sendEmail({
@@ -143,8 +150,8 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
           subject: `New poll${context}: ${data.pollQuestion}`,
           text: `Hi ${r.name},\n\nA new poll has been opened in ${data.groupName}${context}:\n\n"${data.pollQuestion}"\n\nCast your vote: ${appUrl()}/events/${data.pollId}`,
           html: htmlEmail(
-            `New poll in ${data.groupName}`,
-            `<p>Hi ${r.name},</p><p>A new poll has been opened${context}:</p><blockquote style="border-left:3px solid #e05f1a;margin:16px 0;padding:8px 16px;color:#444">${data.pollQuestion}</blockquote>`,
+            `New poll in ${esc(data.groupName)}`,
+            `<p>Hi ${esc(r.name)},</p><p>A new poll has been opened${contextHtml}:</p><blockquote style="border-left:3px solid #e05f1a;margin:16px 0;padding:8px 16px;color:#444">${esc(data.pollQuestion)}</blockquote>`,
             `${appUrl()}/events/${data.pollId}`,
             "Vote now"
           ),
@@ -163,7 +170,7 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
           text: `Hi ${r.name},\n\nThe poll "${data.pollQuestion}" in ${data.groupName} has been closed. Check the results!\n\nView results: ${appUrl()}/events/${data.pollId}`,
           html: htmlEmail(
             `Poll closed: results are in`,
-            `<p>Hi ${r.name},</p><p>The poll <strong>"${data.pollQuestion}"</strong> in <strong>${data.groupName}</strong> has been closed.</p>`,
+            `<p>Hi ${esc(r.name)},</p><p>The poll <strong>&ldquo;${esc(data.pollQuestion)}&rdquo;</strong> in <strong>${esc(data.groupName)}</strong> has been closed.</p>`,
             `${appUrl()}/events/${data.pollId}`,
             "View results"
           ),
@@ -181,8 +188,8 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
         subject: `You've been invited to ${data.groupName}`,
         text: `Hi ${r.name},\n\n${data.inviterName} has invited you to join "${data.groupName}" on Campfire.\n\nJoin: ${appUrl()}/groups/${data.groupId}`,
         html: htmlEmail(
-          `You've been invited to ${data.groupName}`,
-          `<p>Hi ${r.name},</p><p><strong>${data.inviterName}</strong> has invited you to join <strong>${data.groupName}</strong> on Campfire.</p>`,
+          `You've been invited to ${esc(data.groupName)}`,
+          `<p>Hi ${esc(r.name)},</p><p><strong>${esc(data.inviterName)}</strong> has invited you to join <strong>${esc(data.groupName)}</strong> on Campfire.</p>`,
           `${appUrl()}/groups/${data.groupId}`,
           "View group"
         ),
@@ -200,7 +207,7 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
         text: `Hi ${r.name},\n\n${data.requesterName} sent you a friend request on Campfire.\n\nRespond: ${appUrl()}/friends`,
         html: htmlEmail(
           `New friend request`,
-          `<p>Hi ${r.name},</p><p><strong>${data.requesterName}</strong> sent you a friend request on Campfire.</p>`,
+          `<p>Hi ${esc(r.name)},</p><p><strong>${esc(data.requesterName)}</strong> sent you a friend request on Campfire.</p>`,
           `${appUrl()}/friends`,
           "Respond"
         ),
@@ -218,7 +225,7 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
         text: `Hi ${r.name},\n\n${data.acceptorName} accepted your friend request on Campfire.\n\nView friends: ${appUrl()}/friends`,
         html: htmlEmail(
           `Friend request accepted`,
-          `<p>Hi ${r.name},</p><p><strong>${data.acceptorName}</strong> accepted your friend request on Campfire.</p>`,
+          `<p>Hi ${esc(r.name)},</p><p><strong>${esc(data.acceptorName)}</strong> accepted your friend request on Campfire.</p>`,
           `${appUrl()}/friends`,
           "View friends"
         ),

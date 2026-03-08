@@ -63,7 +63,8 @@ export const friendsRouter = createTRPCRouter({
         type: "friend_request_received",
         data: { requesterId: ctx.user.id, requesterName: ctx.user.name },
       });
-      void enqueueFriendRequest({ requesterName: ctx.user.name, recipientUserId: input.addresseeId });
+      void enqueueFriendRequest({ requesterName: ctx.user.name ?? "Someone", recipientUserId: input.addresseeId })
+        .catch((err) => console.error("enqueueFriendRequest failed", err));
     }),
 
   // Accept or decline a pending request (CAMP-025)
@@ -97,7 +98,8 @@ export const friendsRouter = createTRPCRouter({
           type: "friend_request_accepted",
           data: { acceptorId: ctx.user.id, acceptorName: ctx.user.name },
         });
-        void enqueueFriendRequestAccepted({ acceptorName: ctx.user.name, recipientUserId: input.requesterId });
+        void enqueueFriendRequestAccepted({ acceptorName: ctx.user.name ?? "Someone", recipientUserId: input.requesterId })
+          .catch((err) => console.error("enqueueFriendRequestAccepted failed", err));
       } else {
         await db
           .delete(friendships)
@@ -292,6 +294,7 @@ export const friendsRouter = createTRPCRouter({
         type: "friend_request_received",
         data: { requesterId: ctx.user.id, requesterName: ctx.user.name },
       });
-      void enqueueFriendRequest({ requesterName: ctx.user.name, recipientUserId: found.id });
+      void enqueueFriendRequest({ requesterName: ctx.user.name ?? "Someone", recipientUserId: found.id })
+        .catch((err) => console.error("enqueueFriendRequest failed", err));
     }),
 });
