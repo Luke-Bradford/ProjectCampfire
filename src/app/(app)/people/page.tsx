@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,7 +57,7 @@ export default function PeoplePage() {
           <ul className="space-y-2">
             {friendData!.incoming.map((u) => (
               <li key={u.id} className="flex items-center justify-between rounded-lg border p-3">
-                <div className="flex items-center gap-3">
+                <Link href={u.username ? `/u/${u.username}` : "#"} className="flex items-center gap-3 hover:opacity-80">
                   <Avatar className="h-9 w-9">
                     <AvatarImage src={u.image ?? undefined} />
                     <AvatarFallback>{initials(u.name)}</AvatarFallback>
@@ -65,7 +66,7 @@ export default function PeoplePage() {
                     <p className="text-sm font-medium">{u.name}</p>
                     {u.username && <p className="text-xs text-muted-foreground">@{u.username}</p>}
                   </div>
-                </div>
+                </Link>
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -116,7 +117,7 @@ export default function PeoplePage() {
               const isPending = outgoingIds.has(u.id);
               return (
                 <li key={u.id} className="flex items-center justify-between rounded-lg border p-3">
-                  <div className="flex items-center gap-3">
+                  <Link href={u.username ? `/u/${u.username}` : "#"} className="flex items-center gap-3 hover:opacity-80">
                     <Avatar className="h-9 w-9">
                       <AvatarImage src={u.image ?? undefined} />
                       <AvatarFallback>{initials(u.name)}</AvatarFallback>
@@ -127,7 +128,7 @@ export default function PeoplePage() {
                         <p className="text-xs text-muted-foreground">@{u.username}</p>
                       )}
                     </div>
-                  </div>
+                  </Link>
                   {isFriend ? (
                     <span className="text-xs text-muted-foreground">Friends</span>
                   ) : isPending ? (
