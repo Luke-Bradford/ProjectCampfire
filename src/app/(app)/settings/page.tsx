@@ -181,21 +181,26 @@ function InviteSection() {
 
 function DangerZoneSection() {
   const router = useRouter();
+  const utils = api.useUtils();
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState("");
 
   const deleteAccount = api.user.deleteAccount.useMutation({
-    onSuccess: () => {
-      // Session is dead server-side; redirect to login
+    onSuccess: async () => {
+      // Flush the tRPC cache so stale user data doesn't flash during navigation.
+      await utils.invalidate();
       router.replace("/login");
     },
     onError: (e) => setError(e.message),
   });
 
   function handleDelete() {
+    // Runtime guard: reject if confirmation isn't exactly "DELETE".
+    // The button is already disabled client-side, but this defends against
+    // programmatic calls and removes the need for an unsafe type cast.
+    if (confirmation !== "DELETE") return;
     setError("");
-    // Pass the actual typed value so the server Zod literal validates it.
-    deleteAccount.mutate({ confirmation: confirmation as "DELETE" });
+    deleteAccount.mutate({ confirmation });
   }
 
   return (

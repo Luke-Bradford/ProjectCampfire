@@ -151,9 +151,13 @@ export const userRouter = createTRPCRouter({
         await tx.delete(account).where(eq(account.userId, userId));
       });
 
-      // Enqueue PII scrub after transaction commits — if this fails, the account
-      // is still soft-deleted (safe), and the job can be re-enqueued manually.
-      await enqueueScrubAccount(userId);
+      // Fire-and-forget: the account is already soft-deleted and sessions revoked
+      // regardless of whether Redis accepts the job. If the enqueue fails the
+      // PII can be scrubbed by re-enqueueing manually; don't surface a 500 to
+      // the client for what is already a completed deletion.
+      enqueueScrubAccount(userId).catch((err: unknown) =>
+        console.error("[deleteAccount] failed to enqueue scrub job for", userId, err),
+      );
 
       return { success: true };
     }),

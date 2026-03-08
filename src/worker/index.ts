@@ -6,9 +6,7 @@ import type { EmailJobPayload } from "@/server/jobs/email-jobs";
 import type { AccountJobPayload } from "@/server/jobs/account-jobs";
 
 // Queue definitions — imported by other modules to enqueue jobs.
-// accountQueue is defined (with retry/backoff options) in server/jobs/account-jobs.ts
-// and re-exported here for consistency.
-export { accountQueue } from "@/server/jobs/account-jobs";
+// accountQueue lives in server/jobs/account-jobs.ts (import from there directly).
 export const emailQueue = new Queue<EmailJobPayload>("email", { connection: bullmqConnection });
 export const imageQueue = new Queue("image-processing", {
   connection: bullmqConnection,
