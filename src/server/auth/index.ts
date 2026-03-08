@@ -24,10 +24,11 @@ export const auth = betterAuth({
         // Block session creation for soft-deleted accounts. This covers both
         // email/password sign-in and OAuth re-authentication, preventing a
         // deleted user from logging back in or having a new session provisioned.
-        // Hook contract (verified against better-auth/dist/db/with-hooks.mjs):
-        //   return false       → cancel session creation
+        // Hook contract (verified against better-auth@1.5.4 dist/db/with-hooks.mjs):
+        //   return false       → cancel session creation (returns null from createWithHooks)
         //   return { data: x } → use modified session data
         //   return undefined   → proceed with original session data (our happy path)
+        // If better-auth changes this contract, upgrade with care and re-verify.
         before: async (newSession) => {
           const row = await db.query.user.findFirst({
             where: eq(user.id, newSession.userId),

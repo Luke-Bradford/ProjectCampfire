@@ -74,7 +74,13 @@ export async function processAccountJob(job: Job<AccountJobPayload>) {
 
       await Promise.all(
         unscrubbed.map((u) =>
-          accountQueue.add("scrub_account", { type: "scrub_account", userId: u.id }),
+          // Deterministic jobId deduplicates: if a scrub job is already queued
+          // for this user, BullMQ will not add a second one.
+          accountQueue.add(
+            "scrub_account",
+            { type: "scrub_account", userId: u.id },
+            { jobId: `scrub-${u.id}` },
+          ),
         ),
       );
       console.log(`[account] sweep re-enqueued ${unscrubbed.length} scrub job(s)`);
