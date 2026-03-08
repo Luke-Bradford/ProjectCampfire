@@ -10,7 +10,8 @@ export type EmailJobType =
   | "poll_opened"
   | "poll_closed"
   | "group_invite"
-  | "friend_request";
+  | "friend_request"
+  | "friend_request_accepted";
 
 export type EventConfirmedPayload = {
   type: "event_confirmed";
@@ -76,7 +77,8 @@ export type EmailJobPayload =
   | PollOpenedPayload
   | PollClosedPayload
   | GroupInvitePayload
-  | FriendRequestPayload;
+  | FriendRequestPayload
+  | FriendRequestAcceptedPayload;
 
 // ── Queue (shared singleton) ──────────────────────────────────────────────────
 
@@ -114,4 +116,22 @@ export function enqueuePollOpened(payload: Omit<PollOpenedPayload, "type">) {
 
 export function enqueuePollClosed(payload: Omit<PollClosedPayload, "type">) {
   return emailQueue.add("poll_closed", { type: "poll_closed", ...payload });
+}
+
+export function enqueueFriendRequest(payload: Omit<FriendRequestPayload, "type">) {
+  return emailQueue.add("friend_request", { type: "friend_request", ...payload });
+}
+
+export type FriendRequestAcceptedPayload = {
+  type: "friend_request_accepted";
+  acceptorName: string;
+  recipientUserId: string;
+};
+
+export function enqueueFriendRequestAccepted(payload: Omit<FriendRequestAcceptedPayload, "type">) {
+  return emailQueue.add("friend_request_accepted", { type: "friend_request_accepted", ...payload });
+}
+
+export function enqueueGroupInvite(payload: Omit<GroupInvitePayload, "type">) {
+  return emailQueue.add("group_invite", { type: "group_invite", ...payload });
 }

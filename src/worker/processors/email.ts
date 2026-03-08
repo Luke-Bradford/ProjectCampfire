@@ -208,6 +208,24 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
       break;
     }
 
+    case "friend_request_accepted": {
+      const r = await getSingleRecipient(data.recipientUserId);
+      if (!r) break;
+      if (!pref(r.notificationPrefs as Prefs, "emailFriendRequest")) break;
+      await sendEmail({
+        to: r.email,
+        subject: `${data.acceptorName} accepted your friend request`,
+        text: `Hi ${r.name},\n\n${data.acceptorName} accepted your friend request on Campfire.\n\nView friends: ${appUrl()}/friends`,
+        html: htmlEmail(
+          `Friend request accepted`,
+          `<p>Hi ${r.name},</p><p><strong>${data.acceptorName}</strong> accepted your friend request on Campfire.</p>`,
+          `${appUrl()}/friends`,
+          "View friends"
+        ),
+      });
+      break;
+    }
+
     default: {
       const _exhaustive: never = data;
       console.warn("Unknown email job type:", (_exhaustive as { type: string }).type);

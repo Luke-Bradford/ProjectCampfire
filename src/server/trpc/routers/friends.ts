@@ -5,6 +5,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
 import { user, friendships, notifications } from "@/server/db/schema";
+import { enqueueFriendRequest, enqueueFriendRequestAccepted } from "@/server/jobs/email-jobs";
 
 export const friendsRouter = createTRPCRouter({
   // Search open-profile users by username or display name (CAMP-020)
@@ -62,6 +63,7 @@ export const friendsRouter = createTRPCRouter({
         type: "friend_request_received",
         data: { requesterId: ctx.user.id, requesterName: ctx.user.name },
       });
+      void enqueueFriendRequest({ requesterName: ctx.user.name, recipientUserId: input.addresseeId });
     }),
 
   // Accept or decline a pending request (CAMP-025)
@@ -95,6 +97,7 @@ export const friendsRouter = createTRPCRouter({
           type: "friend_request_accepted",
           data: { acceptorId: ctx.user.id, acceptorName: ctx.user.name },
         });
+        void enqueueFriendRequestAccepted({ acceptorName: ctx.user.name, recipientUserId: input.requesterId });
       } else {
         await db
           .delete(friendships)
@@ -289,5 +292,6 @@ export const friendsRouter = createTRPCRouter({
         type: "friend_request_received",
         data: { requesterId: ctx.user.id, requesterName: ctx.user.name },
       });
+      void enqueueFriendRequest({ requesterName: ctx.user.name, recipientUserId: found.id });
     }),
 });
