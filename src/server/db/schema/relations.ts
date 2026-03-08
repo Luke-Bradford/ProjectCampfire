@@ -4,7 +4,7 @@ import { friendships } from "./friendships";
 import { groups, groupMemberships } from "./groups";
 import { posts, comments, reactions } from "./posts";
 import { games, gameOwnerships } from "./games";
-import { availabilityBlocks } from "./availability";
+import { availabilitySchedules, availabilityOverrides } from "./availability";
 import { events, eventRsvps, polls, pollOptions, pollVotes } from "./events";
 
 export const friendshipsRelations = relations(friendships, ({ one }) => ({
@@ -79,9 +79,12 @@ export const gameOwnershipsRelations = relations(gameOwnerships, ({ one }) => ({
 
 // ── Availability ──────────────────────────────────────────────────────────────
 
-export const availabilityBlocksRelations = relations(availabilityBlocks, ({ one }) => ({
-  user: one(user, { fields: [availabilityBlocks.userId], references: [user.id] }),
-  group: one(groups, { fields: [availabilityBlocks.groupId], references: [groups.id] }),
+export const availabilitySchedulesRelations = relations(availabilitySchedules, ({ one }) => ({
+  user: one(user, { fields: [availabilitySchedules.userId], references: [user.id] }),
+}));
+
+export const availabilityOverridesRelations = relations(availabilityOverrides, ({ one }) => ({
+  user: one(user, { fields: [availabilityOverrides.userId], references: [user.id] }),
 }));
 
 // ── Events ────────────────────────────────────────────────────────────────────

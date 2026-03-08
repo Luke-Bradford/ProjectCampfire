@@ -57,3 +57,37 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* FullCalendar theme overrides */
+.fc-wrapper .fc {
+  --fc-border-color: hsl(var(--border));
+  --fc-button-bg-color: hsl(var(--primary));
+  --fc-button-text-color: hsl(var(--primary-foreground));
+  --fc-button-hover-bg-color: hsl(var(--primary) / 0.9);
+  --fc-button-active-bg-color: hsl(var(--primary) / 0.8);
+  --fc-today-bg-color: hsl(var(--accent) / 0.3);
+  --fc-neutral-bg-color: hsl(var(--muted));
+  --fc-page-bg-color: transparent;
+  --fc-event-text-color: #fff;
+  font-family: inherit;
+}
+
+.fc-wrapper .fc .fc-button {
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+  padding: 0.25rem 0.75rem;
+}
+
+.fc-wrapper .fc .fc-toolbar-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.fc-wrapper .fc .fc-col-header-cell-cushion,
+.fc-wrapper .fc .fc-daygrid-day-number {
+  font-size: 0.8125rem;
+}
+
+.fc-wrapper .fc .fc-timegrid-slot-label-cushion {
+  font-size: 0.75rem;
+}
