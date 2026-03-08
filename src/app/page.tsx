@@ -1,8 +1,8 @@
-export default function HomePage() {
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-4">
-      <h1 className="text-4xl font-bold tracking-tight">Campfire</h1>
-      <p className="text-muted-foreground">Play together. Plan together.</p>
-    </main>
-  );
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { auth } from "@/server/auth";
+
+export default async function RootPage() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  redirect(session ? "/feed" : "/login");
 }

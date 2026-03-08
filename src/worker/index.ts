@@ -1,19 +1,20 @@
 import { Worker, Queue } from "bullmq";
 import { bullmqConnection } from "@/server/redis";
+import { processEmailJob } from "./processors/email";
+import type { EmailJobPayload } from "@/server/jobs/email-jobs";
 
 // Queue definitions — imported by other modules to enqueue jobs
-export const emailQueue = new Queue("email", { connection: bullmqConnection });
+export const emailQueue = new Queue<EmailJobPayload>("email", { connection: bullmqConnection });
 export const imageQueue = new Queue("image-processing", {
   connection: bullmqConnection,
 });
 export const ogQueue = new Queue("og-fetch", { connection: bullmqConnection });
 
 // Email worker
-new Worker(
+new Worker<EmailJobPayload>(
   "email",
   async (job) => {
-    // TODO: implement email sending via nodemailer
-    console.log("Processing email job:", job.id, job.data);
+    await processEmailJob(job);
   },
   { connection: bullmqConnection }
 );

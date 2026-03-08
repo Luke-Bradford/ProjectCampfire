@@ -14,9 +14,23 @@ export const profileVisibilityEnum = pgEnum("profile_visibility", [
 ]);
 
 export type NotificationPrefs = {
-  friendRequestReceived?: boolean;
-  friendRequestAccepted?: boolean;
-  groupInviteReceived?: boolean;
+  // ── In-app (bell) ───────────────────────────────────────────
+  friendRequestReceived?: boolean;  // default on
+  friendRequestAccepted?: boolean;  // default on
+  groupInviteReceived?: boolean;    // default on
+
+  // ── Email ────────────────────────────────────────────────────
+  // Friends
+  emailFriendRequest?: boolean;     // default off
+  // Events
+  emailEventConfirmed?: boolean;    // default on
+  emailEventCancelled?: boolean;    // default on
+  emailEventRsvpReminder?: boolean; // default on
+  // Polls
+  emailPollOpened?: boolean;        // default on
+  emailPollClosed?: boolean;        // default off
+  // Groups
+  emailGroupInvite?: boolean;       // default on
 };
 
 // better-auth user table extended with our profile fields.

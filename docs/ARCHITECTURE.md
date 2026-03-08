@@ -8,7 +8,7 @@
 | API layer | tRPC v11 | Type-safe end-to-end with no schema maintenance; REST adapter available if needed later |
 | Database | PostgreSQL 16 | Relational model fits the domain exactly; JSONB for flexible metadata; full-text search built-in; trivially self-hostable |
 | ORM | Drizzle ORM | Type-safe; SQL-close; migrations output inspectable SQL files |
-| Auth | Lucia Auth | Self-hostable; no third-party auth service dependency; email/password now, OAuth later |
+| Auth | better-auth | Self-hostable; no third-party auth service dependency; email/password now, OAuth later |
 | Background jobs | BullMQ + Redis | Email delivery, OG tag fetching, image processing, poll auto-close, Steam sync (Phase 2) |
 | Sessions / cache | Redis (Valkey) | Fast session store; BullMQ queue backend |
 | Object storage | MinIO | S3-compatible; self-hostable; swap to real S3 with one env var change |
@@ -53,7 +53,7 @@
                         │  └─────────┘         │  ├────────────────────────┤  │ │
                         │                      │  │  tRPC API Routes       │  │ │
                         │                      │  ├────────────────────────┤  │ │
-                        │                      │  │  Auth (Lucia)          │  │ │
+                        │                      │  │  Auth (better-auth)    │  │ │
                         │                      │  ├────────────────────────┤  │ │
                         │                      │  │  OG Unfurl (queued)    │  │ │
                         │                      │  ├────────────────────────┤  │ │
@@ -186,7 +186,7 @@ WHERE p.deleted_at IS NULL
     p.repost_of_id IS NULL
     OR EXISTS (
       SELECT 1 FROM posts op
-      JOIN users u ON u.id = op.author_id
+      JOIN "user" u ON u.id = op.author_id
       WHERE op.id = p.repost_of_id
         AND op.deleted_at IS NULL
         AND u.profile_visibility = 'open'

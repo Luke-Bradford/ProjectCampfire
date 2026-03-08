@@ -24,7 +24,7 @@ ProjectCampfire is a self-hostable platform that helps friend groups decide what
 | API | tRPC v11 |
 | Database | PostgreSQL 16 |
 | ORM | Drizzle ORM |
-| Auth | Lucia Auth |
+| Auth | better-auth |
 | Jobs | BullMQ + Redis |
 | Storage | MinIO (S3-compatible) |
 | Email | Nodemailer + SMTP relay |
@@ -48,27 +48,19 @@ ProjectCampfire is a self-hostable platform that helps friend groups decide what
 git clone https://github.com/your-org/projectcampfire.git
 cd projectcampfire
 
-# Copy environment variables
-cp .env.example .env
-
-# Start all services
-docker compose up -d
-
-# Install dependencies
-pnpm install
-
-# Run database migrations
-pnpm db:migrate
-
-# Seed development data (optional)
-pnpm db:seed
+# First-time setup (checks prereqs, creates .env, starts Docker, runs migrations)
+bash dev-start.sh
 
 # Start the development server
 pnpm dev
 ```
 
-The app will be available at `http://localhost:3000`.
-Mailhog (dev email catcher) runs at `http://localhost:8025`.
+| URL | Purpose |
+|---|---|
+| http://localhost:3000 | App |
+| http://localhost:8025 | Mailhog — catches all dev emails |
+| http://localhost:9001 | MinIO console (login: `minioadmin` / `minioadmin`) |
+
 Drizzle Studio (database GUI) runs via `pnpm db:studio`.
 
 ### Production (self-hosted)
