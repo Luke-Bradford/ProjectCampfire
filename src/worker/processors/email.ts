@@ -31,6 +31,26 @@ function pref(prefs: Prefs | null | undefined, key: keyof Required<Prefs>): bool
   return DEFAULTS[key];
 }
 
+// ── HTML escaping ─────────────────────────────────────────────────────────────
+
+function esc(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// Strip CR/LF — used on subject (header injection) and text bodies (garbled output)
+function strip(str: string): string {
+  return str.replace(/[\r\n]+/g, " ");
+}
+
+function safeSubject(str: string): string {
+  return strip(str);
+}
+
 // ── Simple HTML email template ────────────────────────────────────────────────
 
 function htmlEmail(title: string, bodyHtml: string, ctaUrl?: string, ctaLabel?: string) {
@@ -82,11 +102,11 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
         if (!pref(r.notificationPrefs as Prefs, "emailEventConfirmed")) continue;
         await sendEmail({
           to: r.email,
-          subject: `Event confirmed: ${data.eventTitle}`,
-          text: `Hi ${r.name},\n\n"${data.eventTitle}" in ${data.groupName} has been confirmed for ${dateStr}${endsStr}.\n\nView event: ${appUrl()}/events/${data.eventId}`,
+          subject: safeSubject(`Event confirmed: ${data.eventTitle}`),
+          text: `Hi ${strip(r.name)},\n\n"${strip(data.eventTitle)}" in ${strip(data.groupName)} has been confirmed for ${dateStr}${endsStr}.\n\nView event: ${appUrl()}/events/${data.eventId}`,
           html: htmlEmail(
-            `Event confirmed: ${data.eventTitle}`,
-            `<p>Hi ${r.name},</p><p><strong>${data.eventTitle}</strong> in <strong>${data.groupName}</strong> has been confirmed for <strong>${dateStr}${endsStr}</strong>.</p>`,
+            `Event confirmed: ${esc(data.eventTitle)}`,
+            `<p>Hi ${esc(r.name)},</p><p><strong>${esc(data.eventTitle)}</strong> in <strong>${esc(data.groupName)}</strong> has been confirmed for <strong>${esc(dateStr)}${esc(endsStr)}</strong>.</p>`,
             `${appUrl()}/events/${data.eventId}`,
             "View event"
           ),
@@ -101,11 +121,11 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
         if (!pref(r.notificationPrefs as Prefs, "emailEventCancelled")) continue;
         await sendEmail({
           to: r.email,
-          subject: `Event cancelled: ${data.eventTitle}`,
-          text: `Hi ${r.name},\n\nUnfortunately "${data.eventTitle}" in ${data.groupName} has been cancelled.\n\nView group: ${appUrl()}/groups`,
+          subject: safeSubject(`Event cancelled: ${data.eventTitle}`),
+          text: `Hi ${strip(r.name)},\n\nUnfortunately "${strip(data.eventTitle)}" in ${strip(data.groupName)} has been cancelled.\n\nView group: ${appUrl()}/groups`,
           html: htmlEmail(
-            `Event cancelled: ${data.eventTitle}`,
-            `<p>Hi ${r.name},</p><p>Unfortunately <strong>${data.eventTitle}</strong> in <strong>${data.groupName}</strong> has been cancelled.</p>`,
+            `Event cancelled: ${esc(data.eventTitle)}`,
+            `<p>Hi ${esc(r.name)},</p><p>Unfortunately <strong>${esc(data.eventTitle)}</strong> in <strong>${esc(data.groupName)}</strong> has been cancelled.</p>`,
             `${appUrl()}/events/${data.eventId}`,
             "View event"
           ),
@@ -120,11 +140,11 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
         if (!pref(r.notificationPrefs as Prefs, "emailEventRsvpReminder")) continue;
         await sendEmail({
           to: r.email,
-          subject: `RSVP reminder: ${data.eventTitle}`,
-          text: `Hi ${r.name},\n\nHave you had a chance to RSVP to "${data.eventTitle}" in ${data.groupName}?\n\nView event: ${appUrl()}/events/${data.eventId}`,
+          subject: safeSubject(`RSVP reminder: ${data.eventTitle}`),
+          text: `Hi ${strip(r.name)},\n\nHave you had a chance to RSVP to "${strip(data.eventTitle)}" in ${strip(data.groupName)}?\n\nView event: ${appUrl()}/events/${data.eventId}`,
           html: htmlEmail(
-            `RSVP reminder: ${data.eventTitle}`,
-            `<p>Hi ${r.name},</p><p>Have you had a chance to RSVP to <strong>${data.eventTitle}</strong> in <strong>${data.groupName}</strong>?</p>`,
+            `RSVP reminder: ${esc(data.eventTitle)}`,
+            `<p>Hi ${esc(r.name)},</p><p>Have you had a chance to RSVP to <strong>${esc(data.eventTitle)}</strong> in <strong>${esc(data.groupName)}</strong>?</p>`,
             `${appUrl()}/events/${data.eventId}`,
             "RSVP now"
           ),
@@ -136,15 +156,16 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
     case "poll_opened": {
       const recipients = await getRecipients(data.recipientUserIds);
       const context = data.eventTitle ? ` for "${data.eventTitle}"` : "";
+      const contextHtml = data.eventTitle ? ` for &ldquo;${esc(data.eventTitle)}&rdquo;` : "";
       for (const r of recipients) {
         if (!pref(r.notificationPrefs as Prefs, "emailPollOpened")) continue;
         await sendEmail({
           to: r.email,
-          subject: `New poll${context}: ${data.pollQuestion}`,
-          text: `Hi ${r.name},\n\nA new poll has been opened in ${data.groupName}${context}:\n\n"${data.pollQuestion}"\n\nCast your vote: ${appUrl()}/events/${data.pollId}`,
+          subject: safeSubject(`New poll${context}: ${data.pollQuestion}`),
+          text: `Hi ${strip(r.name)},\n\nA new poll has been opened in ${strip(data.groupName)}${context}:\n\n"${strip(data.pollQuestion)}"\n\nCast your vote: ${appUrl()}/events/${data.pollId}`,
           html: htmlEmail(
-            `New poll in ${data.groupName}`,
-            `<p>Hi ${r.name},</p><p>A new poll has been opened${context}:</p><blockquote style="border-left:3px solid #e05f1a;margin:16px 0;padding:8px 16px;color:#444">${data.pollQuestion}</blockquote>`,
+            `New poll in ${esc(data.groupName)}`,
+            `<p>Hi ${esc(r.name)},</p><p>A new poll has been opened${contextHtml}:</p><blockquote style="border-left:3px solid #e05f1a;margin:16px 0;padding:8px 16px;color:#444">${esc(data.pollQuestion)}</blockquote>`,
             `${appUrl()}/events/${data.pollId}`,
             "Vote now"
           ),
@@ -159,11 +180,11 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
         if (!pref(r.notificationPrefs as Prefs, "emailPollClosed")) continue;
         await sendEmail({
           to: r.email,
-          subject: `Poll closed: ${data.pollQuestion}`,
-          text: `Hi ${r.name},\n\nThe poll "${data.pollQuestion}" in ${data.groupName} has been closed. Check the results!\n\nView results: ${appUrl()}/events/${data.pollId}`,
+          subject: safeSubject(`Poll closed: ${data.pollQuestion}`),
+          text: `Hi ${strip(r.name)},\n\nThe poll "${strip(data.pollQuestion)}" in ${strip(data.groupName)} has been closed. Check the results!\n\nView results: ${appUrl()}/events/${data.pollId}`,
           html: htmlEmail(
             `Poll closed: results are in`,
-            `<p>Hi ${r.name},</p><p>The poll <strong>"${data.pollQuestion}"</strong> in <strong>${data.groupName}</strong> has been closed.</p>`,
+            `<p>Hi ${esc(r.name)},</p><p>The poll <strong>&ldquo;${esc(data.pollQuestion)}&rdquo;</strong> in <strong>${esc(data.groupName)}</strong> has been closed.</p>`,
             `${appUrl()}/events/${data.pollId}`,
             "View results"
           ),
@@ -178,11 +199,11 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
       if (!pref(r.notificationPrefs as Prefs, "emailGroupInvite")) break;
       await sendEmail({
         to: r.email,
-        subject: `You've been invited to ${data.groupName}`,
-        text: `Hi ${r.name},\n\n${data.inviterName} has invited you to join "${data.groupName}" on Campfire.\n\nJoin: ${appUrl()}/groups/${data.groupId}`,
+        subject: safeSubject(`You've been invited to ${data.groupName}`),
+        text: `Hi ${strip(r.name)},\n\n${strip(data.inviterName)} has invited you to join "${strip(data.groupName)}" on Campfire.\n\nJoin: ${appUrl()}/groups/${data.groupId}`,
         html: htmlEmail(
-          `You've been invited to ${data.groupName}`,
-          `<p>Hi ${r.name},</p><p><strong>${data.inviterName}</strong> has invited you to join <strong>${data.groupName}</strong> on Campfire.</p>`,
+          `You've been invited to ${esc(data.groupName)}`,
+          `<p>Hi ${esc(r.name)},</p><p><strong>${esc(data.inviterName)}</strong> has invited you to join <strong>${esc(data.groupName)}</strong> on Campfire.</p>`,
           `${appUrl()}/groups/${data.groupId}`,
           "View group"
         ),
@@ -196,13 +217,31 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
       if (!pref(r.notificationPrefs as Prefs, "emailFriendRequest")) break;
       await sendEmail({
         to: r.email,
-        subject: `${data.requesterName} sent you a friend request`,
-        text: `Hi ${r.name},\n\n${data.requesterName} sent you a friend request on Campfire.\n\nRespond: ${appUrl()}/friends`,
+        subject: safeSubject(`${data.requesterName} sent you a friend request`),
+        text: `Hi ${strip(r.name)},\n\n${strip(data.requesterName)} sent you a friend request on Campfire.\n\nRespond: ${appUrl()}/friends`,
         html: htmlEmail(
           `New friend request`,
-          `<p>Hi ${r.name},</p><p><strong>${data.requesterName}</strong> sent you a friend request on Campfire.</p>`,
+          `<p>Hi ${esc(r.name)},</p><p><strong>${esc(data.requesterName)}</strong> sent you a friend request on Campfire.</p>`,
           `${appUrl()}/friends`,
           "Respond"
+        ),
+      });
+      break;
+    }
+
+    case "friend_request_accepted": {
+      const r = await getSingleRecipient(data.recipientUserId);
+      if (!r) break;
+      if (!pref(r.notificationPrefs as Prefs, "emailFriendRequest")) break;
+      await sendEmail({
+        to: r.email,
+        subject: safeSubject(`${data.acceptorName} accepted your friend request`),
+        text: `Hi ${strip(r.name)},\n\n${strip(data.acceptorName)} accepted your friend request on Campfire.\n\nView friends: ${appUrl()}/friends`,
+        html: htmlEmail(
+          `Friend request accepted`,
+          `<p>Hi ${esc(r.name)},</p><p><strong>${esc(data.acceptorName)}</strong> accepted your friend request on Campfire.</p>`,
+          `${appUrl()}/friends`,
+          "View friends"
         ),
       });
       break;
