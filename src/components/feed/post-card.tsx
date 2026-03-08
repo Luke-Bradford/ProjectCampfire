@@ -50,8 +50,8 @@ function CommentRow({
         <AvatarFallback className="text-xs">{initials(comment.author.name)}</AvatarFallback>
       </Avatar>
       <div className="flex-1 space-y-0.5">
+        <p className="px-1 text-xs font-medium">{comment.author.name}</p>
         <div className="rounded-lg bg-muted px-3 py-2 text-sm">
-          <span className="font-medium">{comment.author.name}</span>{" "}
           {comment.body}
         </div>
         <div className="flex items-center gap-2 px-1">

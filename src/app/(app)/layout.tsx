@@ -4,6 +4,7 @@ import Link from "next/link";
 import { auth } from "@/server/auth";
 import { UserMenu } from "@/components/nav/user-menu";
 import { NotificationBell } from "@/components/nav/notification-bell";
+import { NavLinks } from "@/components/nav/nav-links";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   let session;
@@ -25,15 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Link href="/feed" className="text-lg font-semibold tracking-tight">
               Campfire
             </Link>
-            <nav className="flex items-center gap-4 text-sm text-muted-foreground">
-              <Link href="/feed" className="hover:text-foreground">Feed</Link>
-              <Link href="/groups" className="hover:text-foreground">Groups</Link>
-              <Link href="/friends" className="hover:text-foreground">Friends</Link>
-              <Link href="/games" className="hover:text-foreground">Games</Link>
-              <Link href="/availability" className="hover:text-foreground">Availability</Link>
-              <Link href="/events" className="hover:text-foreground">Events</Link>
-              <Link href="/people" className="hover:text-foreground">Find people</Link>
-            </nav>
+            <NavLinks />
           </div>
           <div className="flex items-center gap-4">
             <NotificationBell />
