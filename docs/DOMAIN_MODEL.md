@@ -123,23 +123,42 @@ GroupMembership
 
 ---
 
-### AvailabilityBlock
+### AvailabilitySchedule
 
-A time range a user marks themselves as free. Used to drive the group overlap view.
+A recurring weekly template for when a user is typically free. Set once, generates availability automatically.
 
 ```
-AvailabilityBlock
+AvailabilitySchedule
+  id           uuid (PK)
+  user_id      uuid -> User
+  day_of_week  integer (0=Monday ... 6=Sunday)
+  start_time   time (e.g. "19:00")
+  end_time     time (e.g. "23:00")
+  label        text (nullable — e.g. "After work")
+  created_at   timestamptz
+```
+
+**Invariant:** `end_time` must be after `start_time`. Multiple entries per day allowed (e.g. morning + evening).
+
+---
+
+### AvailabilityOverride
+
+Per-date tweaks to the recurring schedule. Used for holidays, extra free time, or one-off changes.
+
+```
+AvailabilityOverride
   id          uuid (PK)
   user_id     uuid -> User
-  group_id    uuid -> Group (nullable — null means applies to all groups / friend context)
-  starts_at   timestamptz
-  ends_at     timestamptz
-  label       text (nullable — e.g. "free after work")
-  visibility  enum: friends | group | private
+  date        date
+  type        enum: available | unavailable
+  start_time  time (nullable — null with type=unavailable means "unavailable all day")
+  end_time    time (nullable)
+  label       text (nullable — e.g. "Holiday", "Extra free time")
   created_at  timestamptz
 ```
 
-**Invariant:** `ends_at` must be after `starts_at`.
+**Resolution logic:** For any given date, take the user's `AvailabilitySchedule` entries for that day of week, then apply `AvailabilityOverride` entries for that specific date. `unavailable` overrides remove or shrink matching schedule slots. `available` overrides add new slots not in the base schedule.
 
 ---
 
@@ -381,7 +400,8 @@ Post ──< Comment
 Post ──< Reaction                         (polymorphic via entity_type)
 Comment ──< Reaction                      (polymorphic via entity_type)
 Post.repost_of_id ──> Post               (one level only)
-User ──< AvailabilityBlock
+User ──< AvailabilitySchedule          (recurring weekly template)
+User ──< AvailabilityOverride          (per-date tweaks)
 User ──< GameOwnership >── Game
 PollOption.game_id ──> Game              (nullable)
 User ──< Notification
@@ -398,7 +418,7 @@ User ──< Notification
 | No repost chains | Application-layer: reject if `repost_of_id` target itself has `repost_of_id IS NOT NULL` |
 | Repost requires open-profile author | Server-side check; UI also reflects with greyed button |
 | `Poll` must have `event_id` or `group_id` | `CHECK (event_id IS NOT NULL OR group_id IS NOT NULL)` |
-| `AvailabilityBlock.ends_at > starts_at` | `CHECK (ends_at > starts_at)` |
+| `AvailabilitySchedule.end_time > start_time` | `CHECK (end_time > start_time)` |
 | `GameOwnership.source = steam` not user-writable | API layer rejects `source = steam` from user-facing procedures |
 | `Event.confirmed_starts_at` only set on confirm | Application-layer state machine |
 | Username 30-day rename cooldown | `username_changed_at` checked before allow; updated on rename |
@@ -423,8 +443,11 @@ CREATE INDEX idx_friendships_addressee ON friendships (addressee_id, status);
 -- Group membership
 CREATE INDEX idx_memberships_user ON group_memberships (user_id);
 
--- Availability overlap
-CREATE INDEX idx_availability_user_time ON availability_blocks (user_id, starts_at, ends_at);
+-- Availability schedule lookup
+CREATE INDEX idx_avail_schedule_user ON availability_schedules (user_id, day_of_week);
+
+-- Availability override lookup
+CREATE INDEX idx_avail_override_user_date ON availability_overrides (user_id, date);
 
 -- Notifications
 CREATE INDEX idx_notifications_user_unread ON notifications (user_id, read_at) WHERE read_at IS NULL;
