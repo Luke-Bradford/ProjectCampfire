@@ -1,10 +1,13 @@
 import { Worker, Queue } from "bullmq";
 import { bullmqConnection } from "@/server/redis";
 import { processEmailJob } from "./processors/email";
+import { processAccountJob } from "./processors/account";
 import type { EmailJobPayload } from "@/server/jobs/email-jobs";
+import type { AccountJobPayload } from "@/server/jobs/account-jobs";
 
 // Queue definitions — imported by other modules to enqueue jobs
 export const emailQueue = new Queue<EmailJobPayload>("email", { connection: bullmqConnection });
+export const accountQueue = new Queue<AccountJobPayload>("account", { connection: bullmqConnection });
 export const imageQueue = new Queue("image-processing", {
   connection: bullmqConnection,
 });
@@ -15,6 +18,15 @@ new Worker<EmailJobPayload>(
   "email",
   async (job) => {
     await processEmailJob(job);
+  },
+  { connection: bullmqConnection }
+);
+
+// Account management worker (soft-delete / PII scrub)
+new Worker<AccountJobPayload>(
+  "account",
+  async (job) => {
+    await processAccountJob(job);
   },
   { connection: bullmqConnection }
 );

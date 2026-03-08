@@ -4,7 +4,8 @@ import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { user, type NotificationPrefs } from "@/server/db/schema";
+import { user, session, account, type NotificationPrefs } from "@/server/db/schema";
+import { enqueueScrubAccount } from "@/server/jobs/account-jobs";
 
 const notificationPrefsSchema = z.object({
   friendRequestReceived: z.boolean().optional(),
@@ -116,5 +117,31 @@ export const userRouter = createTRPCRouter({
         .update(user)
         .set({ username: input.username, usernameChangedAt: new Date() })
         .where(eq(user.id, ctx.user.id));
+    }),
+
+  // Soft-delete the current user's account.
+  // Sets deletedAt, kills all sessions, and enqueues an async PII scrub job.
+  deleteAccount: protectedProcedure
+    .input(z.object({
+      // Confirmation string the user must type — guards against accidental clicks
+      confirmation: z.literal("DELETE"),
+    }))
+    .mutation(async ({ ctx }) => {
+      const userId = ctx.user.id;
+
+      // Mark as deleted
+      await db
+        .update(user)
+        .set({ deletedAt: new Date() })
+        .where(eq(user.id, userId));
+
+      // Revoke all sessions immediately (forces logout everywhere)
+      await db.delete(session).where(eq(session.userId, userId));
+
+      // Revoke OAuth accounts so they can't be used to re-auth
+      await db.delete(account).where(eq(account.userId, userId));
+
+      // Enqueue async PII scrub (nulls name, email, bio, etc.)
+      await enqueueScrubAccount(userId);
     }),
 });
