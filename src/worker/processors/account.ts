@@ -1,7 +1,7 @@
 import type { Job } from "bullmq";
 import { eq } from "drizzle-orm";
 import { db } from "@/server/db";
-import { user, session, account, verification } from "@/server/db/schema";
+import { user, session, account } from "@/server/db/schema";
 import type { AccountJobPayload } from "@/server/jobs/account-jobs";
 
 export async function processAccountJob(job: Job<AccountJobPayload>) {
@@ -11,12 +11,12 @@ export async function processAccountJob(job: Job<AccountJobPayload>) {
     case "scrub_account": {
       const { userId } = data;
 
-      // Scrub all PII from the user row, leaving id + deletedAt as tombstone.
-      // Sessions/accounts/verifications have onDelete: cascade so they're already
-      // gone, but we delete them explicitly here for belt-and-suspenders safety.
+      // Belt-and-suspenders: session and account rows should already be deleted
+      // by the tRPC mutation transaction, but we re-delete here in case of retry
+      // or edge cases. The verification table uses email as identifier, not userId,
+      // so we leave it alone — those rows expire naturally.
       await db.delete(session).where(eq(session.userId, userId));
       await db.delete(account).where(eq(account.userId, userId));
-      await db.delete(verification).where(eq(verification.identifier, userId));
 
       await db
         .update(user)

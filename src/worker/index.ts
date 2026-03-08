@@ -5,9 +5,11 @@ import { processAccountJob } from "./processors/account";
 import type { EmailJobPayload } from "@/server/jobs/email-jobs";
 import type { AccountJobPayload } from "@/server/jobs/account-jobs";
 
-// Queue definitions — imported by other modules to enqueue jobs
+// Queue definitions — imported by other modules to enqueue jobs.
+// accountQueue is defined (with retry/backoff options) in server/jobs/account-jobs.ts
+// and re-exported here for consistency.
+export { accountQueue } from "@/server/jobs/account-jobs";
 export const emailQueue = new Queue<EmailJobPayload>("email", { connection: bullmqConnection });
-export const accountQueue = new Queue<AccountJobPayload>("account", { connection: bullmqConnection });
 export const imageQueue = new Queue("image-processing", {
   connection: bullmqConnection,
 });

@@ -194,7 +194,8 @@ function DangerZoneSection() {
 
   function handleDelete() {
     setError("");
-    deleteAccount.mutate({ confirmation: "DELETE" });
+    // Pass the actual typed value so the server Zod literal validates it.
+    deleteAccount.mutate({ confirmation: confirmation as "DELETE" });
   }
 
   return (

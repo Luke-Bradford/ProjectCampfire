@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -123,25 +123,38 @@ export const userRouter = createTRPCRouter({
   // Sets deletedAt, kills all sessions, and enqueues an async PII scrub job.
   deleteAccount: protectedProcedure
     .input(z.object({
-      // Confirmation string the user must type — guards against accidental clicks
+      // The user must type "DELETE" — validated both client-side (disables button)
+      // and server-side (Zod literal) so API callers can't bypass the confirmation.
       confirmation: z.literal("DELETE"),
     }))
     .mutation(async ({ ctx }) => {
       const userId = ctx.user.id;
 
-      // Mark as deleted
-      await db
-        .update(user)
-        .set({ deletedAt: new Date() })
-        .where(eq(user.id, userId));
+      // All DB operations run in a single transaction so we never end up in a
+      // partially-deleted state (e.g. sessions revoked but deletedAt not set).
+      await db.transaction(async (tx) => {
+        // Guard: only proceed if account isn't already soft-deleted.
+        const updated = await tx
+          .update(user)
+          .set({ deletedAt: new Date() })
+          .where(and(eq(user.id, userId), isNull(user.deletedAt)))
+          .returning({ id: user.id });
 
-      // Revoke all sessions immediately (forces logout everywhere)
-      await db.delete(session).where(eq(session.userId, userId));
+        if (updated.length === 0) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Account already deleted." });
+        }
 
-      // Revoke OAuth accounts so they can't be used to re-auth
-      await db.delete(account).where(eq(account.userId, userId));
+        // Revoke all sessions immediately (forces logout everywhere)
+        await tx.delete(session).where(eq(session.userId, userId));
 
-      // Enqueue async PII scrub (nulls name, email, bio, etc.)
+        // Revoke OAuth credentials so they can't be used to re-authenticate
+        await tx.delete(account).where(eq(account.userId, userId));
+      });
+
+      // Enqueue PII scrub after transaction commits — if this fails, the account
+      // is still soft-deleted (safe), and the job can be re-enqueued manually.
       await enqueueScrubAccount(userId);
+
+      return { success: true };
     }),
 });
