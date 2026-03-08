@@ -19,14 +19,15 @@ jobs:
           fetch-depth: 0
 
       - name: Get PR diff
-        run: |
-          gh pr diff ${{ github.event.pull_request.number }} > pr.diff
+        run: gh pr diff ${{ github.event.pull_request.number }} > pr.diff
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get PR description
         run: |
-          gh pr view ${{ github.event.pull_request.number }} --json title,body -q '"# " + .title + "\n\n" + .body' > pr_desc.txt
+          gh pr view ${{ github.event.pull_request.number }} \
+            --json title,body \
+            -q '"# " + .title + "\n\n" + .body' > pr_desc.txt
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -70,29 +71,42 @@ jobs:
           with open('request.json', 'w') as f:
               json.dump(payload, f)
 
-          print("Request body written successfully")
+          print(f"Request written: {len(diff)} chars of diff, {len(prompt)} chars total prompt")
           PYEOF
 
       - name: Call Claude API
         run: |
-          curl -sf https://api.anthropic.com/v1/messages \
+          # Use -s (silent) but NOT -f so we always get the response body even on errors
+          HTTP_STATUS=$(curl -s -w "%{http_code}" \
             -H "x-api-key: $ANTHROPIC_API_KEY" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
             --data-binary @request.json \
-            -o response.json
+            -o response.json \
+            https://api.anthropic.com/v1/messages)
+
+          echo "HTTP status: $HTTP_STATUS"
+          echo "--- Response body ---"
+          cat response.json
+          echo "--- End response ---"
+
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "API returned HTTP $HTTP_STATUS"
+            exit 1
+          fi
 
           python3 -c "
           import json, sys
           data = json.load(open('response.json'))
           if 'content' in data and data['content']:
-              print(data['content'][0]['text'])
+              text = data['content'][0]['text']
+              with open('review.txt', 'w') as f:
+                  f.write(text)
+              print('Review extracted successfully')
           else:
-              print('API error:', json.dumps(data, indent=2))
+              print('Unexpected response shape:', json.dumps(data, indent=2))
               sys.exit(1)
-          " > review.txt
-
-          cat review.txt
+          "
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
