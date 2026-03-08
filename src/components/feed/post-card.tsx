@@ -89,6 +89,7 @@ export function PostCard({
 
   const toggleLike = api.feed.toggleLike.useMutation({ onSuccess: onRefresh });
   const deletePost = api.feed.delete.useMutation({ onSuccess: onRefresh });
+  const blockUser = api.friends.block.useMutation({ onSuccess: onRefresh });
   const addComment = api.feed.comment.useMutation({
     onSuccess: () => {
       setCommentBody("");
@@ -120,12 +121,24 @@ export function PostCard({
             </p>
           </div>
         </div>
-        {post.author.id === currentUserId && (
+        {post.author.id === currentUserId ? (
           <button
             className="text-xs text-muted-foreground hover:text-destructive"
             onClick={() => deletePost.mutate({ id: post.id })}
           >
             Delete
+          </button>
+        ) : (
+          <button
+            className="text-xs text-muted-foreground hover:text-destructive"
+            onClick={() => {
+              if (window.confirm(`Block ${post.author.name}? Their posts will be hidden from your feed.`)) {
+                blockUser.mutate({ targetId: post.author.id });
+              }
+            }}
+            disabled={blockUser.isPending}
+          >
+            Block
           </button>
         )}
       </div>

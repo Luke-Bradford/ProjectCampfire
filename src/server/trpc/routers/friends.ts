@@ -184,6 +184,20 @@ export const friendsRouter = createTRPCRouter({
       });
     }),
 
+  // List users blocked by the current user (CAMP-028/029)
+  listBlocked: protectedProcedure.query(async ({ ctx }) => {
+    const rows = await db.query.friendships.findMany({
+      where: and(
+        eq(friendships.requesterId, ctx.user.id),
+        eq(friendships.status, "blocked")
+      ),
+      with: {
+        addressee: { columns: { id: true, name: true, username: true, image: true } },
+      },
+    });
+    return rows.map((r) => r.addressee);
+  }),
+
   // Unblock (CAMP-029)
   unblock: protectedProcedure
     .input(z.object({ targetId: z.string() }))
