@@ -19,35 +19,107 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Claude code review
-        uses: anthropics/claude-code-action@beta
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          direct_prompt: |
-            You are a strict senior code reviewer. Your job is to find real problems — not to be encouraging.
+      - name: Get PR diff
+        run: |
+          gh pr diff ${{ github.event.pull_request.number }} > pr.diff
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-            Review this pull request. The diff is below.
+      - name: Get PR description
+        run: |
+          gh pr view ${{ github.event.pull_request.number }} --json title,body -q '"# " + .title + "\n\n" + .body' > pr_desc.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-            **What to check:**
-            1. **Correctness** — Does the logic do what the description claims? Off-by-one errors, wrong conditions, missing edge cases?
-            2. **Security** — Missing auth checks, exposed data, unvalidated input reaching the DB?
-            3. **tRPC / data layer** — Input validated with Zod? Business logic in server, not component?
-            4. **Type safety** — Any `any`, unchecked casts, or suppressed errors?
-            5. **Scope creep** — Does this do more than the ticket requires? Check against docs/MVP_BOUNDARIES.md if available.
-            6. **Regressions** — Anything removed that other code still depends on?
+      - name: Build request and call Claude API
+        id: claude
+        run: |
+          python3 - <<'PYEOF'
+          import json, subprocess, sys
 
-            **Format your response as:**
+          diff = open('pr.diff').read()
+          desc = open('pr_desc.txt').read()
 
-            ### [BLOCKING] — must fix before merge
-            - Each issue with file:line reference and explanation. If none, write "None."
+          prompt = f"""You are a strict senior code reviewer. Your job is to find real problems — not to be encouraging.
 
-            ### [WARNING] — should fix, not blocking
-            - Each issue with file:line reference. If none, write "None."
+          PR Description:
+          {desc}
 
-            ### [NITPICK] — optional / style
-            - Each issue with file:line reference. If none, write "None."
+          **What to check:**
+          1. **Correctness** — Does the logic do what the description claims? Off-by-one errors, wrong conditions, missing edge cases?
+          2. **Security** — Missing auth checks, exposed data, unvalidated input reaching the DB?
+          3. **tRPC / data layer** — Input validated with Zod? Business logic in server, not component?
+          4. **Type safety** — Any `any`, unchecked casts, or suppressed errors?
+          5. **Scope creep** — Does this do more than the ticket requires?
+          6. **Regressions** — Anything removed that other code still depends on?
 
-            ### Verdict
-            One of: **APPROVE**, **REQUEST CHANGES**, or **NEEDS DISCUSSION**.
+          **Format your response as:**
 
-            Be direct. If the code is fine, say so briefly. Do not pad the review with praise.
+          ### [BLOCKING] — must fix before merge
+          - Each issue with file:line reference and explanation. If none, write "None."
+
+          ### [WARNING] — should fix, not blocking
+          - Each issue with file:line reference. If none, write "None."
+
+          ### [NITPICK] — optional / style
+          - Each issue with file:line reference. If none, write "None."
+
+          ### Verdict
+          One of: **APPROVE**, **REQUEST CHANGES**, or **NEEDS DISCUSSION**.
+
+          Be direct. If the code is fine, say so briefly. Do not pad the review with praise.
+
+          Diff:
+          ```diff
+          {diff}
+          ```"""
+
+          payload = json.dumps({
+              "model": "claude-opus-4-6",
+              "max_tokens": 4096,
+              "messages": [{"role": "user", "content": prompt}]
+          })
+
+          with open('request.json', 'w') as f:
+              f.write(payload)
+
+          print("Request body written successfully")
+          PYEOF
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Call Claude API
+        id: api_call
+        run: |
+          RESPONSE=$(curl -sf https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            --data-binary @request.json)
+
+          echo "$RESPONSE" > response.json
+
+          # Extract the review text
+          python3 -c "
+          import json, sys
+          data = json.load(open('response.json'))
+          if 'content' in data and data['content']:
+              print(data['content'][0]['text'])
+          else:
+              print('Error: unexpected response shape')
+              print(json.dumps(data, indent=2))
+              sys.exit(1)
+          " > review.txt
+
+          cat review.txt
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Post review comment
+        run: |
+          BODY=$(cat review.txt)
+          gh pr comment ${{ github.event.pull_request.number }} --body "## Claude Code Review
+
+          $BODY"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
