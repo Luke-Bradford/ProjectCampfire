@@ -1,6 +1,33 @@
 # ProjectCampfire
 
-Gaming social + session planning app. Self-hosted, Docker Compose, TypeScript monorepo.
+ProjectCampfire is a private-first social planning app for friend groups who game together.
+
+It helps users:
+- add friends
+- create private groups
+- share availability
+- plan gaming sessions
+- vote on games and times
+- keep related discussion in one place
+- view lightweight game context as supporting information
+
+## Product Boundaries
+
+ProjectCampfire is **not** a broad public social network in MVP.
+
+Do not expand the MVP into:
+- public threads or public game communities
+- live chat, voice, or streaming infrastructure
+- recommendation engines
+- broad moderation-heavy public spaces
+- deep third-party platform dependence
+- unnecessary feed complexity
+
+For MVP, the core value is:
+
+**Helping friend groups decide what to play, when to play, who is available, and who already owns the game.**
+
+Game metadata, price/popularity data, and external integrations are supporting features, not the product core.
 
 ## Quick Start
 
@@ -17,6 +44,19 @@ pnpm worker                  # BullMQ worker (separate terminal)
 
 Next.js 15 (App Router) · tRPC v11 · Drizzle ORM · PostgreSQL 16 · Redis (Valkey) · **better-auth** · BullMQ · MinIO · Sharp · Nodemailer · shadcn/ui · Tailwind CSS v3
 
+## Working Style
+
+When making changes:
+- Read the relevant files first.
+- Prefer the smallest useful implementation.
+- Preserve existing architectural boundaries.
+- Do not introduce new dependencies without justification.
+- Do not widen MVP scope unless explicitly asked.
+- If a change affects product behavior, schema, or architecture, update docs.
+- Explain risks, assumptions, and follow-on work clearly.
+
+Prefer incremental delivery over large speculative refactors.
+
 ## Work Tracking
 
 **Source of truth: [GitHub Issues](https://github.com/Luke-Bradford/ProjectCampfire/issues)** with milestones per phase.
@@ -30,9 +70,12 @@ Next.js 15 (App Router) · tRPC v11 · Drizzle ORM · PostgreSQL 16 · Redis (Va
 
 - **Auth:** better-auth (not Lucia). User table is `user` (singular). Session uses `token` field.
 - **Schema:** All custom profile fields live on the `user` table. See `src/server/db/schema/auth.ts`.
-- **BullMQ:** Export `bullmqConnection` as a plain options object from `src/server/redis.ts`. Do NOT pass an IORedis instance to BullMQ (version conflict).
+- **Validation:** Validate all procedure inputs explicitly.
+- **tRPC:** Keep routers thin. Put business logic in server-side services/helpers, not UI components.
+- **Database access:** Do not place database logic in React presentation components.
+- **BullMQ:** Use background jobs only for slow, external, retryable, or async work (email, sync, processing). Export bullmqConnection as a plain options object from src/server/redis.ts.
 - **Lint:** Use `eslint src --max-warnings 0` directly (`next lint` is deprecated in Next.js 15).
-- **Env validation:** `src/env.ts` uses `@t3-oss/env-nextjs` with Zod v4. App crashes on startup if variables are missing.
+- **Env validation:** `src/env.ts` uses `@t3-oss/env-nextjs` with Zod v4. The app should fail fast if required variables are missing.
 
 ## Project Layout
 
@@ -79,3 +122,12 @@ docs/
 | `pnpm typecheck` | tsc --noEmit |
 | `pnpm test:run` | Vitest one-shot |
 | `pnpm lint` | ESLint |
+
+## Notes for AI Assistance
+
+- Before implementing anything substantial:
+- identify the affected files
+- check whether the task belongs in the current phase
+- avoid introducing future-phase behavior unless explicitly requested
+- keep solutions self-hosted and compatible with Docker Compose deployment
+- prefer maintainability and clarity over cleverness

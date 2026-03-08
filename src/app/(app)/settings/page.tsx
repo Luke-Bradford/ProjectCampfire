@@ -2,10 +2,61 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/trpc/react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { NotificationPrefs } from "@/server/db/schema";
+
+// ── Blocked users section ─────────────────────────────────────────────────────
+
+function BlockedUsersSection() {
+  const { data: blocked, refetch } = api.friends.listBlocked.useQuery();
+  const unblock = api.friends.unblock.useMutation({ onSuccess: () => void refetch() });
+
+  if (!blocked?.length) {
+    return (
+      <section className="space-y-4">
+        <h2 className="text-base font-semibold border-b pb-2">Blocked users</h2>
+        <p className="text-sm text-muted-foreground">You haven&apos;t blocked anyone.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-4">
+      <h2 className="text-base font-semibold border-b pb-2">Blocked users</h2>
+      <ul className="space-y-2">
+        {blocked.map((u) => (
+          <li key={u.id} className="flex items-center justify-between rounded-lg border p-3">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-9 w-9">
+                <AvatarImage src={u.image ?? undefined} />
+                <AvatarFallback>{initials(u.name)}</AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="text-sm font-medium">{u.name}</p>
+                {u.username && <p className="text-xs text-muted-foreground">@{u.username}</p>}
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={unblock.isPending}
+              onClick={() => unblock.mutate({ targetId: u.id })}
+            >
+              Unblock
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function initials(name: string) {
+  return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+}
 
 // ── Toggle row ────────────────────────────────────────────────────────────────
 
@@ -65,6 +116,63 @@ const PREF_DEFAULTS: Required<NotificationPrefs> = {
 
 function mergePrefs(saved: NotificationPrefs | undefined): Required<NotificationPrefs> {
   return { ...PREF_DEFAULTS, ...(saved ?? {}) };
+}
+
+// ── Invite section ────────────────────────────────────────────────────────────
+
+function InviteSection() {
+  const { data, refetch } = api.user.getInviteToken.useQuery();
+  const regenerate = api.user.regenerateInviteToken.useMutation({
+    onSuccess: () => void refetch(),
+  });
+  const [copied, setCopied] = useState(false);
+
+  const inviteUrl = typeof window !== "undefined" && data?.token
+    ? `${window.location.origin}/invite/${data.token}`
+    : "";
+
+  function handleCopy() {
+    if (!inviteUrl) return;
+    void navigator.clipboard.writeText(inviteUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <section className="space-y-4">
+      <h2 className="text-base font-semibold border-b pb-2">Invite a friend</h2>
+      <p className="text-sm text-muted-foreground">
+        Share your personal invite link. Anyone who visits it can send you a friend request.
+        Regenerating the link invalidates the old one.
+      </p>
+      {data?.token ? (
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <Input readOnly value={inviteUrl} className="font-mono text-xs" />
+            <Button variant="outline" onClick={handleCopy} className="shrink-0">
+              {copied ? "Copied!" : "Copy"}
+            </Button>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs text-muted-foreground"
+            disabled={regenerate.isPending}
+            onClick={() => {
+              if (window.confirm("Regenerate your invite link? The old link will stop working.")) {
+                regenerate.mutate();
+              }
+            }}
+          >
+            {regenerate.isPending ? "Regenerating…" : "Regenerate link"}
+          </Button>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">Generating link…</p>
+      )}
+    </section>
+  );
 }
 
 // ── Settings page ─────────────────────────────────────────────────────────────
@@ -155,6 +263,9 @@ export default function SettingsPage() {
           <p className="text-sm text-muted-foreground">{me?.email ?? "—"}</p>
         </div>
       </section>
+
+      {/* ── Invite a friend ──────────────────────────────────────────────────── */}
+      <InviteSection />
 
       {/* ── Notifications ────────────────────────────────────────────────────── */}
       <section className="space-y-1">
@@ -256,6 +367,9 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
+
+      {/* ── Blocked users ─────────────────────────────────────────────────────── */}
+      <BlockedUsersSection />
     </div>
   );
 }
