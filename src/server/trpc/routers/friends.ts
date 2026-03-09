@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { user, friendships, notifications } from "@/server/db/schema";
+import { user, friendships, notifications, groupMemberships, groups } from "@/server/db/schema";
 import { enqueueFriendRequest, enqueueFriendRequestAccepted } from "@/server/jobs/email-jobs";
 import { assertRateLimit } from "@/server/ratelimit";
 
@@ -243,6 +243,33 @@ export const friendsRouter = createTRPCRouter({
         return { id: found.id, name: found.name, username: found.username, image: null, bio: null, profileVisibility: "private" as const };
       }
       return found;
+    }),
+
+  // Return standard groups for a user's profile — visible to friends only (CAMP-044)
+  getProfileGroups: protectedProcedure
+    .input(z.object({ userId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      // Must be a friend to see groups
+      const friendship = await db.query.friendships.findFirst({
+        where: and(
+          or(
+            and(eq(friendships.requesterId, ctx.user.id), eq(friendships.addresseeId, input.userId)),
+            and(eq(friendships.requesterId, input.userId), eq(friendships.addresseeId, ctx.user.id))
+          ),
+          eq(friendships.status, "accepted")
+        ),
+        columns: { requesterId: true },
+      });
+      if (!friendship) return [];
+
+      // Return standard (non-private) groups the target user belongs to.
+      // visibility filter is in the DB query — private group names never touch server memory.
+      const rows = await db
+        .select({ id: groups.id, name: groups.name })
+        .from(groupMemberships)
+        .innerJoin(groups, and(eq(groups.id, groupMemberships.groupId), eq(groups.visibility, "standard")))
+        .where(eq(groupMemberships.userId, input.userId));
+      return rows;
     }),
 
   // Resolve an invite token to a public profile — no auth required (CAMP-023)

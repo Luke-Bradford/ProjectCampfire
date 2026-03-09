@@ -6,6 +6,17 @@ import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
 import { groups, groupMemberships } from "@/server/db/schema";
 
+// Discord invite URLs must be on discord.gg or discord.com/invite — no arbitrary URLs
+const discordInviteUrl = z
+  .string()
+  .url()
+  .refine(
+    (v) => /^https:\/\/(discord\.gg\/|discord\.com\/invite\/)/.test(v),
+    "Must be a discord.gg or discord.com/invite URL"
+  )
+  .optional()
+  .or(z.literal(""));
+
 export const groupsRouter = createTRPCRouter({
   // List groups the current user belongs to
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -54,7 +65,7 @@ export const groupsRouter = createTRPCRouter({
         name: z.string().min(1).max(100),
         description: z.string().max(500).optional(),
         visibility: z.enum(["standard", "private"]).default("standard"),
-        discordInviteUrl: z.string().url().optional().or(z.literal("")),
+        discordInviteUrl,
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -74,6 +85,38 @@ export const groupsRouter = createTRPCRouter({
         role: "owner",
       });
       return { id };
+    }),
+
+  // Update group settings — admin/owner only (CAMP-041)
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        name: z.string().min(1).max(100).optional(),
+        description: z.string().max(500).optional(),
+        discordInviteUrl,
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const membership = await db.query.groupMemberships.findFirst({
+        where: and(
+          eq(groupMemberships.groupId, input.id),
+          eq(groupMemberships.userId, ctx.user.id)
+        ),
+        columns: { role: true },
+      });
+      if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only admins can edit group settings." });
+      }
+      const { id, ...fields } = input;
+      await db
+        .update(groups)
+        .set({
+          ...(fields.name !== undefined && { name: fields.name }),
+          ...(fields.description !== undefined && { description: fields.description || null }),
+          ...(fields.discordInviteUrl !== undefined && { discordInviteUrl: fields.discordInviteUrl || null }),
+        })
+        .where(eq(groups.id, id));
     }),
 
   // Join via invite token (CAMP-042)
