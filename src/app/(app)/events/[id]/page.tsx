@@ -14,6 +14,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { PostComposer } from "@/components/feed/post-composer";
+import { PostCard } from "@/components/feed/post-card";
 import { format } from "date-fns";
 import { useState } from "react";
 
@@ -204,6 +206,36 @@ function CreatePollDialog({ eventId, groupId, onCreated }: { eventId: string; gr
 
 // ── Event detail page ─────────────────────────────────────────────────────────
 
+// ── Event discussion ──────────────────────────────────────────────────────────
+
+function EventDiscussion({ eventId, groupId, isGroupAdmin }: { eventId: string; groupId: string; isGroupAdmin: boolean }) {
+  const { data: me } = api.user.me.useQuery();
+  const { data: eventPosts, refetch } = api.feed.listForEvent.useQuery({ eventId });
+
+  function refresh() { void refetch(); }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm font-medium">Discussion</p>
+      <PostComposer groupId={groupId} eventId={eventId} onPosted={refresh} />
+      {eventPosts?.length === 0 && (
+        <p className="text-sm text-muted-foreground">No posts yet. Start the discussion!</p>
+      )}
+      {eventPosts?.map((post) => (
+        <PostCard
+          key={post.id}
+          post={post}
+          currentUserId={me?.id ?? ""}
+          isGroupAdmin={isGroupAdmin}
+          onRefresh={refresh}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ── Event detail page ─────────────────────────────────────────────────────────
+
 export default function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -211,6 +243,10 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
 
   const { data: me } = api.user.me.useQuery();
   const { data: event, isLoading } = api.events.get.useQuery({ id });
+  const { data: groupData } = api.groups.get.useQuery(
+    { id: event?.groupId ?? "" },
+    { enabled: !!event?.groupId }
+  );
   const upsertRsvp = api.events.upsertRsvp.useMutation({
     onSuccess: () => void utils.events.get.invalidate({ id }),
   });
@@ -231,6 +267,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const maybeCount = event.rsvps.filter((r) => r.status === "maybe").length;
   const noCount = event.rsvps.filter((r) => r.status === "no").length;
   const isEventCreator = event.createdBy.id === myUserId;
+  const isGroupAdmin = groupData?.myRole === "owner" || groupData?.myRole === "admin";
 
   return (
     <div className="space-y-6">
@@ -325,6 +362,9 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
           ))
         )}
       </div>
+
+      {/* Discussion */}
+      <EventDiscussion eventId={id} groupId={event.groupId} isGroupAdmin={isGroupAdmin} />
 
       {/* Status controls (for event creator) */}
       {isEventCreator && (event.status === "open" || event.status === "draft") && (

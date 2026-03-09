@@ -44,6 +44,7 @@ export const groupMembershipsRelations = relations(groupMemberships, ({ one }) =
 export const postsRelations = relations(posts, ({ one, many }) => ({
   author: one(user, { fields: [posts.authorId], references: [user.id] }),
   group: one(groups, { fields: [posts.groupId], references: [groups.id] }),
+  event: one(events, { fields: [posts.eventId], references: [events.id] }),
   comments: many(comments),
   reactions: many(reactions),
   repostOf: one(posts, {

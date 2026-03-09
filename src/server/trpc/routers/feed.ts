@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { posts, comments, reactions, friendships, groupMemberships } from "@/server/db/schema";
+import { posts, comments, reactions, friendships, groupMemberships, events } from "@/server/db/schema";
 import { assertRateLimit } from "@/server/ratelimit";
 import { enqueueOgFetch } from "@/server/jobs/og-fetch-jobs";
 
@@ -89,6 +89,7 @@ export const feedRouter = createTRPCRouter({
         with: {
           author: { columns: { id: true, name: true, username: true, image: true } },
           group: { columns: { id: true, name: true } },
+          event: { columns: { id: true, title: true } },
           reactions: { columns: { id: true, userId: true, type: true } },
           comments: {
             where: isNull(comments.deletedAt),
@@ -123,12 +124,15 @@ export const feedRouter = createTRPCRouter({
       if (!updated) throw new TRPCError({ code: "NOT_FOUND" });
     }),
 
-  // Create a post (CAMP-080)
+  // Create a post (CAMP-080, CAMP-094)
   create: protectedProcedure
     .input(
       z.object({
         body: z.string().min(1).max(1000),
         groupId: z.string().optional(),
+        // eventId: scopes the post to a specific event's discussion thread (CAMP-094).
+        // The event must belong to a group the caller is a member of.
+        eventId: z.string().optional(),
         // imageKeys: raw MinIO keys returned by /api/upload/post-image, one per image slot.
         // Pattern: posts/{userId}/{uploadId}/{cuid}-raw
         // userId: mixed-case alphanumeric (better-auth format). uploadId/cuid: lowercase alphanumeric (cuid2).
@@ -149,13 +153,35 @@ export const feedRouter = createTRPCRouter({
           throw new TRPCError({ code: "FORBIDDEN", message: "Image does not belong to you." });
         }
       }
+
+      // Authz for event-scoped posts: caller must be a member of the event's group.
+      // groupId is inferred from the event rather than supplied separately.
+      let resolvedGroupId = input.groupId ?? null;
+      if (input.eventId) {
+        const event = await db.query.events.findFirst({
+          where: eq(events.id, input.eventId),
+          columns: { groupId: true },
+        });
+        if (!event) throw new TRPCError({ code: "NOT_FOUND", message: "Event not found." });
+        const membership = await db.query.groupMemberships.findFirst({
+          where: and(
+            eq(groupMemberships.groupId, event.groupId),
+            eq(groupMemberships.userId, ctx.user.id)
+          ),
+          columns: { groupId: true },
+        });
+        if (!membership) throw new TRPCError({ code: "FORBIDDEN", message: "Not a member of this group." });
+        resolvedGroupId = event.groupId;
+      }
+
       await assertRateLimit(`rl:feed:create:${ctx.user.id}`, 10, 60);
       const id = createId();
       await db.insert(posts).values({
         id,
         authorId: ctx.user.id,
         body: input.body,
-        groupId: input.groupId ?? null,
+        groupId: resolvedGroupId,
+        eventId: input.eventId ?? null,
         imageUrls: [],
       });
       // Enqueue processing for any uploaded images. Each key was already uploaded to MinIO
@@ -232,6 +258,77 @@ export const feedRouter = createTRPCRouter({
       });
       if (!comment) throw new TRPCError({ code: "NOT_FOUND" });
       await db.update(comments).set({ deletedAt: new Date() }).where(eq(comments.id, input.id));
+    }),
+
+  // List posts scoped to a specific event (CAMP-094).
+  // Caller must be a member of the event's group.
+  // Returns posts newest-first; pinned posts float to the top within the group.
+  listForEvent: protectedProcedure
+    .input(z.object({ eventId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const event = await db.query.events.findFirst({
+        where: eq(events.id, input.eventId),
+        columns: { groupId: true },
+      });
+      if (!event) throw new TRPCError({ code: "NOT_FOUND" });
+      const membership = await db.query.groupMemberships.findFirst({
+        where: and(
+          eq(groupMemberships.groupId, event.groupId),
+          eq(groupMemberships.userId, ctx.user.id)
+        ),
+        columns: { groupId: true },
+      });
+      if (!membership) throw new TRPCError({ code: "FORBIDDEN" });
+
+      return db.query.posts.findMany({
+        where: and(eq(posts.eventId, input.eventId), isNull(posts.deletedAt)),
+        // Pinned posts first, then newest.
+        orderBy: [desc(posts.pinnedAt), desc(posts.createdAt)],
+        with: {
+          author: { columns: { id: true, name: true, username: true, image: true } },
+          group: { columns: { id: true, name: true } },
+          event: { columns: { id: true, title: true } },
+          reactions: { columns: { id: true, userId: true, type: true } },
+          comments: {
+            where: isNull(comments.deletedAt),
+            orderBy: [asc(comments.createdAt)],
+            limit: 20,
+            with: {
+              author: { columns: { id: true, name: true, username: true, image: true } },
+              reactions: { columns: { id: true, userId: true, type: true } },
+            },
+          },
+        },
+      });
+    }),
+
+  // Pin/unpin a post in its group (CAMP-095).
+  // Only group admins (owner or admin role) may pin. The post must belong to a group.
+  // Toggle: pinned → unpinned, unpinned → pinned.
+  pinPost: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const post = await db.query.posts.findFirst({
+        where: and(eq(posts.id, input.id), isNull(posts.deletedAt)),
+        columns: { id: true, groupId: true, pinnedAt: true },
+      });
+      if (!post) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!post.groupId) throw new TRPCError({ code: "BAD_REQUEST", message: "Post is not in a group." });
+
+      const membership = await db.query.groupMemberships.findFirst({
+        where: and(
+          eq(groupMemberships.groupId, post.groupId),
+          eq(groupMemberships.userId, ctx.user.id)
+        ),
+        columns: { role: true },
+      });
+      if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only group admins can pin posts." });
+      }
+
+      const newPinnedAt = post.pinnedAt ? null : new Date();
+      await db.update(posts).set({ pinnedAt: newPinnedAt }).where(eq(posts.id, input.id));
+      return { pinned: newPinnedAt !== null };
     }),
 
   // Toggle like on a post or comment (CAMP-089)

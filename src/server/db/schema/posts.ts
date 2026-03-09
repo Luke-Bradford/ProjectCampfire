@@ -8,6 +8,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 import { groups } from "./groups";
+import { events } from "./events";
 
 export const reactionTypeEnum = pgEnum("reaction_type", ["like"]);
 
@@ -32,6 +33,9 @@ export const posts = pgTable("posts", {
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
   groupId: text("group_id").references(() => groups.id, {
+    onDelete: "cascade",
+  }),
+  eventId: text("event_id").references(() => events.id, {
     onDelete: "cascade",
   }),
   body: varchar("body", { length: 1000 }),

@@ -19,7 +19,7 @@ type SelectedImage = {
   error: string | null;
 };
 
-export function PostComposer({ groupId, onPosted }: { groupId?: string; onPosted: () => void }) {
+export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string; eventId?: string; onPosted: () => void }) {
   const [body, setBody] = useState("");
   const [images, setImages] = useState<SelectedImage[]>([]);
   const [uploadingCount, setUploadingCount] = useState(0);
@@ -116,6 +116,7 @@ export function PostComposer({ groupId, onPosted }: { groupId?: string; onPosted
     create.mutate({
       body: body.trim(),
       groupId,
+      eventId,
       imageKeys: imageKeys.length ? imageKeys : undefined,
     });
   }

@@ -28,10 +28,12 @@ type PostData = {
   createdAt: Date;
   editedAt: Date | null;
   deletedAt: Date | null;
+  pinnedAt: Date | null;
   imageUrls: (string | null)[] | null;
   embedMetadata: EmbedMetadata | null;
   author: PostAuthor;
   group: { id: string; name: string } | null;
+  event: { id: string; title: string } | null;
   reactions: { id: string; userId: string; type: string }[];
   comments: CommentData[];
 };
@@ -166,10 +168,13 @@ function CommentRow({
 export function PostCard({
   post,
   currentUserId,
+  isGroupAdmin,
   onRefresh,
 }: {
   post: PostData;
   currentUserId: string;
+  /** Whether the current user is an admin/owner of the group this post belongs to */
+  isGroupAdmin?: boolean;
   onRefresh: () => void;
 }) {
   const [showComments, setShowComments] = useState(false);
@@ -185,6 +190,7 @@ export function PostCard({
   const editPostMutation = api.feed.editPost.useMutation({
     onSuccess: () => { setEditingPost(false); onRefresh(); },
   });
+  const pinPost = api.feed.pinPost.useMutation({ onSuccess: onRefresh });
   const blockUser = api.friends.block.useMutation({ onSuccess: onRefresh });
   const addComment = api.feed.comment.useMutation({
     onSuccess: () => {
@@ -214,7 +220,11 @@ export function PostCard({
   const imageUrls = (post.imageUrls ?? []).filter((u): u is string => u !== null);
 
   return (
-    <article className="space-y-3 rounded-lg border p-4">
+    <article className={`space-y-3 rounded-lg border p-4 ${post.pinnedAt ? "border-primary/40 bg-primary/5" : ""}`}>
+      {/* Pinned indicator */}
+      {post.pinnedAt && (
+        <p className="text-xs font-medium text-primary">📌 Pinned</p>
+      )}
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
@@ -230,6 +240,9 @@ export function PostCard({
               {post.editedAt && <span className="ml-1">(edited)</span>}
               {post.group && (
                 <> · <span className="font-medium">{post.group.name}</span></>
+              )}
+              {post.event && (
+                <> · <span className="font-medium">{post.event.title}</span></>
               )}
             </p>
           </div>
@@ -252,19 +265,39 @@ export function PostCard({
                 </button>
               </>
             )}
+            {isGroupAdmin && post.group && !editingPost && (
+              <button
+                className="text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => pinPost.mutate({ id: post.id })}
+                disabled={pinPost.isPending}
+              >
+                {post.pinnedAt ? "Unpin" : "Pin"}
+              </button>
+            )}
           </div>
         ) : (
-          <button
-            className="text-xs text-muted-foreground hover:text-destructive"
-            onClick={() => {
-              if (window.confirm(`Block ${post.author.name}? Their posts will be hidden from your feed.`)) {
-                blockUser.mutate({ targetId: post.author.id });
-              }
-            }}
-            disabled={blockUser.isPending}
-          >
-            Block
-          </button>
+          <div className="flex gap-2">
+            {isGroupAdmin && post.group && (
+              <button
+                className="text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => pinPost.mutate({ id: post.id })}
+                disabled={pinPost.isPending}
+              >
+                {post.pinnedAt ? "Unpin" : "Pin"}
+              </button>
+            )}
+            <button
+              className="text-xs text-muted-foreground hover:text-destructive"
+              onClick={() => {
+                if (window.confirm(`Block ${post.author.name}? Their posts will be hidden from your feed.`)) {
+                  blockUser.mutate({ targetId: post.author.id });
+                }
+              }}
+              disabled={blockUser.isPending}
+            >
+              Block
+            </button>
+          </div>
         )}
       </div>
 
