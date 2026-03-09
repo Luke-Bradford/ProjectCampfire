@@ -88,7 +88,7 @@ export function PostComposer({ groupId, onPosted }: { groupId?: string; onPosted
       setImages((prev) =>
         prev.map((i) =>
           i.uploadId === img.uploadId
-            ? { ...i, key: json.key ?? null, error: json.error ?? null }
+            ? { ...i, key: json.key ?? null, error: json.error ?? (json.key ? null : "Upload failed") }
             : i
         )
       );

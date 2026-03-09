@@ -6,7 +6,6 @@ import { assertRateLimit } from "@/server/ratelimit";
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB — must match validateImage in storage.ts
 // uploadId is a client-generated cuid used only to namespace the MinIO path.
-// It is NOT the real DB post ID. Validated to be a safe path component.
 const UPLOAD_ID_RE = /^[a-z0-9]{10,}$/;
 
 export async function POST(req: NextRequest) {
@@ -17,15 +16,6 @@ export async function POST(req: NextRequest) {
   }
   const userId = session.user.id;
 
-  // Reject oversized bodies before buffering — avoids OOM from arbitrarily large uploads.
-  const contentLength = Number(req.headers.get("content-length") ?? "0");
-  if (contentLength > MAX_BYTES) {
-    return NextResponse.json(
-      { error: `Image exceeds the 5 MB size limit.` },
-      { status: 413 }
-    );
-  }
-
   // Rate limit: 20 image uploads per minute per user
   try {
     await assertRateLimit(`rl:upload:post-image:${userId}`, 20, 60);
@@ -33,7 +23,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many uploads. Try again shortly." }, { status: 429 });
   }
 
-  const formData = await req.formData();
+  // Stream the body with a hard byte cap — Content-Length alone is bypassable.
+  // This accumulates the raw body, enforces the limit, then parses as FormData.
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  const reader = req.body?.getReader();
+  if (!reader) {
+    return NextResponse.json({ error: "Empty body" }, { status: 400 });
+  }
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > MAX_BYTES) {
+      await reader.cancel();
+      return NextResponse.json({ error: "Image exceeds the 5 MB size limit." }, { status: 413 });
+    }
+    chunks.push(value);
+  }
+
+  // Re-parse the accumulated bytes as FormData using the original Content-Type (multipart boundary).
+  const contentType = req.headers.get("content-type") ?? "";
+  const bodyBuffer = Buffer.concat(chunks.map((c) => Buffer.from(c)));
+  const formData = await new Request("http://localhost", {
+    method: "POST",
+    headers: { "content-type": contentType },
+    body: bodyBuffer,
+  }).formData();
+
   const uploadId = formData.get("postId"); // field name kept as "postId" for client compat
   const file = formData.get("file");
 
@@ -56,9 +73,9 @@ export async function POST(req: NextRequest) {
     throw err;
   }
 
-  // index not used for MinIO key disambiguation here — createId() ensures uniqueness.
-  // Processing jobs are enqueued by feed.create with the correct index after post insert.
-  const key = `posts/${uploadId}/${createId()}-raw`;
+  // Key includes userId so feed.create can verify ownership by prefix check.
+  // Pattern: posts/{userId}/{uploadId}/{cuid}-raw
+  const key = `posts/${userId}/${uploadId}/${createId()}-raw`;
   await uploadImage(key, buffer, file.type);
   // Do NOT enqueue processing here. feed.create re-enqueues with the real postId and
   // correct index after the DB insert, so the worker updates the right row.
