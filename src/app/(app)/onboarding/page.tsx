@@ -127,6 +127,7 @@ function StepProfile({
     }
 
     const reader = new FileReader();
+    reader.onerror = () => setFileError("Failed to read the file. Please try again.");
     reader.onload = (ev) => {
       const result = ev.target?.result;
       if (!result || typeof result !== "string") {
@@ -251,7 +252,8 @@ function StepInvite({ onDone }: { onDone: () => void }) {
   const [copied, setCopied] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sentTo, setSentTo] = useState<Set<string>>(new Set());
-  const [pendingId, setPendingId] = useState<string | null>(null);
+  // Track each in-flight request by ID so multiple adds can be pending simultaneously
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
 
   const { data: tokenData } = api.user.getInviteToken.useQuery();
   const inviteUrl =
@@ -267,9 +269,11 @@ function StepInvite({ onDone }: { onDone: () => void }) {
   const sendRequest = api.friends.sendRequest.useMutation({
     onSuccess: (_, vars) => {
       setSentTo((prev) => new Set(prev).add(vars.addresseeId));
-      setPendingId(null);
+      setPendingIds((prev) => { const s = new Set(prev); s.delete(vars.addresseeId); return s; });
     },
-    onError: () => setPendingId(null),
+    onError: (_, vars) => {
+      setPendingIds((prev) => { const s = new Set(prev); s.delete(vars.addresseeId); return s; });
+    },
   });
 
   function handleCopy() {
@@ -341,14 +345,14 @@ function StepInvite({ onDone }: { onDone: () => void }) {
                   <Button
                     size="sm"
                     variant={sentTo.has(u.id) ? "secondary" : "default"}
-                    disabled={sentTo.has(u.id) || pendingId === u.id}
+                    disabled={sentTo.has(u.id) || pendingIds.has(u.id)}
                     onClick={() => {
-                      setPendingId(u.id);
+                      setPendingIds((prev) => new Set(prev).add(u.id));
                       sendRequest.mutate({ addresseeId: u.id });
                     }}
                     className="shrink-0"
                   >
-                    {sentTo.has(u.id) ? "Sent" : pendingId === u.id ? "Sending…" : "Add"}
+                    {sentTo.has(u.id) ? "Sent" : pendingIds.has(u.id) ? "Sending…" : "Add"}
                   </Button>
                 </div>
               ))}
@@ -422,8 +426,11 @@ export default function OnboardingPage() {
       </div>
 
       {step === "username" && <StepUsername onDone={next} />}
-      {step === "profile" && (
-        <StepProfile initialName={me?.name ?? ""} onDone={next} />
+      {step === "profile" && me && (
+        <StepProfile initialName={me.name ?? ""} onDone={next} />
+      )}
+      {step === "profile" && !me && (
+        <p className="text-sm text-muted-foreground">Loading…</p>
       )}
       {step === "invite" && <StepInvite onDone={next} />}
     </div>
