@@ -7,6 +7,7 @@ import { db } from "@/server/db";
 import { posts } from "@/server/db/schema";
 import { uploadImage, ImageValidationError, ALLOWED_IMAGE_MIME_TYPES } from "@/server/storage";
 import { enqueueProcessAvatar, enqueueProcessPostImage } from "@/server/jobs/image-jobs";
+import { assertRateLimit } from "@/server/ratelimit";
 
 const MAX_POST_IMAGES = 4;
 // Base64 overhead is ~4/3 — 5 MB raw → ~6.67 MB base64. Allow a small margin.
@@ -33,6 +34,8 @@ export const uploadRouter = createTRPCRouter({
   avatar: protectedProcedure
     .input(imageInput())
     .mutation(async ({ ctx, input }) => {
+      // 5 avatar uploads per 10 minutes — prevents MinIO flooding
+      await assertRateLimit(`rl:upload:avatar:${ctx.user.id}`, 5, 600);
       const buffer = toBuffer(input.data);
       const key = `avatars/${ctx.user.id}/${createId()}-raw`;
 
@@ -67,6 +70,8 @@ export const uploadRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // 20 post-image uploads per 10 minutes (4 images × 5 posts) — prevents MinIO flooding
+      await assertRateLimit(`rl:upload:postImage:${ctx.user.id}`, 20, 600);
       const post = await db.query.posts.findFirst({
         where: and(eq(posts.id, input.postId), eq(posts.authorId, ctx.user.id)),
         columns: { id: true },

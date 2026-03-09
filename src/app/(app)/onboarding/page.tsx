@@ -128,9 +128,17 @@ function StepProfile({
 
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const result = ev.target?.result as string;
+      const result = ev.target?.result;
+      if (!result || typeof result !== "string") {
+        setFileError("Failed to read the file. Please try again.");
+        return;
+      }
       // result is a data URL: "data:<mime>;base64,<data>"
       const base64 = result.split(",")[1] ?? "";
+      if (!base64) {
+        setFileError("Failed to read the file. Please try again.");
+        return;
+      }
       setAvatarPreview(result);
       setAvatarData({
         data: base64,
@@ -243,6 +251,7 @@ function StepInvite({ onDone }: { onDone: () => void }) {
   const [copied, setCopied] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sentTo, setSentTo] = useState<Set<string>>(new Set());
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
   const { data: tokenData } = api.user.getInviteToken.useQuery();
   const inviteUrl =
@@ -256,7 +265,11 @@ function StepInvite({ onDone }: { onDone: () => void }) {
   );
 
   const sendRequest = api.friends.sendRequest.useMutation({
-    onSuccess: (_, vars) => setSentTo((prev) => new Set(prev).add(vars.addresseeId)),
+    onSuccess: (_, vars) => {
+      setSentTo((prev) => new Set(prev).add(vars.addresseeId));
+      setPendingId(null);
+    },
+    onError: () => setPendingId(null),
   });
 
   function handleCopy() {
@@ -328,11 +341,14 @@ function StepInvite({ onDone }: { onDone: () => void }) {
                   <Button
                     size="sm"
                     variant={sentTo.has(u.id) ? "secondary" : "default"}
-                    disabled={sentTo.has(u.id) || sendRequest.isPending}
-                    onClick={() => sendRequest.mutate({ addresseeId: u.id })}
+                    disabled={sentTo.has(u.id) || pendingId === u.id}
+                    onClick={() => {
+                      setPendingId(u.id);
+                      sendRequest.mutate({ addresseeId: u.id });
+                    }}
                     className="shrink-0"
                   >
-                    {sentTo.has(u.id) ? "Sent" : "Add"}
+                    {sentTo.has(u.id) ? "Sent" : pendingId === u.id ? "Sending…" : "Add"}
                   </Button>
                 </div>
               ))}
