@@ -30,6 +30,22 @@ Must be self-contained for a reviewer with no codebase context:
 - **Known tradeoffs**: document deliberate limitations before the reviewer finds them.
   Use a "Known tradeoffs" section. Verified behaviour claims must state how they were verified.
 
+## After pushing a PR — mandatory PR watch loop
+
+Immediately after every `git push` that creates or updates a PR:
+
+1. **Start polling** — check `gh pr view <number> --comments` every ~30–45 seconds.
+   Do not end the conversation or move on while a PR is open and unreviewed.
+2. **Act on every severity** — BLOCKING and WARNING must be fixed before merge.
+   NITPICK items that are genuine quality concerns must be raised as GitHub issues
+   (label: `tech-debt`) so nothing is silently dropped.
+3. **Reply to each comment** with what was done and the commit SHA.
+4. **Merge** once the review bot issues an APPROVE with no outstanding items.
+5. **Close linked GitHub issues** after merging.
+6. **Stop polling** only after the PR is merged and issues are closed.
+
+This loop is non-negotiable. It does not require the user to prompt it.
+
 ## Responding to review comments
 
 1. Reply to **each comment** with what was done and the commit SHA.
