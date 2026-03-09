@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import type { EmbedMetadata } from "@/server/db/schema/posts";
 import { formatDistanceToNow } from "date-fns";
 import { api } from "@/trpc/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -28,6 +29,7 @@ type PostData = {
   editedAt: Date | null;
   deletedAt: Date | null;
   imageUrls: (string | null)[] | null;
+  embedMetadata: EmbedMetadata | null;
   author: PostAuthor;
   group: { id: string; name: string } | null;
   reactions: { id: string; userId: string; type: string }[];
@@ -315,6 +317,35 @@ export function PostCard({
             />
           ))}
         </div>
+      )}
+
+      {/* Link preview — rendered for both "link" and "youtube" types.
+          YouTube player (iframe embed) is added in CAMP-084. */}
+      {post.embedMetadata && (
+        <a
+          href={post.embedMetadata.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block overflow-hidden rounded-lg border hover:bg-muted/50 transition-colors"
+        >
+          {post.embedMetadata.thumbnailUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={post.embedMetadata.thumbnailUrl}
+              alt=""
+              className="w-full aspect-video object-cover"
+            />
+          )}
+          <div className="px-3 py-2 space-y-0.5">
+            {post.embedMetadata.title && (
+              <p className="text-sm font-medium line-clamp-2">{post.embedMetadata.title}</p>
+            )}
+            {post.embedMetadata.description && (
+              <p className="text-xs text-muted-foreground line-clamp-2">{post.embedMetadata.description}</p>
+            )}
+            <p className="text-xs text-muted-foreground truncate">{post.embedMetadata.url}</p>
+          </div>
+        </a>
       )}
 
       {/* Actions */}

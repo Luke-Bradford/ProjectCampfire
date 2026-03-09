@@ -6,6 +6,7 @@ import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
 import { posts, comments, reactions, friendships, groupMemberships } from "@/server/db/schema";
 import { assertRateLimit } from "@/server/ratelimit";
+import { enqueueOgFetch } from "@/server/jobs/og-fetch-jobs";
 
 export const feedRouter = createTRPCRouter({
   // Unified feed: friends + groups, block-filtered, cursor-paginated (CAMP-096)
@@ -164,6 +165,18 @@ export const feedRouter = createTRPCRouter({
         await Promise.all(
           input.imageKeys.map((key, index) => enqueueProcessPostImage(id, key, index))
         );
+      }
+      // Detect the first URL in the post body and enqueue OG tag fetch.
+      // Post is visible immediately; embedMetadata populates asynchronously.
+      // Only one URL per post (one embed per product spec).
+      // Trailing punctuation commonly appended in prose (., ), ;, etc.) is stripped.
+      // Fire-and-forget: a Redis/queue failure must not fail the post creation itself.
+      const urlMatch = /https?:\/\/[^\s<>"]+/i.exec(input.body);
+      if (urlMatch) {
+        const cleanUrl = urlMatch[0].replace(/[).,;:!?\]]+$/, "");
+        enqueueOgFetch(id, cleanUrl).catch((err: unknown) => {
+          console.error(`[feed] failed to enqueue OG fetch for post ${id}:`, err);
+        });
       }
       return { id };
     }),
