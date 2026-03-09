@@ -2,15 +2,18 @@ import { TRPCError } from "@trpc/server";
 import { redis } from "@/server/redis";
 
 /**
- * Sliding fixed-window rate limiter backed by Redis.
+ * Fixed-window rate limiter backed by Redis.
  *
- * Uses INCR + EXPIRE: the counter key expires after `windowSeconds`, so each
- * window resets cleanly. Not a true sliding window but is sufficient for MVP
- * abuse protection and produces zero false positives on normal usage.
+ * Uses INCR + EXPIRE on every request. EXPIRE is called unconditionally (not
+ * only on count === 1) to eliminate the race where the process crashes between
+ * INCR and EXPIRE, which would leave the key without a TTL and permanently
+ * block that user/IP. Re-setting the TTL on each request slightly extends the
+ * window on sustained traffic, which makes the limit more lenient — acceptable
+ * for abuse protection.
  *
- * @param key     Unique key for this limit (e.g. `rl:search:userId`)
- * @param limit   Max requests allowed in the window
- * @param windowSeconds  Window duration in seconds
+ * @param key           Unique key for this limit (e.g. `rl:search:userId`)
+ * @param limit         Max requests allowed in the window
+ * @param windowSeconds Window duration in seconds
  * @returns true if the request is allowed, false if it is over-limit
  */
 export async function checkRateLimit(
@@ -19,10 +22,7 @@ export async function checkRateLimit(
   windowSeconds: number,
 ): Promise<boolean> {
   const count = await redis.incr(key);
-  if (count === 1) {
-    // First request in this window — set the expiry
-    await redis.expire(key, windowSeconds);
-  }
+  await redis.expire(key, windowSeconds);
   return count <= limit;
 }
 
