@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/trpc/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -172,6 +174,69 @@ function InviteSection() {
       ) : (
         <p className="text-sm text-muted-foreground">Generating link…</p>
       )}
+    </section>
+  );
+}
+
+// ── Danger zone ───────────────────────────────────────────────────────────────
+
+function DangerZoneSection() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [confirmation, setConfirmation] = useState("");
+  const [error, setError] = useState("");
+
+  const deleteAccount = api.user.deleteAccount.useMutation({
+    onSuccess: () => {
+      // Wipe the React Query cache synchronously before redirecting.
+      // Using clear() (not invalidate()) avoids firing refetches against
+      // the now-revoked session which would produce 401 errors.
+      queryClient.clear();
+      router.replace("/login");
+    },
+    onError: (e) => setError(e.message),
+  });
+
+  function handleDelete() {
+    // Runtime guard: reject if confirmation isn't exactly "DELETE".
+    // The button is already disabled client-side, but this defends against
+    // programmatic calls and removes the need for an unsafe type cast.
+    if (confirmation !== "DELETE") return;
+    setError("");
+    deleteAccount.mutate({ confirmation });
+  }
+
+  return (
+    <section className="space-y-4">
+      <h2 className="text-base font-semibold border-b border-destructive/40 pb-2 text-destructive">
+        Danger zone
+      </h2>
+      <p className="text-sm text-muted-foreground">
+        Deleting your account is permanent. Your profile, posts, and group memberships will be
+        removed. This cannot be undone.
+      </p>
+      <div className="space-y-2">
+        <Label htmlFor="delete-confirm">
+          Type <span className="font-mono font-bold">DELETE</span> to confirm
+        </Label>
+        <div className="flex gap-2">
+          <Input
+            id="delete-confirm"
+            value={confirmation}
+            onChange={(e) => { setConfirmation(e.target.value); setError(""); }}
+            placeholder="DELETE"
+            className="max-w-48"
+          />
+          <Button
+            variant="destructive"
+            disabled={confirmation !== "DELETE" || deleteAccount.isPending}
+            onClick={handleDelete}
+          >
+            {deleteAccount.isPending ? "Deleting…" : "Delete account"}
+          </Button>
+        </div>
+        {error && <p className="text-xs text-destructive">{error}</p>}
+      </div>
     </section>
   );
 }
@@ -399,6 +464,9 @@ export default function SettingsPage() {
 
       {/* ── Blocked users ─────────────────────────────────────────────────────── */}
       <BlockedUsersSection />
+
+      {/* ── Danger zone ───────────────────────────────────────────────────────── */}
+      <DangerZoneSection />
     </div>
   );
 }

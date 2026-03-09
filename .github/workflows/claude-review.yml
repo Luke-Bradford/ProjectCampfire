@@ -31,24 +31,82 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get PR comments
+        run: |
+          gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            --jq '[.[] | "### Comment by " + .user.login + " at " + .created_at + "\n" + .body] | join("\n\n---\n\n")' \
+            > pr_comments.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get linked issue
+        run: |
+          # Extract issue number from PR body (looks for "Closes #NNN" etc.)
+          ISSUE_NUM=$(gh pr view ${{ github.event.pull_request.number }} --json body -q '.body' \
+            | grep -oP '(?<=Closes #|closes #|Fixes #|fixes #|Resolves #|resolves #)\d+' | head -1)
+          if [ -n "$ISSUE_NUM" ]; then
+            gh issue view "$ISSUE_NUM" --repo ${{ github.repository }} \
+              --json number,title,body -q '"# Issue #" + (.number | tostring) + ": " + .title + "\n\n" + .body' \
+              > linked_issue.txt 2>/dev/null || echo "(issue not found)" > linked_issue.txt
+          else
+            echo "(no linked issue found in PR body)" > linked_issue.txt
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build request body
         run: |
-          python3 - <<'PYEOF'
-          import json
+          cat > build_prompt.py << 'PYEOF'
+          import json, os
 
           diff = open('pr.diff').read()
           desc = open('pr_desc.txt').read()
+          comments_raw = open('pr_comments.txt').read().strip()
+          issue = open('linked_issue.txt').read().strip()
+
+          comments_section = (
+              "## PR Comment History (previous review rounds and author responses)\n\n"
+              + (comments_raw if comments_raw else "(no comments yet)")
+          )
+
+          issue_section = "## Linked Issue / Ticket\n\n" + issue
 
           prompt = (
-              "You are a strict senior code reviewer. Your job is to find real problems — not to be encouraging.\n\n"
-              "PR Description:\n" + desc + "\n\n"
-              "**What to check:**\n"
-              "1. **Correctness** — Does the logic do what the description claims? Off-by-one errors, wrong conditions, missing edge cases?\n"
-              "2. **Security** — Missing auth checks, exposed data, unvalidated input reaching the DB?\n"
-              "3. **tRPC / data layer** — Input validated with Zod? Business logic in server, not component?\n"
+              "You are a strict senior code reviewer for a TypeScript/Next.js project. "
+              "Your job is to find real problems — not to be encouraging.\n\n"
+
+              "## Important constraints\n\n"
+              "You only see the diff, not the full codebase. The PR description is written specifically "
+              "to give you the context you need about surrounding code. Trust it. "
+              "If the PR description explains why something outside the diff makes a change safe, "
+              "accept that explanation rather than flagging the change as risky.\n\n"
+              "This may not be a first review. Read the PR comment history carefully. "
+              "Do NOT re-raise issues that are already addressed or explained in the comment thread — "
+              "even if you cannot verify the fix yourself. If an author has explained a design decision "
+              "and it is technically sound, accept it. "
+              "Only flag issues that are genuinely unresolved in the current diff.\n\n"
+              "Be especially careful about changes that REMOVE code: a removal may be the fix, "
+              "not the problem. Check the PR description and comment history before flagging a removal.\n\n"
+
+              + issue_section + "\n\n"
+              + "## PR Description\n\n" + desc + "\n\n"
+              + comments_section + "\n\n"
+
+              "## What to check\n"
+              "1. **Correctness** — Does the logic do what the description claims?\n"
+              "2. **Security** — Missing auth checks, unvalidated input reaching the DB, exposed secrets?\n"
+              "3. **tRPC / data layer** — Input validated with Zod? Business logic in server, not UI?\n"
               "4. **Type safety** — Any `any`, unchecked casts, or suppressed errors?\n"
               "5. **Scope creep** — Does this do more than the ticket requires?\n"
               "6. **Regressions** — Anything removed that other code still depends on?\n\n"
+
+              "## What NOT to flag\n"
+              "- Code in unchanged files (if a file is not in the diff, do not speculate about it)\n"
+              "- Concerns already resolved in the PR comment history\n"
+              "- Intentional removals explained in the PR description\n"
+              "- Missing migration files (this project gitignores `drizzle/` — migrations are generated locally and run at deploy time)\n"
+              "- `username: null` in PostgreSQL unique columns (Postgres allows multiple NULLs by design)\n\n"
+
               "**Format your response as:**\n\n"
               "### [BLOCKING] — must fix before merge\n"
               "- Each issue with file:line reference and explanation. If none, write \"None.\"\n\n"
@@ -58,8 +116,8 @@ jobs:
               "- Each issue with file:line reference. If none, write \"None.\"\n\n"
               "### Verdict\n"
               "One of: **APPROVE**, **REQUEST CHANGES**, or **NEEDS DISCUSSION**.\n\n"
-              "Be direct. If the code is fine, say so briefly. Do not pad the review with praise.\n\n"
-              "Diff:\n```diff\n" + diff + "\n```"
+              "Be direct. If the code is fine, say so. Do not pad the review with praise.\n\n"
+              "## Diff\n```diff\n" + diff + "\n```"
           )
 
           payload = {
@@ -71,8 +129,9 @@ jobs:
           with open('request.json', 'w') as f:
               json.dump(payload, f)
 
-          print(f"Request written: {len(diff)} chars of diff, {len(prompt)} chars total prompt")
+          print(f"Request written: {len(diff)} chars of diff, {len(comments_raw)} chars of comments, {len(prompt)} chars total prompt")
           PYEOF
+          python3 build_prompt.py
 
       - name: Call Claude API
         run: |

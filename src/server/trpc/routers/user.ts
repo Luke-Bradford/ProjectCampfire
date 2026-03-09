@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { user, type NotificationPrefs } from "@/server/db/schema";
+import { user, session, account, type NotificationPrefs } from "@/server/db/schema";
+import { enqueueScrubAccount } from "@/server/jobs/account-jobs";
 
 const notificationPrefsSchema = z.object({
   friendRequestReceived: z.boolean().optional(),
@@ -116,5 +117,55 @@ export const userRouter = createTRPCRouter({
         .update(user)
         .set({ username: input.username, usernameChangedAt: new Date() })
         .where(eq(user.id, ctx.user.id));
+    }),
+
+  // Soft-delete the current user's account.
+  // Sets deletedAt, kills all sessions, and enqueues an async PII scrub job.
+  deleteAccount: protectedProcedure
+    .input(z.object({
+      // The user must type "DELETE" — validated both client-side (disables button)
+      // and server-side (Zod literal) so API callers can't bypass the confirmation.
+      confirmation: z.literal("DELETE"),
+    }))
+    .mutation(async ({ ctx }) => {
+      const userId = ctx.user.id;
+
+      // All DB operations run in a single transaction so we never end up in a
+      // partially-deleted state (e.g. sessions revoked but deletedAt not set).
+      await db.transaction(async (tx) => {
+        // Guard: only proceed if account isn't already soft-deleted.
+        // Email is replaced here atomically so the real address is freed
+        // immediately — the async scrub job handles the remaining PII fields.
+        const updated = await tx
+          .update(user)
+          .set({ deletedAt: sql`now()`, email: `deleted-${userId}@invalid` })
+          .where(and(eq(user.id, userId), isNull(user.deletedAt)))
+          .returning({ id: user.id });
+
+        if (updated.length === 0) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Account already deleted." });
+        }
+
+        // Revoke all sessions immediately — this device and all others.
+        // Any in-flight request using the current token will complete (the
+        // session row is read at request start, before this transaction commits).
+        // The client is redirected to /login on success so the deleted session
+        // token is never reused. New session creation is blocked by the
+        // better-auth databaseHook in src/server/auth/index.ts.
+        await tx.delete(session).where(eq(session.userId, userId));
+
+        // Revoke OAuth credentials so they can't be used to re-authenticate
+        await tx.delete(account).where(eq(account.userId, userId));
+      });
+
+      // Fire-and-forget: the account is already soft-deleted and sessions revoked
+      // regardless of whether Redis accepts the job. If the enqueue fails the
+      // PII can be scrubbed by re-enqueueing manually; don't surface a 500 to
+      // the client for what is already a completed deletion.
+      enqueueScrubAccount(userId).catch((err: unknown) =>
+        console.error("[deleteAccount] failed to enqueue scrub job for", userId, err),
+      );
+
+      return { success: true };
     }),
 });

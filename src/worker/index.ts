@@ -1,9 +1,13 @@
 import { Worker, Queue } from "bullmq";
 import { bullmqConnection } from "@/server/redis";
 import { processEmailJob } from "./processors/email";
+import { processAccountJob } from "./processors/account";
+import { accountQueue } from "@/server/jobs/account-jobs";
 import type { EmailJobPayload } from "@/server/jobs/email-jobs";
+import type { AccountJobPayload } from "@/server/jobs/account-jobs";
 
-// Queue definitions — imported by other modules to enqueue jobs
+// Queue definitions — imported by other modules to enqueue jobs.
+// accountQueue lives in server/jobs/account-jobs.ts (import from there directly).
 export const emailQueue = new Queue<EmailJobPayload>("email", { connection: bullmqConnection });
 export const imageQueue = new Queue("image-processing", {
   connection: bullmqConnection,
@@ -17,6 +21,26 @@ new Worker<EmailJobPayload>(
     await processEmailJob(job);
   },
   { connection: bullmqConnection }
+);
+
+// Account management worker (soft-delete / PII scrub + hourly sweep)
+new Worker<AccountJobPayload>(
+  "account",
+  async (job) => {
+    await processAccountJob(job);
+  },
+  { connection: bullmqConnection }
+);
+
+// Hourly sweeper: finds deleted accounts where the scrub job was lost (e.g. Redis
+// was down during deleteAccount) and re-enqueues them. This is the fallback
+// recovery mechanism for the fire-and-forget enqueue in the tRPC mutation.
+accountQueue.add(
+  "sweep_unscrubbed",
+  { type: "sweep_unscrubbed" },
+  { repeat: { every: 60 * 60 * 1000 }, jobId: "sweep_unscrubbed" },
+).catch((err: unknown) =>
+  console.error("[worker] failed to register sweep_unscrubbed repeatable job:", err),
 );
 
 // Image processing worker

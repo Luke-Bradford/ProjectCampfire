@@ -22,3 +22,25 @@ When asked to implement or modify something in ProjectCampfire:
    - affected files
    - risks
    - what should be tested
+
+## PR description standard
+
+PRs are reviewed by an automated agent that only sees the diff, not the full codebase.
+Write PR descriptions that make the change self-contained and reviewable without needing
+to read other files. Specifically:
+
+- **State the security model explicitly.** If a security property relies on code *outside*
+  the diff (e.g. a middleware, a DB hook, a cascade constraint), name the file and explain
+  the relationship. Don't assume the reviewer can see it.
+- **Explain deliberate removals.** If something was added then removed across commits,
+  explain why in the description so the reviewer doesn't flag the removal as a regression.
+- **Document known-safe patterns.** If a pattern looks questionable but is intentional
+  (e.g. fire-and-forget with a recovery mechanism, `null` in a unique column), explain it
+  in the description rather than in a comment thread after the fact.
+- **Keep the description current.** If a round of review causes significant design changes,
+  update the PR description to reflect the final state — not just the original intent.
+- **Document conscious tradeoffs.** If you are knowingly accepting a limitation (e.g. an
+  unbounded query that's fine at MVP scale, a fire-and-forget with a recovery mechanism,
+  a pattern that looks risky but is safe given other constraints), name it explicitly in
+  the PR description under a "Known tradeoffs" section. This prevents the review agent
+  from escalating warnings to blockers across multiple rounds.
