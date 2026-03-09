@@ -21,6 +21,11 @@ Be especially careful about removals: a removal may be the fix, not the problem.
 5. **Scope creep** — Does this do more than the ticket requires?
 6. **Regressions** — Anything removed that other code still depends on?
 
+If you are unsure whether a behaviour claim in the diff or description is correct
+(e.g. "Postgres does X", "Next.js Y config applies here"), use WebSearch to verify
+against official docs before raising it as a concern. Do not flag something as an
+issue based on uncertainty alone — verify first.
+
 ## What NOT to flag
 
 - Code in unchanged files — do not speculate about files not in the diff

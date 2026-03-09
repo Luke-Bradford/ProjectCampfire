@@ -1,0 +1,9 @@
+{
+  "effortLevel": "max",
+  "autoUpdatesChannel": "latest",
+  "permissions": {
+    "allow": [
+      "WebSearch"
+    ]
+  }
+}
