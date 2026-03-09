@@ -45,7 +45,7 @@ function CommentRow({
   const toggleLike = api.feed.toggleLike.useMutation({ onSuccess: onRefresh });
 
   const likeCount = comment.reactions.filter((r) => r.type === "like").length;
-  const hasLiked = comment.reactions.some((r) => r.userId === currentUserId);
+  const hasLiked = comment.reactions.some((r) => r.type === "like" && r.userId === currentUserId);
 
   return (
     <div className="flex gap-2">
