@@ -128,6 +128,9 @@ export const feedRouter = createTRPCRouter({
       z.object({
         body: z.string().min(1).max(1000),
         groupId: z.string().optional(),
+        // imageKeys: raw MinIO keys returned by /api/upload/post-image, one per image slot.
+        // The worker will process each key and update imageUrls[index] asynchronously.
+        imageKeys: z.array(z.string()).max(4).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -140,6 +143,14 @@ export const feedRouter = createTRPCRouter({
         groupId: input.groupId ?? null,
         imageUrls: [],
       });
+      // Enqueue processing for any uploaded images. Each key was already uploaded to MinIO
+      // by the /api/upload/post-image route before the post was created.
+      if (input.imageKeys?.length) {
+        const { enqueueProcessPostImage } = await import("@/server/jobs/image-jobs");
+        await Promise.all(
+          input.imageKeys.map((key, index) => enqueueProcessPostImage(id, key, index))
+        );
+      }
       return { id };
     }),
 

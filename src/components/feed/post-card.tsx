@@ -27,6 +27,7 @@ type PostData = {
   createdAt: Date;
   editedAt: Date | null;
   deletedAt: Date | null;
+  imageUrls: (string | null)[] | null;
   author: PostAuthor;
   group: { id: string; name: string } | null;
   reactions: { id: string; userId: string; type: string }[];
@@ -298,6 +299,26 @@ export function PostCard({
       ) : (
         post.body && <p className="text-sm whitespace-pre-wrap">{post.body}</p>
       )}
+
+      {/* Images — filter nulls (unprocessed slots); show nothing until at least one is ready */}
+      {(() => {
+        const urls = (post.imageUrls ?? []).filter((u): u is string => u !== null);
+        if (!urls.length) return null;
+        return (
+          <div className={`grid gap-1 ${urls.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+            {urls.map((url, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={i}
+                src={url}
+                alt=""
+                className="w-full rounded object-cover"
+                style={{ maxHeight: urls.length === 1 ? "400px" : "200px" }}
+              />
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Actions */}
       <div className="flex items-center gap-4 border-t pt-2">
