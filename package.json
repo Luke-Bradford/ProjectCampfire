@@ -7,7 +7,7 @@
     "pnpm": ">=10"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "dev:start": "powershell -File scripts/dev-start.ps1",
     "build": "next build",
     "start": "next start",
