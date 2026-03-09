@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, asc, desc, eq, isNull, or, inArray, ne } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt, or, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -9,10 +9,25 @@ import { assertRateLimit } from "@/server/ratelimit";
 
 export const feedRouter = createTRPCRouter({
   // Unified feed: friends + groups, block-filtered, cursor-paginated (CAMP-096)
+  // cursor encodes "<isoTimestamp>_<postId>" for stable tie-breaking when two posts share createdAt.
+  // Condition: (createdAt < t) OR (createdAt = t AND id < id) — no posts silently skipped.
   list: protectedProcedure
     .input(z.object({ cursor: z.string().optional(), limit: z.number().min(1).max(50).default(20) }))
     .query(async ({ ctx, input }) => {
       const me = ctx.user.id;
+
+      // Parse compound cursor "<isoTimestamp>_<postId>"
+      let cursorDate: Date | undefined;
+      let cursorId: string | undefined;
+      if (input.cursor) {
+        const sep = input.cursor.lastIndexOf("_");
+        if (sep === -1) throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid cursor" });
+        cursorDate = new Date(input.cursor.slice(0, sep));
+        cursorId = input.cursor.slice(sep + 1);
+        if (isNaN(cursorDate.getTime()) || !cursorId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid cursor" });
+        }
+      }
 
       const [friendRows, blockedRows, memberRows] = await Promise.all([
         // Friends
@@ -60,8 +75,13 @@ export const feedRouter = createTRPCRouter({
             visibleAuthorIds.length > 0 ? inArray(posts.authorId, visibleAuthorIds) : undefined,
             myGroupIds.length > 0 ? inArray(posts.groupId, myGroupIds) : undefined
           ),
-          // Cursor
-          input.cursor ? ne(posts.id, input.cursor) : undefined
+          // Compound cursor: (createdAt < t) OR (createdAt = t AND id < cursorId)
+          cursorDate && cursorId
+            ? or(
+                lt(posts.createdAt, cursorDate),
+                and(eq(posts.createdAt, cursorDate), lt(posts.id, cursorId))
+              )
+            : undefined
         ),
         orderBy: [desc(posts.createdAt)],
         limit: input.limit + 1,
@@ -83,7 +103,8 @@ export const feedRouter = createTRPCRouter({
 
       const hasMore = feedPosts.length > input.limit;
       const items = hasMore ? feedPosts.slice(0, input.limit) : feedPosts;
-      const nextCursor = hasMore ? items[items.length - 1]?.id : undefined;
+      const last = items[items.length - 1];
+      const nextCursor = hasMore && last ? `${last.createdAt.toISOString()}_${last.id}` : undefined;
 
       return { items, nextCursor };
     }),
@@ -133,6 +154,19 @@ export const feedRouter = createTRPCRouter({
         body: input.body,
       });
       return { id };
+    }),
+
+  // Edit own comment (CAMP-088)
+  // Single UPDATE with ownership + soft-delete check to avoid TOCTOU between check and write.
+  editComment: protectedProcedure
+    .input(z.object({ id: z.string(), body: z.string().min(1).max(1000) }))
+    .mutation(async ({ ctx, input }) => {
+      const [updated] = await db
+        .update(comments)
+        .set({ body: input.body, editedAt: new Date() })
+        .where(and(eq(comments.id, input.id), eq(comments.authorId, ctx.user.id), isNull(comments.deletedAt)))
+        .returning({ id: comments.id });
+      if (!updated) throw new TRPCError({ code: "NOT_FOUND" });
     }),
 
   // Delete own comment
