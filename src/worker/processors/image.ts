@@ -77,6 +77,11 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
       // The generate_series approach fills all 4 slots in one statement and is race-safe:
       // concurrent jobs each rebuild the full array from the latest DB state within the UPDATE.
       // Both the index and the URL are parameterized — no sql.raw used.
+      //
+      // NULL slots: the array always has 4 elements; unprocessed slots are NULL.
+      // This preserves positional semantics — array_remove(…, NULL) would collapse positions
+      // (e.g. index 2 would shift to index 1 if index 1 is still NULL). Consumers rendering
+      // imageUrls must filter with .filter(Boolean) to skip unprocessed slots.
       const pgIndex = data.index + 1;
       const url = storageUrl(outKey);
       await db.execute(sql`
