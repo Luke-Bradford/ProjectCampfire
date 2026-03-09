@@ -166,16 +166,27 @@ async function main() {
   if (!existingGroup) {
     await db.insert(groups).values(SEED_GROUP);
     log(`create group "${SEED_GROUP.name}"`);
-
-    const memberships = SEED_USERS.map((u, i) => ({
-      groupId: SEED_GROUP.id,
-      userId: u.id,
-      role: (i === 0 ? "owner" : "member") as "owner" | "member",
-    }));
-    await db.insert(groupMemberships).values(memberships);
-    log(`create group memberships (alice=owner, bob+carol=member)`);
   } else {
     log(`skip  group "${SEED_GROUP.name}" (already exists)`);
+  }
+
+  // Group memberships — checked individually so they survive user re-creation
+  const seedMemberships = SEED_USERS.map((u, i) => ({
+    userId: u.id,
+    role: (i === 0 ? "owner" : "member") as "owner" | "member",
+  }));
+  for (const m of seedMemberships) {
+    const existing = await db.query.groupMemberships.findFirst({
+      where: (t, { eq, and }) =>
+        and(eq(t.groupId, SEED_GROUP.id), eq(t.userId, m.userId)),
+      columns: { userId: true },
+    });
+    if (existing) {
+      log(`skip  membership ${m.userId} in ${SEED_GROUP.id}`);
+      continue;
+    }
+    await db.insert(groupMemberships).values({ groupId: SEED_GROUP.id, ...m });
+    log(`create membership ${m.userId} in ${SEED_GROUP.id}`);
   }
 
   // Games
