@@ -173,7 +173,7 @@ export const feedRouter = createTRPCRouter({
       // Fire-and-forget: a Redis/queue failure must not fail the post creation itself.
       // (?<![='"]) negative lookbehind: skip URLs that appear inside HTML attribute
       // values (e.g. src="https://..." in pasted iframe code).
-      const urlMatch = /(?<![='"'])https?:\/\/[^\s<>"]+/i.exec(input.body);
+      const urlMatch = /(?<![='"])https?:\/\/[^\s<>"]+/i.exec(input.body);
       if (urlMatch) {
         const cleanUrl = urlMatch[0].replace(/[).,;:!?\]]+$/, "");
         enqueueOgFetch(id, cleanUrl).catch((err: unknown) => {
