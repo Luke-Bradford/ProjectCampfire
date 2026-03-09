@@ -18,7 +18,8 @@ function extractYouTubeVideoId(url: string): string | null {
       if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v;
     }
     if (host === "youtu.be") {
-      const id = parsed.pathname.slice(1).split("?")[0];
+      // pathname never contains a query string after new URL() parsing
+      const id = parsed.pathname.slice(1);
       if (id && /^[A-Za-z0-9_-]{11}$/.test(id)) return id;
     }
   } catch {
@@ -36,14 +37,18 @@ function extractYouTubeVideoId(url: string): string | null {
 function extractMeta(html: string, property: string): string | undefined {
   const escaped = property.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-  // Try double-quoted attribute values first (most common in OG tags)
+  // Try double-quoted attribute values first (most common in OG tags).
+  // Use [^>"']* (not [^>]*) between attribute pairs so the gap quantifier cannot
+  // match quote characters — prevents overlapping choices with the adjacent
+  // quoted-value groups, which would otherwise allow catastrophic backtracking
+  // on crafted inputs. Well-formed HTML never has unquoted " or ' between attrs.
   for (const [q, inner] of [
     ['"', '[^"]*'],
     ["'", "[^']*"],
   ] as const) {
     const pattern = new RegExp(
-      `<meta[^>]+(?:property|name)=${q}${escaped}${q}[^>]*content=${q}(${inner})${q}` +
-      `|<meta[^>]+content=${q}(${inner})${q}[^>]*(?:property|name)=${q}${escaped}${q}`,
+      `<meta[^>"']*(?:property|name)=${q}${escaped}${q}[^>"']*content=${q}(${inner})${q}` +
+      `|<meta[^>"']*content=${q}(${inner})${q}[^>"']*(?:property|name)=${q}${escaped}${q}`,
       "i"
     );
     const match = pattern.exec(html);
