@@ -266,21 +266,28 @@ function StepInvite({ onDone }: { onDone: () => void }) {
     { enabled: searchQuery.trim().length >= 2 },
   );
 
+  function removePending(id: string) {
+    setPendingIds((prev) => {
+      const s = new Set(prev);
+      s.delete(id);
+      return s;
+    });
+  }
+
   const sendRequest = api.friends.sendRequest.useMutation({
     onSuccess: (_, vars) => {
       setSentTo((prev) => new Set(prev).add(vars.addresseeId));
-      setPendingIds((prev) => { const s = new Set(prev); s.delete(vars.addresseeId); return s; });
+      removePending(vars.addresseeId);
     },
-    onError: (_, vars) => {
-      setPendingIds((prev) => { const s = new Set(prev); s.delete(vars.addresseeId); return s; });
-    },
+    onError: (_, vars) => removePending(vars.addresseeId),
   });
 
   function handleCopy() {
     if (!inviteUrl) return;
-    void navigator.clipboard.writeText(inviteUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    navigator.clipboard.writeText(inviteUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => { /* clipboard denied — don't flash "Copied!" */ });
   }
 
   return (
@@ -328,7 +335,7 @@ function StepInvite({ onDone }: { onDone: () => void }) {
               {searchResults.isLoading && (
                 <p className="px-2 py-1 text-xs text-muted-foreground">Searching…</p>
               )}
-              {searchResults.data?.length === 0 && (
+              {!searchResults.isFetching && searchResults.data?.length === 0 && (
                 <p className="px-2 py-1 text-xs text-muted-foreground">No results found.</p>
               )}
               {searchResults.data?.map((u) => (
