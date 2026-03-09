@@ -37,8 +37,11 @@ Immediately after every `git push` that creates or updates a PR:
 1. **Start polling** — check `gh pr view <number> --comments` every ~30–45 seconds.
    Do not end the conversation or move on while a PR is open and unreviewed.
 2. **Act on every severity** — BLOCKING and WARNING must be fixed before merge.
-   NITPICK items that are genuine quality concerns must be raised as GitHub issues
-   (label: `tech-debt`) so nothing is silently dropped.
+   After each review round, assess every WARNING and NITPICK for future value:
+   - Does it identify a real UX gap, security hardening opportunity, or maintainability concern?
+   - If yes → create a GitHub issue (label: `tech-debt`) with enough context to act on later.
+   - If no (pure style, already-safe pattern, out-of-scope) → explicitly decide to drop it and move on.
+   The goal is zero silently discarded feedback. Either fix it or track it.
 3. **Reply to each comment** with what was done and the commit SHA.
 4. **Merge** once the review bot issues an APPROVE with no outstanding items.
 5. **Close linked GitHub issues** after merging.
