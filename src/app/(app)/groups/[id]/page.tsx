@@ -38,31 +38,41 @@ function InviteSection({ groupId }: { groupId: string }) {
   );
 }
 
-function GroupSettings({ groupId }: { groupId: string }) {
-  const { data: group, refetch } = api.groups.get.useQuery({ id: groupId });
+type GroupData = {
+  id: string;
+  name: string;
+  description: string | null;
+  discordInviteUrl: string | null;
+};
+
+function GroupSettings({ group, onSaved }: { group: GroupData; onSaved: () => void }) {
   const [name, setName] = useState<string | null>(null);
   const [description, setDescription] = useState<string | null>(null);
   const [discordUrl, setDiscordUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const update = api.groups.update.useMutation({
     onSuccess: () => {
       setName(null);
       setDescription(null);
       setDiscordUrl(null);
-      void refetch();
+      setError(null);
+      onSaved();
     },
+    onError: (err) => setError(err.message),
   });
-
-  if (!group) return null;
 
   const currentName = name ?? group.name;
   const currentDescription = description ?? (group.description ?? "");
   const currentDiscordUrl = discordUrl ?? (group.discordInviteUrl ?? "");
 
-  const isDirty =
-    currentName !== group.name ||
-    currentDescription !== (group.description ?? "") ||
-    currentDiscordUrl !== (group.discordInviteUrl ?? "");
+  // Only send fields that actually changed to prevent overwriting concurrent edits
+  const dirtyFields: Record<string, string> = {};
+  if (currentName !== group.name) dirtyFields.name = currentName.trim();
+  if (currentDescription !== (group.description ?? "")) dirtyFields.description = currentDescription;
+  if (currentDiscordUrl !== (group.discordInviteUrl ?? "")) dirtyFields.discordInviteUrl = currentDiscordUrl;
+
+  const isDirty = Object.keys(dirtyFields).length > 0;
 
   return (
     <section className="space-y-4 rounded-lg border p-4">
@@ -93,20 +103,15 @@ function GroupSettings({ groupId }: { groupId: string }) {
             placeholder="https://discord.gg/..."
             type="url"
           />
+          <p className="text-xs text-muted-foreground">Must be a discord.gg or discord.com/invite link</p>
         </div>
       </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
       {isDirty && (
         <Button
           size="sm"
           disabled={update.isPending || !currentName.trim()}
-          onClick={() =>
-            update.mutate({
-              id: groupId,
-              name: currentName.trim(),
-              description: currentDescription,
-              discordInviteUrl: currentDiscordUrl,
-            })
-          }
+          onClick={() => update.mutate({ id: group.id, ...dirtyFields })}
         >
           {update.isPending ? "Saving…" : "Save changes"}
         </Button>
@@ -118,7 +123,7 @@ function GroupSettings({ groupId }: { groupId: string }) {
 export default function GroupPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const { data: group, isLoading } = api.groups.get.useQuery({ id });
+  const { data: group, isLoading, refetch } = api.groups.get.useQuery({ id });
 
   const leave = api.groups.leave.useMutation({
     onSuccess: () => router.push("/groups"),
@@ -164,7 +169,12 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
 
       <InviteSection groupId={id} />
 
-      {isAdmin && <GroupSettings groupId={id} />}
+      {isAdmin && (
+        <GroupSettings
+          group={{ id: group.id, name: group.name, description: group.description, discordInviteUrl: group.discordInviteUrl }}
+          onSaved={() => void refetch()}
+        />
+      )}
 
       <section className="space-y-3">
         <h2 className="font-semibold">

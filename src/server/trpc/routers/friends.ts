@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { user, friendships, notifications, groupMemberships } from "@/server/db/schema";
+import { user, friendships, notifications, groupMemberships, groups } from "@/server/db/schema";
 import { enqueueFriendRequest, enqueueFriendRequestAccepted } from "@/server/jobs/email-jobs";
 import { assertRateLimit } from "@/server/ratelimit";
 
@@ -262,18 +262,14 @@ export const friendsRouter = createTRPCRouter({
       });
       if (!friendship) return [];
 
-      // Return standard (non-private) groups the target user belongs to
-      const memberships = await db.query.groupMemberships.findMany({
-        where: eq(groupMemberships.userId, input.userId),
-        with: {
-          group: {
-            columns: { id: true, name: true, visibility: true },
-          },
-        },
-      });
-      return memberships
-        .filter((m) => m.group.visibility === "standard")
-        .map((m) => ({ id: m.group.id, name: m.group.name }));
+      // Return standard (non-private) groups the target user belongs to.
+      // visibility filter is in the DB query — private group names never touch server memory.
+      const rows = await db
+        .select({ id: groups.id, name: groups.name })
+        .from(groupMemberships)
+        .innerJoin(groups, and(eq(groups.id, groupMemberships.groupId), eq(groups.visibility, "standard")))
+        .where(eq(groupMemberships.userId, input.userId));
+      return rows;
     }),
 
   // Resolve an invite token to a public profile — no auth required (CAMP-023)
