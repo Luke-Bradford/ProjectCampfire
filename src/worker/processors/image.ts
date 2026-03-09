@@ -1,8 +1,8 @@
 import type { Job } from "bullmq";
 import sharp from "sharp";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/server/db";
-import { user, posts } from "@/server/db/schema";
+import { user } from "@/server/db/schema";
 import { minio, storageUrl } from "@/server/storage";
 import { env } from "@/env";
 import type { ImageJobPayload } from "@/server/jobs/image-jobs";
@@ -14,7 +14,13 @@ async function downloadFromMinio(key: string): Promise<Buffer> {
   const stream = await minio.getObject(env.MINIO_BUCKET, key);
   const chunks: Buffer[] = [];
   for await (const chunk of stream) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
+    if (Buffer.isBuffer(chunk)) {
+      chunks.push(chunk);
+    } else if (chunk instanceof Uint8Array) {
+      chunks.push(Buffer.from(chunk));
+    } else {
+      throw new Error(`[image] unexpected chunk type from MinIO stream: ${typeof chunk}`);
+    }
   }
   return Buffer.concat(chunks);
 }
@@ -63,23 +69,15 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
       const outKey = processedKey(data.key);
       await uploadProcessed(outKey, processed);
 
-      // Read the current imageUrls, set the URL at the correct index, write back.
-      // Fetching first avoids sql.raw and correctly preserves all other indices
-      // regardless of job processing order.
-      const post = await db.query.posts.findFirst({
-        where: eq(posts.id, data.postId),
-        columns: { imageUrls: true },
-      });
-
-      const urls: (string | null)[] = Array.from({ length: 4 }, (_, i) =>
-        post?.imageUrls?.[i] ?? null,
+      // Single atomic UPDATE using Postgres array index assignment.
+      // image_urls is 1-based in Postgres, so data.index (0-based) becomes data.index+1.
+      // Both the index and the URL are passed as parameterized values — no sql.raw used.
+      // This avoids the read-modify-write race when multiple images for the same post
+      // are processed concurrently.
+      const pgIndex = data.index + 1;
+      await db.execute(
+        sql`UPDATE posts SET image_urls[${pgIndex}] = ${storageUrl(outKey)} WHERE id = ${data.postId}`,
       );
-      urls[data.index] = storageUrl(outKey);
-
-      await db
-        .update(posts)
-        .set({ imageUrls: urls.filter((u): u is string => u !== null) })
-        .where(eq(posts.id, data.postId));
 
       console.log(`[image] post image processed for post ${data.postId}[${data.index}] → ${outKey}`);
       break;
