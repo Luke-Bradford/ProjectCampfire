@@ -7,6 +7,7 @@ import { api } from "@/trpc/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 function initials(name: string) {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -220,7 +221,7 @@ export function PostCard({
   const imageUrls = (post.imageUrls ?? []).filter((u): u is string => u !== null);
 
   return (
-    <article className={`space-y-3 rounded-lg border p-4 ${post.pinnedAt ? "border-primary/40 bg-primary/5" : ""}`}>
+    <article className={cn("space-y-3 rounded-lg border p-4", post.pinnedAt && "border-primary/40 bg-primary/5")}>
       {/* Pinned indicator */}
       {post.pinnedAt && (
         <p className="text-xs font-medium text-primary">📌 Pinned</p>
