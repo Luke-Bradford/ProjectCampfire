@@ -8,6 +8,17 @@ RUN corepack enable pnpm
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
+# Dev — hot-reload via volume mount, src/ is NOT copied (mounted at runtime)
+FROM base AS dev
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+RUN corepack enable pnpm
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json pnpm-lock.yaml ./
+ENV NODE_ENV=development
+EXPOSE 3000
+CMD ["pnpm", "dev"]
+
 # Build
 FROM base AS builder
 WORKDIR /app
