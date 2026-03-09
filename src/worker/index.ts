@@ -35,10 +35,12 @@ new Worker<AccountJobPayload>(
 // Hourly sweeper: finds deleted accounts where the scrub job was lost (e.g. Redis
 // was down during deleteAccount) and re-enqueues them. This is the fallback
 // recovery mechanism for the fire-and-forget enqueue in the tRPC mutation.
-void accountQueue.add(
+accountQueue.add(
   "sweep_unscrubbed",
   { type: "sweep_unscrubbed" },
   { repeat: { every: 60 * 60 * 1000 }, jobId: "sweep_unscrubbed" },
+).catch((err: unknown) =>
+  console.error("[worker] failed to register sweep_unscrubbed repeatable job:", err),
 );
 
 // Image processing worker

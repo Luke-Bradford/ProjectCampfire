@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -138,7 +138,7 @@ export const userRouter = createTRPCRouter({
         // immediately — the async scrub job handles the remaining PII fields.
         const updated = await tx
           .update(user)
-          .set({ deletedAt: new Date(), email: `deleted-${userId}@invalid` })
+          .set({ deletedAt: sql`now()`, email: `deleted-${userId}@invalid` })
           .where(and(eq(user.id, userId), isNull(user.deletedAt)))
           .returning({ id: user.id });
 
