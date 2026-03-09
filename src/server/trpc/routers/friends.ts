@@ -6,12 +6,14 @@ import { createTRPCRouter, protectedProcedure, publicProcedure } from "@/server/
 import { db } from "@/server/db";
 import { user, friendships, notifications } from "@/server/db/schema";
 import { enqueueFriendRequest, enqueueFriendRequestAccepted } from "@/server/jobs/email-jobs";
+import { assertRateLimit } from "@/server/ratelimit";
 
 export const friendsRouter = createTRPCRouter({
   // Search open-profile users by username or display name (CAMP-020)
   search: protectedProcedure
     .input(z.object({ query: z.string().min(1).max(50) }))
     .query(async ({ ctx, input }) => {
+      await assertRateLimit(`rl:friends:search:${ctx.user.id}`, 30, 60);
       const term = `%${input.query}%`;
       return db
         .select({
