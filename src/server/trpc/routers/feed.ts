@@ -129,8 +129,11 @@ export const feedRouter = createTRPCRouter({
         body: z.string().min(1).max(1000),
         groupId: z.string().optional(),
         // imageKeys: raw MinIO keys returned by /api/upload/post-image, one per image slot.
-        // The worker will process each key and update imageUrls[index] asynchronously.
-        imageKeys: z.array(z.string()).max(4).optional(),
+        // Pattern: posts/<uploadId>/<cuid>-raw — validated to prevent arbitrary MinIO path injection.
+        imageKeys: z
+          .array(z.string().regex(/^posts\/[a-z0-9]{10,}\/[a-z0-9]+-raw$/))
+          .max(4)
+          .optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

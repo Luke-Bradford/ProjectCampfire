@@ -209,6 +209,7 @@ export function PostCard({
   const hasLiked = post.reactions.some((r) => r.userId === currentUserId);
   const commentCount = post.comments.length;
   const isOwn = post.author.id === currentUserId;
+  const imageUrls = (post.imageUrls ?? []).filter((u): u is string => u !== null);
 
   return (
     <article className="space-y-3 rounded-lg border p-4">
@@ -300,25 +301,21 @@ export function PostCard({
         post.body && <p className="text-sm whitespace-pre-wrap">{post.body}</p>
       )}
 
-      {/* Images — filter nulls (unprocessed slots); show nothing until at least one is ready */}
-      {(() => {
-        const urls = (post.imageUrls ?? []).filter((u): u is string => u !== null);
-        if (!urls.length) return null;
-        return (
-          <div className={`grid gap-1 ${urls.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
-            {urls.map((url, i) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={i}
-                src={url}
-                alt=""
-                className="w-full rounded object-cover"
-                style={{ maxHeight: urls.length === 1 ? "400px" : "200px" }}
-              />
-            ))}
-          </div>
-        );
-      })()}
+      {/* Images — null slots (unprocessed by worker) already filtered out above */}
+      {imageUrls.length > 0 && (
+        <div className={`grid gap-1 ${imageUrls.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+          {imageUrls.map((url, i) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={i}
+              src={url}
+              alt=""
+              className="w-full rounded object-cover"
+              style={{ maxHeight: imageUrls.length === 1 ? "400px" : "200px" }}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex items-center gap-4 border-t pt-2">

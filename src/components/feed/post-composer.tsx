@@ -68,8 +68,11 @@ export function PostComposer({ groupId, onPosted }: { groupId?: string; onPosted
 
   async function uploadAll(toUpload: SelectedImage[]) {
     setUploadingCount((n) => n + toUpload.length);
-    await Promise.all(toUpload.map(uploadOne));
-    setUploadingCount((n) => n - toUpload.length);
+    try {
+      await Promise.all(toUpload.map(uploadOne));
+    } finally {
+      setUploadingCount((n) => n - toUpload.length);
+    }
   }
 
   async function uploadOne(img: SelectedImage) {
@@ -78,7 +81,6 @@ export function PostComposer({ groupId, onPosted }: { groupId?: string; onPosted
     // uploadId is used only for the MinIO path. The real DB postId is assigned on submit
     // and passed to enqueueProcessPostImage, so the worker updates the correct row.
     fd.append("postId", img.uploadId);
-    fd.append("index", "0");
 
     try {
       const res = await fetch("/api/upload/post-image", { method: "POST", body: fd });
