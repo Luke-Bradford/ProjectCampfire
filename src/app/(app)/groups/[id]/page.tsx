@@ -67,7 +67,7 @@ function GroupSettings({ group, onSaved }: { group: GroupData; onSaved: () => vo
   const currentDiscordUrl = discordUrl ?? (group.discordInviteUrl ?? "");
 
   // Only send fields that actually changed to prevent overwriting concurrent edits
-  const dirtyFields: Record<string, string> = {};
+  const dirtyFields: Partial<{ name: string; description: string; discordInviteUrl: string }> = {};
   if (currentName !== group.name) dirtyFields.name = currentName.trim();
   if (currentDescription !== (group.description ?? "")) dirtyFields.description = currentDescription;
   if (currentDiscordUrl !== (group.discordInviteUrl ?? "")) dirtyFields.discordInviteUrl = currentDiscordUrl;
