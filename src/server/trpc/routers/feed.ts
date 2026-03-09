@@ -168,10 +168,12 @@ export const feedRouter = createTRPCRouter({
       // Detect the first URL in the post body and enqueue OG tag fetch.
       // Post is visible immediately; embedMetadata populates asynchronously.
       // Only one URL per post (one embed per product spec).
+      // Trailing punctuation commonly appended in prose (., ), ;, etc.) is stripped.
       const urlMatch = /https?:\/\/[^\s<>"]+/i.exec(input.body);
       if (urlMatch) {
+        const cleanUrl = urlMatch[0].replace(/[).,;:!?]+$/, "");
         const { enqueueOgFetch } = await import("@/server/jobs/og-fetch-jobs");
-        await enqueueOgFetch(id, urlMatch[0]);
+        await enqueueOgFetch(id, cleanUrl);
       }
       return { id };
     }),

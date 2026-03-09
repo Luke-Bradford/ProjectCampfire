@@ -27,18 +27,29 @@ function extractYouTubeVideoId(url: string): string | null {
   return null;
 }
 
-/** Extract the value of an OG/Twitter meta tag from raw HTML. */
+/** Extract the value of an OG/Twitter meta tag from raw HTML.
+ *
+ * Handles both attribute orderings (property/name before or after content).
+ * Uses separate patterns for double- and single-quoted attribute values to avoid
+ * the quote-mismatch bug where [^"'] would stop at a quote character embedded
+ * inside a differently-quoted attribute value. */
 function extractMeta(html: string, property: string): string | undefined {
-  // Match <meta property="og:title" content="…"> or <meta name="og:title" content="…">
-  // Content can be before or after property/name — handle both attribute orderings.
   const escaped = property.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(
-    `<meta[^>]+(?:property|name)=["']${escaped}["'][^>]*content=["']([^"']*?)["']` +
-    `|<meta[^>]+content=["']([^"']*?)["'][^>]*(?:property|name)=["']${escaped}["']`,
-    "i"
-  );
-  const match = pattern.exec(html);
-  return match?.[1] ?? match?.[2] ?? undefined;
+
+  // Try double-quoted attribute values first (most common in OG tags)
+  for (const [q, inner] of [
+    ['"', '[^"]*'],
+    ["'", "[^']*"],
+  ] as const) {
+    const pattern = new RegExp(
+      `<meta[^>]+(?:property|name)=${q}${escaped}${q}[^>]*content=${q}(${inner})${q}` +
+      `|<meta[^>]+content=${q}(${inner})${q}[^>]*(?:property|name)=${q}${escaped}${q}`,
+      "i"
+    );
+    const match = pattern.exec(html);
+    if (match) return match[1] ?? match[2];
+  }
+  return undefined;
 }
 
 /** Decode common HTML entities in an OG tag value. */
@@ -50,6 +61,16 @@ function decodeEntities(s: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&apos;/g, "'");
+}
+
+/** Validate that a thumbnail URL is a safe HTTP(S) URL before storing it. */
+function isSafeHttpUrl(candidate: string): boolean {
+  try {
+    const parsed = new URL(candidate);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 export async function processOgFetchJob(job: Job<OgFetchJobPayload>) {
@@ -79,30 +100,39 @@ export async function processOgFetchJob(job: Job<OgFetchJobPayload>) {
 
       if (!res.ok) {
         console.warn(`[og-fetch] HTTP ${res.status} for ${url} (post ${postId})`);
+        // Consume / discard the body to release the connection
+        res.body?.cancel().catch(() => undefined);
       } else {
         const contentType = res.headers.get("content-type") ?? "";
         if (!contentType.includes("text/html") && !contentType.includes("application/xhtml")) {
           console.warn(`[og-fetch] non-HTML content-type "${contentType}" for ${url} — skipping`);
+          // Discard body to release the connection
+          res.body?.cancel().catch(() => undefined);
         } else {
-          // Read up to MAX_BODY_BYTES to find the <head> section
+          // Stream the response incrementally, stopping at </head> or MAX_BODY_BYTES.
+          // Use TextDecoder in streaming mode so we never re-decode accumulated chunks —
+          // each call to decode() only processes the new chunk, avoiding O(n²) behaviour.
           const reader = res.body?.getReader();
           if (reader) {
+            const decoder = new TextDecoder("utf-8", { fatal: false });
             let bytesRead = 0;
-            const chunks: Uint8Array[] = [];
-            let done = false;
-            while (!done && bytesRead < MAX_BODY_BYTES) {
+            let accumulated = "";
+            let foundHead = false;
+
+            while (!foundHead && bytesRead < MAX_BODY_BYTES) {
               const result = await reader.read();
               if (result.done) break;
-              chunks.push(result.value);
+              // stream:true — decoder holds partial multi-byte sequences between calls
+              accumulated += decoder.decode(result.value, { stream: true });
               bytesRead += result.value.byteLength;
-              // Stop once we've seen </head> — OG tags are always in <head>
-              const partial = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
-              if (partial.toLowerCase().includes("</head>")) {
-                done = true;
+              if (accumulated.toLowerCase().includes("</head>")) {
+                foundHead = true;
               }
             }
+            // Flush any remaining bytes in the decoder and cancel the stream
+            accumulated += decoder.decode();
             reader.cancel().catch(() => undefined);
-            html = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
+            html = accumulated;
           }
         }
       }
@@ -123,11 +153,13 @@ export async function processOgFetchJob(job: Job<OgFetchJobPayload>) {
         ""
       ).trim() || undefined;
 
-      const thumbnailUrl = (
+      const rawThumbnail =
         extractMeta(html, "og:image") ??
-        extractMeta(html, "twitter:image") ??
-        undefined
-      );
+        extractMeta(html, "twitter:image");
+
+      // Only store thumbnail URLs with a safe http(s) protocol — reject javascript:, data:, etc.
+      const thumbnailUrl =
+        rawThumbnail && isSafeHttpUrl(rawThumbnail) ? rawThumbnail : undefined;
 
       metadata = {
         type: videoId ? "youtube" : "link",

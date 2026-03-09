@@ -341,8 +341,7 @@ export function PostCard({
             <img
               src={post.embedMetadata.thumbnailUrl}
               alt=""
-              className="w-full object-cover"
-              style={{ maxHeight: "200px" }}
+              className="w-full aspect-video object-cover"
             />
           )}
           <div className="px-3 py-2 space-y-0.5">
