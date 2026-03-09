@@ -18,7 +18,7 @@ type CommentData = {
   createdAt: Date;
   deletedAt: Date | null;
   author: PostAuthor;
-  reactions: { id: string; userId: string }[];
+  reactions: { id: string; userId: string; type: string }[];
 };
 type PostData = {
   id: string;
@@ -35,13 +35,17 @@ type PostData = {
 function CommentRow({
   comment,
   currentUserId,
-  onDeleted,
+  onRefresh,
 }: {
   comment: CommentData;
   currentUserId: string;
-  onDeleted: () => void;
+  onRefresh: () => void;
 }) {
-  const deleteComment = api.feed.deleteComment.useMutation({ onSuccess: onDeleted });
+  const deleteComment = api.feed.deleteComment.useMutation({ onSuccess: onRefresh });
+  const toggleLike = api.feed.toggleLike.useMutation({ onSuccess: onRefresh });
+
+  const likeCount = comment.reactions.filter((r) => r.type === "like").length;
+  const hasLiked = comment.reactions.some((r) => r.userId === currentUserId);
 
   return (
     <div className="flex gap-2">
@@ -61,6 +65,13 @@ function CommentRow({
           >
             {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
           </span>
+          <button
+            className={`text-xs ${hasLiked ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
+            onClick={() => toggleLike.mutate({ commentId: comment.id })}
+            disabled={toggleLike.isPending}
+          >
+            {hasLiked ? "♥" : "♡"}{likeCount > 0 && ` ${likeCount}`}
+          </button>
           {comment.author.id === currentUserId && (
             <button
               className="text-xs text-muted-foreground hover:text-destructive"
@@ -170,7 +181,7 @@ export function PostCard({
               key={c.id}
               comment={c}
               currentUserId={currentUserId}
-              onDeleted={onRefresh}
+              onRefresh={onRefresh}
             />
           ))}
           <form
