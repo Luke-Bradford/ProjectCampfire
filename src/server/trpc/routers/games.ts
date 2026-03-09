@@ -5,6 +5,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
 import { games, gameOwnerships } from "@/server/db/schema";
+import { assertRateLimit } from "@/server/ratelimit";
 
 const PLATFORMS = ["pc", "playstation", "xbox", "nintendo", "other"] as const;
 
@@ -12,7 +13,8 @@ export const gamesRouter = createTRPCRouter({
   // Search the game catalog by title (CAMP-062 quick-add support)
   search: protectedProcedure
     .input(z.object({ query: z.string().min(1).max(100) }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await assertRateLimit(`rl:games:search:${ctx.user.id}`, 30, 60);
       return db
         .select({
           id: games.id,

@@ -5,6 +5,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
 import { posts, comments, reactions, friendships, groupMemberships } from "@/server/db/schema";
+import { assertRateLimit } from "@/server/ratelimit";
 
 export const feedRouter = createTRPCRouter({
   // Unified feed: friends + groups, block-filtered, cursor-paginated (CAMP-096)
@@ -95,6 +96,7 @@ export const feedRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      await assertRateLimit(`rl:feed:create:${ctx.user.id}`, 10, 60);
       const id = createId();
       await db.insert(posts).values({
         id,
