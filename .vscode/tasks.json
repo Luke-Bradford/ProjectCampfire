@@ -2,9 +2,9 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Next.js dev server",
+      "label": "Start dev stack",
       "type": "shell",
-      "command": "powershell -File scripts/kill-port.ps1 ; pnpm dev",
+      "command": "powershell -File scripts/dev-start.ps1",
       "isBackground": true,
       "problemMatcher": {
         "pattern": {
@@ -15,37 +15,18 @@
         },
         "background": {
           "activeOnStart": true,
-          "beginsPattern": "Starting\\.\\.\\.",
-          "endsPattern": "Ready in"
+          "beginsPattern": "==>",
+          "endsPattern": "Dev stack is ready"
         }
       },
-      "presentation": {
-        "group": "devservers",
-        "reveal": "silent",
-        "panel": "dedicated"
-      }
-    },
-    {
-      "label": "BullMQ worker",
-      "type": "shell",
-      "command": "pnpm worker",
-      "isBackground": true,
-      "problemMatcher": [],
-      "presentation": {
-        "group": "devservers",
-        "reveal": "silent",
-        "panel": "dedicated"
-      }
-    },
-    {
-      "label": "Start dev",
-      "dependsOn": ["Next.js dev server", "BullMQ worker"],
-      "dependsOrder": "parallel",
       "group": {
         "kind": "build",
         "isDefault": true
       },
-      "problemMatcher": []
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
     }
   ]
 }

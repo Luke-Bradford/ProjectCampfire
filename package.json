@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
+    "dev:start": "powershell -File scripts/dev-start.ps1",
     "build": "next build",
     "start": "next start",
     "lint": "eslint src --max-warnings 0",
