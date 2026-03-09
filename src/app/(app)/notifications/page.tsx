@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
@@ -58,21 +58,27 @@ export default function NotificationsPage() {
       void utils.notifications.unreadCount.invalidate();
     },
   });
+  const markAllExcept = api.notifications.markAllReadExcept.useMutation({
+    onSuccess: () => {
+      void refetch();
+      void utils.notifications.unreadCount.invalidate();
+    },
+  });
   const markOne = api.notifications.markRead.useMutation({ onSuccess: () => void refetch() });
 
-  // Auto-mark non-actionable notifications read on page load — clears the bell badge.
-  // Friend request notifications are excluded: they stay unread until accepted/declined.
+  // Auto-mark non-actionable notifications read on page load — single DB call, no loop.
+  // friend_request_received stays unread until the user accepts or declines.
+  const hasMarkedRef = useRef(false);
   useEffect(() => {
+    if (hasMarkedRef.current || notifs.length === 0) return;
+    hasMarkedRef.current = true;
     const hasActionable = notifs.some(
       (n) => n.type === "friend_request_received" && !n.readAt
     );
-    if (!hasActionable) {
-      markAll.mutate();
+    if (hasActionable) {
+      markAllExcept.mutate({ excludeTypes: ["friend_request_received"] });
     } else {
-      // Mark only non-friend-request unread notifications
-      notifs
-        .filter((n) => n.type !== "friend_request_received" && !n.readAt)
-        .forEach((n) => markOne.mutate({ id: n.id }));
+      markAll.mutate();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notifs.length]);

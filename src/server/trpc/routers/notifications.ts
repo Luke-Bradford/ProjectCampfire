@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { and, count, desc, eq, isNull } from "drizzle-orm";
+import { and, count, desc, eq, isNull, notInArray } from "drizzle-orm";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { notifications } from "@/server/db/schema";
+import { notifications, notificationTypeEnum } from "@/server/db/schema";
 
 export const notificationsRouter = createTRPCRouter({
   // Unread count for the bell badge (CAMP-120)
@@ -48,4 +48,20 @@ export const notificationsRouter = createTRPCRouter({
         and(eq(notifications.userId, ctx.user.id), isNull(notifications.readAt))
       );
   }),
+
+  // Mark all read except specific notification types — single DB call, no loop (CAMP-143)
+  markAllReadExcept: protectedProcedure
+    .input(z.object({ excludeTypes: z.array(z.enum(notificationTypeEnum.enumValues)).min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      await db
+        .update(notifications)
+        .set({ readAt: new Date() })
+        .where(
+          and(
+            eq(notifications.userId, ctx.user.id),
+            isNull(notifications.readAt),
+            notInArray(notifications.type, input.excludeTypes)
+          )
+        );
+    }),
 });
