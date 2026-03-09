@@ -1,95 +1,38 @@
-# Pre-PR Quality Checklist
+# PR & Review Standards
 
-Before pushing any branch for review, work through this checklist.
-A PR should only catch genuine edge cases — not basic correctness errors.
+These rules apply at all times.
 
----
+## Before pushing for review
 
-## 1. Know the tools you're using
+A PR should only catch genuine edge cases — not basic correctness errors that
+could have been caught locally. Before pushing:
 
-Before writing code that uses a library or platform feature, verify behaviour
-if you are not certain. Do not assert facts about runtime behaviour (Postgres,
-Redis, Node.js, Next.js, BullMQ) without either knowing them with confidence
-or testing them. When in doubt, write a quick empirical test (e.g. a psql
-command against the running Docker container) rather than guessing.
+1. Re-read the full diff (`git diff main...HEAD`) as if you are the reviewer.
+2. Run `pnpm typecheck && pnpm lint` — both must be clean.
+3. Check every changed file against the security checklist below.
+4. Write or update the PR description (see standard below).
 
-Common failure modes to check explicitly:
-- **Postgres**: array assignment on NULL columns, JSONB merge behaviour,
-  constraint interactions, 1-based vs 0-based indexing
-- **Next.js App Router**: config exports that only work in Pages Router
-  (e.g. `api.bodyParser`); route segment config that does/doesn't apply
-- **BullMQ**: job concurrency, retry behaviour, deduplication by jobId
-- **MinIO client**: `endPoint` expects hostname only (not host:port);
-  `useSSL` vs `useSSL` at proxy boundary
+## Security checklist (every mutation and query)
 
----
+- Authentication: is this behind `protectedProcedure`?
+- Authorisation: does the caller own or have access to the resource?
+  `protectedProcedure` = logged in. It does NOT = owns the record. Check both.
+- Input validation: all user-supplied values validated with Zod before use?
+- SQL safety: no `sql.raw()` with any runtime value. Use parameterised `sql` tags.
+- No magic strings for schema identifiers — reference Drizzle table/column objects.
 
-## 2. Security checklist
+## PR description standard
 
-For every mutation or query, check:
-- [ ] Authentication: is this behind `protectedProcedure`?
-- [ ] Authorisation: does the caller own or have access to the resource?
-  A user being logged in does not mean they own the record.
-- [ ] Input validation: are all user-supplied values validated before use?
-- [ ] SQL safety: no `sql.raw()` with user-controlled input. Use parameterized
-  `sql` template tags only.
-- [ ] Injection: no string interpolation into SQL, shell commands, or HTML.
+Must be self-contained for a reviewer with no codebase context:
 
----
+- **Summary**: what changed and why.
+- **Security model**: how auth/authz is enforced. Name files outside the diff.
+- **Known tradeoffs**: document deliberate limitations before the reviewer finds them.
+  Use a "Known tradeoffs" section. Verified behaviour claims must state how they were verified.
 
-## 3. Code quality checklist
+## Responding to review comments
 
-- [ ] No magic strings for DB table/column names — reference Drizzle schema objects
-- [ ] No duplicate constants — single source of truth, exported and imported
-- [ ] Lint and typecheck pass: `pnpm typecheck && pnpm lint`
-- [ ] No unused imports or variables (lint enforces this at 0 warnings)
-- [ ] Error paths are handled — not just the happy path
-- [ ] Fire-and-forget async calls use `.catch()` with a meaningful log
-
----
-
-## 4. PR description standard
-
-The PR description must be self-contained for a reviewer who cannot see
-the rest of the codebase. Every PR must include:
-
-**Summary** — what changed and why, at the feature/behaviour level.
-
-**Security model** — state explicitly how auth/authz is enforced.
-Name the file if it relies on code outside the diff (e.g. middleware,
-DB cascade, Drizzle schema constraint).
-
-**Known tradeoffs** — document any deliberate limitations:
-- Unbounded queries acceptable at MVP scale
-- Fire-and-forget with recovery mechanism
-- Missing feature deferred to a later story (name the story/issue)
-Do not let the reviewer discover these — name them first.
-
-**Verified behaviour** — if the implementation relies on a specific
-runtime behaviour (Postgres, Node.js, Next.js), state that it was
-verified and how (e.g. "tested on Postgres 16 — see comment in code").
-
----
-
-## 5. Responding to reviewer comments
-
-When pushing a follow-up commit to address review comments:
-
-1. **Reply to each comment** before or immediately after pushing.
-   Reference the commit SHA. Explain what was done and why.
-
-2. **Commit message must reference reviewer concerns** — not just
-   "fix review comments". Use the format:
-   ```
-   Reviewer responses (round N):
-   Block #1 — <topic>: <what was done and verified>
-   Warning #1 — <topic>: <what was done or why deferred>
-   ```
-
-3. **Update the PR description** if the fix changes the design or
-   tradeoff profile significantly (e.g. changed from approach A to B,
-   or a known tradeoff was resolved rather than deferred).
-
-4. **Do not introduce new issues when fixing old ones.** After making
-   fixes, re-run the full pre-PR checklist above before pushing.
-   Check that changed files are still type-safe and lint-clean.
+1. Reply to **each comment** with what was done and the commit SHA.
+2. Commit message must list each reviewer concern addressed (not just "fix review").
+3. Update the PR description if the design changed significantly.
+4. Re-run `pnpm typecheck && pnpm lint` after every fix before pushing.
