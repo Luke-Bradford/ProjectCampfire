@@ -2,8 +2,8 @@
 # Starts the full ProjectCampfire dev stack:
 #   1. Kill orphaned node processes
 #   2. Start Docker backing services (postgres, redis, minio, mailhog)
-#   3. Start Next.js dev server
-#   4. Start BullMQ worker
+#   3. Start Next.js dev server (detached process, survives this script)
+#   4. Start BullMQ worker (detached process, survives this script)
 #   5. Wait until localhost:3000 responds
 
 param(
@@ -46,26 +46,18 @@ do {
 if ($health -ne 'healthy') { Write-Fail "Postgres did not become healthy in time" }
 Write-OK "Postgres healthy"
 
-# 4. Start Next.js dev server in background
+# 4. Start Next.js dev server as a detached process with its own window
 Write-Step "Starting Next.js dev server..."
-$nextJob = Start-Job -ScriptBlock {
-    param($dir)
-    Set-Location $dir
-    pnpm dev 2>&1
-} -ArgumentList $root
-Write-OK "Next.js started (job $($nextJob.Id))"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$root'; pnpm dev" -WindowStyle Minimized
+Write-OK "Next.js started"
 
-# 5. Start BullMQ worker in background
+# 5. Start BullMQ worker as a detached process with its own window
 Write-Step "Starting BullMQ worker..."
-$workerJob = Start-Job -ScriptBlock {
-    param($dir)
-    Set-Location $dir
-    pnpm worker 2>&1
-} -ArgumentList $root
-Write-OK "Worker started (job $($workerJob.Id))"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$root'; pnpm worker" -WindowStyle Minimized
+Write-OK "Worker started"
 
 # 6. Wait for localhost:3000 to respond
-Write-Step "Waiting for localhost:3000..."
+Write-Step "Waiting for localhost:3000 (up to ${TimeoutSeconds}s)..."
 $elapsed = 0
 $ready = $false
 while ($elapsed -lt $TimeoutSeconds) {
@@ -77,18 +69,9 @@ while ($elapsed -lt $TimeoutSeconds) {
         $ready = $true
         break
     } catch {}
-
-    # Surface any Next.js errors early
-    $out = Receive-Job $nextJob -ErrorAction SilentlyContinue
-    if ($out -match 'Error|ELIFECYCLE') {
-        Write-Host $out
-        Write-Fail "Next.js failed to start"
-    }
 }
 
 if (-not $ready) {
-    $out = Receive-Job $nextJob -ErrorAction SilentlyContinue
-    Write-Host $out
     Write-Fail "localhost:3000 did not respond within ${TimeoutSeconds}s"
 }
 
@@ -97,6 +80,3 @@ Write-Host "Dev stack is ready."
 Write-Host "  App:    http://localhost:3000"
 Write-Host "  MinIO:  http://localhost:9001"
 Write-Host "  Mail:   http://localhost:8025"
-Write-Host ""
-Write-Host "Next.js job ID: $($nextJob.Id)  |  Worker job ID: $($workerJob.Id)"
-Write-Host "To stop: Stop-Job $($nextJob.Id),$($workerJob.Id); Remove-Job $($nextJob.Id),$($workerJob.Id)"
