@@ -208,8 +208,7 @@ function CreatePollDialog({ eventId, groupId, onCreated }: { eventId: string; gr
 
 // ── Event discussion ──────────────────────────────────────────────────────────
 
-function EventDiscussion({ eventId, groupId, isGroupAdmin }: { eventId: string; groupId: string; isGroupAdmin: boolean }) {
-  const { data: me } = api.user.me.useQuery();
+function EventDiscussion({ eventId, groupId, currentUserId, isGroupAdmin }: { eventId: string; groupId: string; currentUserId: string; isGroupAdmin: boolean }) {
   const { data: eventPosts, refetch } = api.feed.listForEvent.useQuery({ eventId });
 
   function refresh() { void refetch(); }
@@ -225,7 +224,7 @@ function EventDiscussion({ eventId, groupId, isGroupAdmin }: { eventId: string; 
         <PostCard
           key={post.id}
           post={post}
-          currentUserId={me?.id ?? ""}
+          currentUserId={currentUserId}
           isGroupAdmin={isGroupAdmin}
           onRefresh={refresh}
         />
@@ -364,7 +363,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
       </div>
 
       {/* Discussion */}
-      <EventDiscussion eventId={id} groupId={event.groupId} isGroupAdmin={isGroupAdmin} />
+      <EventDiscussion eventId={id} groupId={event.groupId} currentUserId={myUserId} isGroupAdmin={isGroupAdmin} />
 
       {/* Status controls (for event creator) */}
       {isEventCreator && (event.status === "open" || event.status === "draft") && (

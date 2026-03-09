@@ -125,6 +125,8 @@ export const feedRouter = createTRPCRouter({
     }),
 
   // Create a post (CAMP-080, CAMP-094)
+  // groupId and eventId are mutually exclusive: eventId resolves its own groupId server-side,
+  // so supplying both would create an ambiguity. Enforce this at the schema level.
   create: protectedProcedure
     .input(
       z.object({
@@ -132,6 +134,7 @@ export const feedRouter = createTRPCRouter({
         groupId: z.string().optional(),
         // eventId: scopes the post to a specific event's discussion thread (CAMP-094).
         // The event must belong to a group the caller is a member of.
+        // Mutually exclusive with groupId — eventId resolves its own groupId server-side.
         eventId: z.string().optional(),
         // imageKeys: raw MinIO keys returned by /api/upload/post-image, one per image slot.
         // Pattern: posts/{userId}/{uploadId}/{cuid}-raw
@@ -141,7 +144,10 @@ export const feedRouter = createTRPCRouter({
           .array(z.string().regex(/^posts\/[A-Za-z0-9]+\/[A-Za-z0-9]{10,}\/[a-z0-9]+-raw$/))
           .max(4)
           .optional(),
-      })
+      }).refine(
+        (v) => !(v.groupId && v.eventId),
+        { message: "groupId and eventId are mutually exclusive" }
+      )
     )
     .mutation(async ({ ctx, input }) => {
       // Verify all imageKeys belong to the calling user (prefix = posts/{userId}/).
@@ -154,9 +160,10 @@ export const feedRouter = createTRPCRouter({
         }
       }
 
-      // Authz for event-scoped posts: caller must be a member of the event's group.
-      // groupId is inferred from the event rather than supplied separately.
-      let resolvedGroupId = input.groupId ?? null;
+      // Authz: verify the caller is a member of the target group.
+      // For event-scoped posts: groupId is inferred from the event.
+      // For group-scoped posts: groupId is supplied directly — membership still checked.
+      let resolvedGroupId: string | null = null;
       if (input.eventId) {
         const event = await db.query.events.findFirst({
           where: eq(events.id, input.eventId),
@@ -172,6 +179,16 @@ export const feedRouter = createTRPCRouter({
         });
         if (!membership) throw new TRPCError({ code: "FORBIDDEN", message: "Not a member of this group." });
         resolvedGroupId = event.groupId;
+      } else if (input.groupId) {
+        const membership = await db.query.groupMemberships.findFirst({
+          where: and(
+            eq(groupMemberships.groupId, input.groupId),
+            eq(groupMemberships.userId, ctx.user.id)
+          ),
+          columns: { groupId: true },
+        });
+        if (!membership) throw new TRPCError({ code: "FORBIDDEN", message: "Not a member of this group." });
+        resolvedGroupId = input.groupId;
       }
 
       await assertRateLimit(`rl:feed:create:${ctx.user.id}`, 10, 60);
