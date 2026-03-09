@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
@@ -58,13 +58,32 @@ export default function NotificationsPage() {
       void utils.notifications.unreadCount.invalidate();
     },
   });
+  const markAllExcept = api.notifications.markAllReadExcept.useMutation({
+    onSuccess: () => {
+      void refetch();
+      void utils.notifications.unreadCount.invalidate();
+    },
+  });
   const markOne = api.notifications.markRead.useMutation({ onSuccess: () => void refetch() });
 
-  // Auto-mark all read on page load — clears the bell badge
+  // Auto-mark non-actionable notifications read on page load — single DB call, no loop.
+  // friend_request_received stays unread until the user accepts or declines.
+  const hasMarkedRef = useRef(false);
   useEffect(() => {
-    markAll.mutate();
+    if (hasMarkedRef.current || notifs.length === 0) return;
+    hasMarkedRef.current = true;
+    const hasActionable = notifs.some(
+      (n) => n.type === "friend_request_received" && !n.readAt
+    );
+    if (hasActionable) {
+      markAllExcept.mutate({ excludeTypes: ["friend_request_received"] });
+    } else {
+      markAll.mutate();
+    }
+  // Intentionally fire-once: mutation refs and notifs omitted — including them would
+  // re-trigger on every refetch after markRead runs, defeating the "mark once" intent.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [notifs.length]);
 
   const unreadCount = notifs.filter((n) => !n.readAt).length;
 
@@ -88,6 +107,7 @@ export default function NotificationsPage() {
       <ul className="space-y-1">
         {notifs.map((n) => {
           const data = n.data as NotifData;
+          // Show Accept/Decline only while unread — once acted on, onDone marks it read
           const isPendingRequest = n.type === "friend_request_received" && !n.readAt;
           return (
             <li

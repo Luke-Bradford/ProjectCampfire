@@ -7,14 +7,16 @@
     "pnpm": ">=10"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
+    "dev:start": "docker compose up --build",
     "build": "next build",
     "start": "next start",
     "lint": "eslint src --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "worker": "tsx src/worker/index.ts",
+    "worker": "tsx --env-file=.env src/worker/index.ts",
+    "worker:docker": "tsx --watch src/worker/index.ts",
     "db:push": "drizzle-kit push",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",

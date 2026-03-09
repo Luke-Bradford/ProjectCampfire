@@ -1,0 +1,32 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start dev stack",
+      "type": "shell",
+      "command": "docker compose up --build",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^(.*)$",
+          "file": 1,
+          "line": 1,
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Starting",
+          "endsPattern": "ready started server"
+        }
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    }
+  ]
+}

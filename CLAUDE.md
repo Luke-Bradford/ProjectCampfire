@@ -44,6 +44,27 @@ pnpm worker                  # BullMQ worker (separate terminal)
 
 Next.js 15 (App Router) · tRPC v11 · Drizzle ORM · PostgreSQL 16 · Redis (Valkey) · **better-auth** · BullMQ · MinIO · Sharp · Nodemailer · shadcn/ui · Tailwind CSS v3
 
+## Docker & Data Safety
+
+**NEVER run `docker compose down -v`** — this destroys the named volumes (`postgres_data`, `redis_data`, `minio_data`) and permanently wipes all database content including manually-created user data that cannot be recovered from seed.
+
+Safe commands:
+- `docker compose up --build` — start everything, data persists
+- `docker compose down` — stop everything, data persists
+- `docker compose restart <service>` — restart a single service, data persists
+
+Destructive (require explicit user confirmation every time, no exceptions):
+- `docker compose down -v` — destroys ALL volume data
+- `docker volume rm projectcampfire_postgres_data` — destroys the database
+
+The database lives in the Docker named volume `projectcampfire_postgres_data`. It persists across restarts. Seeding is only needed on a genuinely fresh/wiped database.
+
+**After adding or removing a dependency**, the anonymous `node_modules` volume inside the container can go stale. `--build` alone does not refresh it. Run:
+```bash
+docker compose down && docker compose up --build
+```
+This recreates the anonymous volumes with the freshly-installed dependencies.
+
 ## Working Style
 
 When making changes:

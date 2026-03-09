@@ -50,6 +50,65 @@ services:
       - "1025:1025"  # SMTP
       - "8025:8025"  # Web UI
 
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    command: pnpm db:migrate
+    env_file:
+      - .env
+      - .env.docker
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+      - .env.docker
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+      target: dev
+    env_file:
+      - .env
+      - .env.docker
+    environment:
+      NODE_ENV: development
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   redis_data:

@@ -1,8 +1,16 @@
-FROM node:20-alpine
+FROM node:20-alpine AS base
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 RUN corepack enable pnpm
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
+
+# Dev — src/ mounted as volume, tsx --watch for hot-reload
+FROM base AS dev
+ENV NODE_ENV=development
+CMD ["pnpm", "worker:docker"]
+
+# Production
+FROM base AS production
 COPY . .
 CMD ["pnpm", "worker"]
