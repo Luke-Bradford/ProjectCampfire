@@ -1,0 +1,51 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Next.js dev server",
+      "type": "shell",
+      "command": "pnpm dev",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^(.*)$",
+          "file": 1,
+          "line": 1,
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Starting\\.\\.\\.",
+          "endsPattern": "Ready in"
+        }
+      },
+      "presentation": {
+        "group": "devservers",
+        "reveal": "silent",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "BullMQ worker",
+      "type": "shell",
+      "command": "pnpm worker",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "group": "devservers",
+        "reveal": "silent",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Start dev",
+      "dependsOn": ["Next.js dev server", "BullMQ worker"],
+      "dependsOrder": "parallel",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}
