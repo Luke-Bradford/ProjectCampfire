@@ -41,13 +41,13 @@ jobs:
 
       - name: Get linked issue
         run: |
-          # Extract issue number from PR body (looks for CAMP-NNN or #NNN patterns)
+          # Extract issue number from PR body (looks for "Closes #NNN" etc.)
           ISSUE_NUM=$(gh pr view ${{ github.event.pull_request.number }} --json body -q '.body' \
             | grep -oP '(?<=Closes #|closes #|Fixes #|fixes #|Resolves #|resolves #)\d+' | head -1)
           if [ -n "$ISSUE_NUM" ]; then
             gh issue view "$ISSUE_NUM" --repo ${{ github.repository }} \
-              --json title,body -q '"# Issue #" + ($ISSUE_NUM|tostring) + ": " + .title + "\n\n" + .body' \
-              --argjson ISSUE_NUM "$ISSUE_NUM" > linked_issue.txt 2>/dev/null || echo "(issue not found)" > linked_issue.txt
+              --json number,title,body -q '"# Issue #" + (.number | tostring) + ": " + .title + "\n\n" + .body' \
+              > linked_issue.txt 2>/dev/null || echo "(issue not found)" > linked_issue.txt
           else
             echo "(no linked issue found in PR body)" > linked_issue.txt
           fi
@@ -112,18 +112,6 @@ jobs:
           print(f"Request written: {len(diff)} chars of diff, {len(comments_raw)} chars of comments, {len(prompt)} chars total prompt")
           PYEOF
           python3 build_prompt.py
-
-          payload = {
-              "model": "claude-opus-4-6",
-              "max_tokens": 4096,
-              "messages": [{"role": "user", "content": prompt}]
-          }
-
-          with open('request.json', 'w') as f:
-              json.dump(payload, f)
-
-          print(f"Request written: {len(diff)} chars of diff, {len(prompt)} chars total prompt")
-          PYEOF
 
       - name: Call Claude API
         run: |
