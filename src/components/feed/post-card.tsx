@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import type { EmbedMetadata } from "@/server/db/schema/posts";
 import { formatDistanceToNow } from "date-fns";
 import { api } from "@/trpc/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -21,15 +22,6 @@ type CommentData = {
   author: PostAuthor;
   reactions: { id: string; userId: string; type: string }[];
 };
-type EmbedMetadata = {
-  type: "youtube" | "link";
-  url: string;
-  title?: string;
-  description?: string;
-  thumbnailUrl?: string;
-  videoId?: string;
-};
-
 type PostData = {
   id: string;
   body: string | null;

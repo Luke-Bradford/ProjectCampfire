@@ -155,21 +155,26 @@ export async function processOgFetchJob(job: Job<OgFetchJobPayload>) {
     }
 
     if (html) {
+      // Cap input to extractMeta at 50 KB to limit regex backtracking on crafted HTML.
+      // OG tags are always in <head>; the streaming loop already stops at </head>, so
+      // truncating here is a defence-in-depth measure against pathological inputs.
+      const safeHtml = html.slice(0, 50_000);
+
       const title = decodeEntities(
-        extractMeta(html, "og:title") ??
-        extractMeta(html, "twitter:title") ??
+        extractMeta(safeHtml, "og:title") ??
+        extractMeta(safeHtml, "twitter:title") ??
         ""
       ).trim() || undefined;
 
       const description = decodeEntities(
-        extractMeta(html, "og:description") ??
-        extractMeta(html, "twitter:description") ??
+        extractMeta(safeHtml, "og:description") ??
+        extractMeta(safeHtml, "twitter:description") ??
         ""
       ).trim() || undefined;
 
       const rawThumbnail =
-        extractMeta(html, "og:image") ??
-        extractMeta(html, "twitter:image");
+        extractMeta(safeHtml, "og:image") ??
+        extractMeta(safeHtml, "twitter:image");
 
       // Only store thumbnail URLs with a safe http(s) protocol — reject javascript:, data:, etc.
       const thumbnailUrl =

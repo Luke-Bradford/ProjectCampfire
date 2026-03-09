@@ -170,10 +170,13 @@ export const feedRouter = createTRPCRouter({
       // Post is visible immediately; embedMetadata populates asynchronously.
       // Only one URL per post (one embed per product spec).
       // Trailing punctuation commonly appended in prose (., ), ;, etc.) is stripped.
+      // Fire-and-forget: a Redis/queue failure must not fail the post creation itself.
       const urlMatch = /https?:\/\/[^\s<>"]+/i.exec(input.body);
       if (urlMatch) {
         const cleanUrl = urlMatch[0].replace(/[).,;:!?\]]+$/, "");
-        await enqueueOgFetch(id, cleanUrl);
+        enqueueOgFetch(id, cleanUrl).catch((err: unknown) => {
+          console.error(`[feed] failed to enqueue OG fetch for post ${id}:`, err);
+        });
       }
       return { id };
     }),
