@@ -171,7 +171,9 @@ export const feedRouter = createTRPCRouter({
       // Only one URL per post (one embed per product spec).
       // Trailing punctuation commonly appended in prose (., ), ;, etc.) is stripped.
       // Fire-and-forget: a Redis/queue failure must not fail the post creation itself.
-      const urlMatch = /https?:\/\/[^\s<>"]+/i.exec(input.body);
+      // (?<![='"]) negative lookbehind: skip URLs that appear inside HTML attribute
+      // values (e.g. src="https://..." in pasted iframe code).
+      const urlMatch = /(?<![='"'])https?:\/\/[^\s<>"]+/i.exec(input.body);
       if (urlMatch) {
         const cleanUrl = urlMatch[0].replace(/[).,;:!?\]]+$/, "");
         enqueueOgFetch(id, cleanUrl).catch((err: unknown) => {
