@@ -80,6 +80,8 @@ export default function NotificationsPage() {
     } else {
       markAll.mutate();
     }
+  // Intentionally fire-once: mutation refs and notifs omitted — including them would
+  // re-trigger on every refetch after markRead runs, defeating the "mark once" intent.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notifs.length]);
 

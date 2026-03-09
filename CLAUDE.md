@@ -59,6 +59,12 @@ Destructive (require explicit user confirmation every time, no exceptions):
 
 The database lives in the Docker named volume `projectcampfire_postgres_data`. It persists across restarts. Seeding is only needed on a genuinely fresh/wiped database.
 
+**After adding or removing a dependency**, the anonymous `node_modules` volume inside the container can go stale. `--build` alone does not refresh it. Run:
+```bash
+docker compose down && docker compose up --build
+```
+This recreates the anonymous volumes with the freshly-installed dependencies.
+
 ## Working Style
 
 When making changes:
