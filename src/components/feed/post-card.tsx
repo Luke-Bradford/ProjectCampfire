@@ -176,7 +176,9 @@ export function PostCard({
   const postTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const toggleLike = api.feed.toggleLike.useMutation({ onSuccess: onRefresh });
-  const deletePost = api.feed.delete.useMutation({ onSuccess: onRefresh });
+  const deletePost = api.feed.delete.useMutation({
+    onSuccess: () => { setEditingPost(false); onRefresh(); },
+  });
   const editPostMutation = api.feed.editPost.useMutation({
     onSuccess: () => { setEditingPost(false); onRefresh(); },
   });
@@ -231,19 +233,21 @@ export function PostCard({
         {isOwn ? (
           <div className="flex gap-2">
             {!editingPost && (
-              <button
-                className="text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => setEditingPost(true)}
-              >
-                Edit
-              </button>
+              <>
+                <button
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => setEditingPost(true)}
+                >
+                  Edit
+                </button>
+                <button
+                  className="text-xs text-muted-foreground hover:text-destructive"
+                  onClick={() => deletePost.mutate({ id: post.id })}
+                >
+                  Delete
+                </button>
+              </>
             )}
-            <button
-              className="text-xs text-muted-foreground hover:text-destructive"
-              onClick={() => deletePost.mutate({ id: post.id })}
-            >
-              Delete
-            </button>
           </div>
         ) : (
           <button

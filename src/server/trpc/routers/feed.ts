@@ -112,7 +112,7 @@ export const feedRouter = createTRPCRouter({
   // Edit own post body (CAMP-086)
   // Single UPDATE with ownership + soft-delete check to avoid TOCTOU.
   editPost: protectedProcedure
-    .input(z.object({ id: z.string(), body: z.string().min(1).max(1000) }))
+    .input(z.object({ id: z.string(), body: z.string().trim().min(1).max(1000) }))
     .mutation(async ({ ctx, input }) => {
       const [updated] = await db
         .update(posts)
