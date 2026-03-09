@@ -109,6 +109,19 @@ export const feedRouter = createTRPCRouter({
       return { items, nextCursor };
     }),
 
+  // Edit own post body (CAMP-086)
+  // Single UPDATE with ownership + soft-delete check to avoid TOCTOU.
+  editPost: protectedProcedure
+    .input(z.object({ id: z.string(), body: z.string().trim().min(1).max(1000) }))
+    .mutation(async ({ ctx, input }) => {
+      const [updated] = await db
+        .update(posts)
+        .set({ body: input.body, editedAt: new Date() })
+        .where(and(eq(posts.id, input.id), eq(posts.authorId, ctx.user.id), isNull(posts.deletedAt)))
+        .returning({ id: posts.id });
+      if (!updated) throw new TRPCError({ code: "NOT_FOUND" });
+    }),
+
   // Create a post (CAMP-080)
   create: protectedProcedure
     .input(

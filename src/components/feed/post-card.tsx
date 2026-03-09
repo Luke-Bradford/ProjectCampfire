@@ -171,9 +171,17 @@ export function PostCard({
 }) {
   const [showComments, setShowComments] = useState(false);
   const [commentBody, setCommentBody] = useState("");
+  const [editingPost, setEditingPost] = useState(false);
+  const [editPostBody, setEditPostBody] = useState(post.body ?? "");
+  const postTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const toggleLike = api.feed.toggleLike.useMutation({ onSuccess: onRefresh });
-  const deletePost = api.feed.delete.useMutation({ onSuccess: onRefresh });
+  const deletePost = api.feed.delete.useMutation({
+    onSuccess: () => { setEditingPost(false); onRefresh(); },
+  });
+  const editPostMutation = api.feed.editPost.useMutation({
+    onSuccess: () => { setEditingPost(false); onRefresh(); },
+  });
   const blockUser = api.friends.block.useMutation({ onSuccess: onRefresh });
   const addComment = api.feed.comment.useMutation({
     onSuccess: () => {
@@ -182,9 +190,24 @@ export function PostCard({
     },
   });
 
+  useEffect(() => {
+    if (editingPost) postTextareaRef.current?.focus();
+  }, [editingPost]);
+
+  // Sync editPostBody if post body changes from a refetch while not editing
+  useEffect(() => {
+    if (!editingPost) setEditPostBody(post.body ?? "");
+  }, [post.body, editingPost]);
+
+  function cancelPostEdit() {
+    setEditingPost(false);
+    setEditPostBody(post.body ?? "");
+  }
+
   const likeCount = post.reactions.filter((r) => r.type === "like").length;
   const hasLiked = post.reactions.some((r) => r.userId === currentUserId);
   const commentCount = post.comments.length;
+  const isOwn = post.author.id === currentUserId;
 
   return (
     <article className="space-y-3 rounded-lg border p-4">
@@ -207,13 +230,25 @@ export function PostCard({
             </p>
           </div>
         </div>
-        {post.author.id === currentUserId ? (
-          <button
-            className="text-xs text-muted-foreground hover:text-destructive"
-            onClick={() => deletePost.mutate({ id: post.id })}
-          >
-            Delete
-          </button>
+        {isOwn ? (
+          <div className="flex gap-2">
+            {!editingPost && (
+              <>
+                <button
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => setEditingPost(true)}
+                >
+                  Edit
+                </button>
+                <button
+                  className="text-xs text-muted-foreground hover:text-destructive"
+                  onClick={() => deletePost.mutate({ id: post.id })}
+                >
+                  Delete
+                </button>
+              </>
+            )}
+          </div>
         ) : (
           <button
             className="text-xs text-muted-foreground hover:text-destructive"
@@ -230,7 +265,39 @@ export function PostCard({
       </div>
 
       {/* Body */}
-      {post.body && <p className="text-sm whitespace-pre-wrap">{post.body}</p>}
+      {editingPost ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const trimmed = editPostBody.trim();
+            if (trimmed && trimmed !== post.body) {
+              editPostMutation.mutate({ id: post.id, body: trimmed });
+            } else {
+              cancelPostEdit();
+            }
+          }}
+          className="flex gap-2"
+        >
+          <Textarea
+            ref={postTextareaRef}
+            value={editPostBody}
+            onChange={(e) => setEditPostBody(e.target.value)}
+            className="resize-none text-sm"
+            rows={3}
+            onKeyDown={(e) => { if (e.key === "Escape") cancelPostEdit(); }}
+          />
+          <div className="flex flex-col gap-1">
+            <Button type="submit" size="sm" disabled={!editPostBody.trim() || editPostMutation.isPending}>
+              Save
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={cancelPostEdit}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : (
+        post.body && <p className="text-sm whitespace-pre-wrap">{post.body}</p>
+      )}
 
       {/* Actions */}
       <div className="flex items-center gap-4 border-t pt-2">
