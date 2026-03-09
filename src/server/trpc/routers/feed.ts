@@ -128,9 +128,26 @@ export const feedRouter = createTRPCRouter({
       z.object({
         body: z.string().min(1).max(1000),
         groupId: z.string().optional(),
+        // imageKeys: raw MinIO keys returned by /api/upload/post-image, one per image slot.
+        // Pattern: posts/{userId}/{uploadId}/{cuid}-raw
+        // userId: mixed-case alphanumeric (better-auth format). uploadId/cuid: lowercase alphanumeric (cuid2).
+        // Shape validated by regex; ownership verified by prefix check in the mutation.
+        imageKeys: z
+          .array(z.string().regex(/^posts\/[A-Za-z0-9]+\/[A-Za-z0-9]{10,}\/[a-z0-9]+-raw$/))
+          .max(4)
+          .optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
+      // Verify all imageKeys belong to the calling user (prefix = posts/{userId}/).
+      // Prevents User A from attaching User B's uploaded images to their own post.
+      if (input.imageKeys?.length) {
+        const prefix = `posts/${ctx.user.id}/`;
+        const alien = input.imageKeys.find((k) => !k.startsWith(prefix));
+        if (alien) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Image does not belong to you." });
+        }
+      }
       await assertRateLimit(`rl:feed:create:${ctx.user.id}`, 10, 60);
       const id = createId();
       await db.insert(posts).values({
@@ -140,6 +157,14 @@ export const feedRouter = createTRPCRouter({
         groupId: input.groupId ?? null,
         imageUrls: [],
       });
+      // Enqueue processing for any uploaded images. Each key was already uploaded to MinIO
+      // by the /api/upload/post-image route before the post was created.
+      if (input.imageKeys?.length) {
+        const { enqueueProcessPostImage } = await import("@/server/jobs/image-jobs");
+        await Promise.all(
+          input.imageKeys.map((key, index) => enqueueProcessPostImage(id, key, index))
+        );
+      }
       return { id };
     }),
 
