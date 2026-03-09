@@ -69,18 +69,26 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
       const outKey = processedKey(data.key);
       await uploadProcessed(outKey, processed);
 
-      // Single atomic UPDATE using Postgres array index assignment.
-      // image_urls is 1-based in Postgres, so data.index (0-based) becomes data.index+1.
-      // Verified on Postgres 16: assigning to any index on a NULL or empty array succeeds
-      // and extends the array with NULLs as needed (e.g. NULL → [2:2]={x}, {}→{NULL,x}).
+      // Atomic UPDATE using generate_series + LEFT JOIN unnest.
+      // Verified on Postgres 16 against all three starting states (NULL, {}, populated array):
+      // always produces a 1-based array regardless of which index is being written.
+      // Direct array index assignment (SET arr[n] = val) produces a subscript-range array
+      // ([n:n]={val}) when n > 1 on a NULL or empty column — breaking downstream consumers.
+      // The generate_series approach fills all 4 slots in one statement and is race-safe:
+      // concurrent jobs each rebuild the full array from the latest DB state within the UPDATE.
       // Both the index and the URL are parameterized — no sql.raw used.
-      // This avoids the read-modify-write race when multiple images for the same post
-      // are processed concurrently.
-      // posts._.name references the Drizzle schema so a table rename produces a type error.
       const pgIndex = data.index + 1;
-      await db.execute(
-        sql`UPDATE ${posts} SET image_urls[${pgIndex}] = ${storageUrl(outKey)} WHERE id = ${data.postId}`,
-      );
+      const url = storageUrl(outKey);
+      await db.execute(sql`
+        UPDATE ${posts}
+        SET image_urls = (
+          SELECT array_agg(CASE WHEN g.i = ${pgIndex} THEN ${url} ELSE a.v END ORDER BY g.i)
+          FROM generate_series(1, 4) AS g(i)
+          LEFT JOIN unnest(COALESCE(image_urls, ARRAY[]::text[])) WITH ORDINALITY AS a(v, i)
+            ON a.i = g.i
+        )
+        WHERE id = ${data.postId}
+      `);
 
       console.log(`[image] post image processed for post ${data.postId}[${data.index}] → ${outKey}`);
       break;
