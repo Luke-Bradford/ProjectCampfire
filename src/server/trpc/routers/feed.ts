@@ -6,6 +6,7 @@ import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
 import { posts, comments, reactions, friendships, groupMemberships } from "@/server/db/schema";
 import { assertRateLimit } from "@/server/ratelimit";
+import { enqueueOgFetch } from "@/server/jobs/og-fetch-jobs";
 
 export const feedRouter = createTRPCRouter({
   // Unified feed: friends + groups, block-filtered, cursor-paginated (CAMP-096)
@@ -171,8 +172,7 @@ export const feedRouter = createTRPCRouter({
       // Trailing punctuation commonly appended in prose (., ), ;, etc.) is stripped.
       const urlMatch = /https?:\/\/[^\s<>"]+/i.exec(input.body);
       if (urlMatch) {
-        const cleanUrl = urlMatch[0].replace(/[).,;:!?]+$/, "");
-        const { enqueueOgFetch } = await import("@/server/jobs/og-fetch-jobs");
+        const cleanUrl = urlMatch[0].replace(/[).,;:!?\]]+$/, "");
         await enqueueOgFetch(id, cleanUrl);
       }
       return { id };

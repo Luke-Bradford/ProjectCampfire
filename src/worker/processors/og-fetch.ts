@@ -15,11 +15,11 @@ function extractYouTubeVideoId(url: string): string | null {
     const host = parsed.hostname.replace(/^www\./, "");
     if (host === "youtube.com" || host === "m.youtube.com") {
       const v = parsed.searchParams.get("v");
-      if (v && /^[\w-]{11}$/.test(v)) return v;
+      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v;
     }
     if (host === "youtu.be") {
       const id = parsed.pathname.slice(1).split("?")[0];
-      if (id && /^[\w-]{11}$/.test(id)) return id;
+      if (id && /^[A-Za-z0-9_-]{11}$/.test(id)) return id;
     }
   } catch {
     // not a valid URL
@@ -76,6 +76,13 @@ function isSafeHttpUrl(candidate: string): boolean {
 export async function processOgFetchJob(job: Job<OgFetchJobPayload>) {
   const { postId, url } = job.data;
 
+  // Defense-in-depth: the URL regex in feed.ts already anchors to https?://,
+  // but validate again here since the job payload is external to the worker.
+  if (!isSafeHttpUrl(url)) {
+    console.warn(`[og-fetch] unsafe URL scheme for post ${postId}: ${url} — skipping`);
+    return;
+  }
+
   const videoId = extractYouTubeVideoId(url);
 
   // Attempt to fetch OG tags. Errors are logged but do not throw — a missing
@@ -110,8 +117,11 @@ export async function processOgFetchJob(job: Job<OgFetchJobPayload>) {
           res.body?.cancel().catch(() => undefined);
         } else {
           // Stream the response incrementally, stopping at </head> or MAX_BODY_BYTES.
-          // Use TextDecoder in streaming mode so we never re-decode accumulated chunks —
-          // each call to decode() only processes the new chunk, avoiding O(n²) behaviour.
+          // TextDecoder in streaming mode: each chunk decoded once, never re-decoded.
+          // </head> search is bounded: we scan only the tail of the accumulated string
+          // (last chunk + 6 bytes for cross-chunk boundary) so the check is O(chunk)
+          // rather than O(accumulated), avoiding O(n²) behaviour over many small chunks.
+          const ENDHEAD = "</head>";
           const reader = res.body?.getReader();
           if (reader) {
             const decoder = new TextDecoder("utf-8", { fatal: false });
@@ -123,9 +133,13 @@ export async function processOgFetchJob(job: Job<OgFetchJobPayload>) {
               const result = await reader.read();
               if (result.done) break;
               // stream:true — decoder holds partial multi-byte sequences between calls
-              accumulated += decoder.decode(result.value, { stream: true });
+              const chunk = decoder.decode(result.value, { stream: true });
+              accumulated += chunk;
               bytesRead += result.value.byteLength;
-              if (accumulated.toLowerCase().includes("</head>")) {
+              // Search only the tail: new chunk text + up to (ENDHEAD.length - 1) chars
+              // from the previous accumulation, in case </head> straddles a chunk boundary.
+              const tail = accumulated.slice(-(chunk.length + ENDHEAD.length - 1));
+              if (tail.toLowerCase().includes(ENDHEAD)) {
                 foundHead = true;
               }
             }
