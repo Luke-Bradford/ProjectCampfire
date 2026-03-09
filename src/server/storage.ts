@@ -70,6 +70,11 @@ export async function uploadImage(
  * TODO(#137): protocol is derived from NODE_ENV; use MINIO_USE_SSL for staging setups.
  */
 export function storageUrl(key: string): string {
+  // MINIO_PUBLIC_URL is the browser-facing base (e.g. http://localhost:9000/campfire).
+  // Use it when MINIO_ENDPOINT is a Docker-internal hostname not reachable by browsers.
+  if (env.MINIO_PUBLIC_URL) {
+    return `${env.MINIO_PUBLIC_URL}/${key}`;
+  }
   const proto = env.NODE_ENV === "production" ? "https" : "http";
   return `${proto}://${env.MINIO_ENDPOINT}:${env.MINIO_PORT}/${env.MINIO_BUCKET}/${key}`;
 }

@@ -11,6 +11,9 @@ export const env = createEnv({
     MINIO_ACCESS_KEY: z.string(),
     MINIO_SECRET_KEY: z.string(),
     MINIO_BUCKET: z.string().default("campfire"),
+    // Public base URL for browser-facing object URLs (e.g. http://localhost:9000/campfire).
+    // Required when MINIO_ENDPOINT is a Docker-internal hostname not reachable by browsers.
+    MINIO_PUBLIC_URL: z.string().url().optional(),
     SMTP_HOST: z.string(),
     SMTP_PORT: z.coerce.number().default(587),
     SMTP_USER: z.string().optional(),
@@ -32,6 +35,7 @@ export const env = createEnv({
     MINIO_ACCESS_KEY: process.env.MINIO_ACCESS_KEY,
     MINIO_SECRET_KEY: process.env.MINIO_SECRET_KEY,
     MINIO_BUCKET: process.env.MINIO_BUCKET,
+    MINIO_PUBLIC_URL: process.env.MINIO_PUBLIC_URL,
     SMTP_HOST: process.env.SMTP_HOST,
     SMTP_PORT: process.env.SMTP_PORT,
     SMTP_USER: process.env.SMTP_USER,
