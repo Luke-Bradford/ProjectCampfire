@@ -19,6 +19,7 @@ export const minio = new Client({
   port: env.MINIO_PORT,
   accessKey: env.MINIO_ACCESS_KEY,
   secretKey: env.MINIO_SECRET_KEY,
+  // TODO(#137): replace with MINIO_USE_SSL env var for staging / reverse-proxy setups
   useSSL: env.NODE_ENV === "production",
 });
 
@@ -62,7 +63,12 @@ export async function uploadImage(
   return key;
 }
 
-/** Builds a public URL for an object stored in MinIO. */
+/**
+ * Builds a public URL for an object stored in MinIO.
+ * TODO: store only the key in the database and build the URL at read time,
+ * to avoid a data migration if the endpoint or bucket ever changes.
+ * TODO(#137): protocol is derived from NODE_ENV; use MINIO_USE_SSL for staging setups.
+ */
 export function storageUrl(key: string): string {
   const proto = env.NODE_ENV === "production" ? "https" : "http";
   return `${proto}://${env.MINIO_ENDPOINT}:${env.MINIO_PORT}/${env.MINIO_BUCKET}/${key}`;
