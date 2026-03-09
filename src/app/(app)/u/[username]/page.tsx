@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { trpc } from "@/trpc/server";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AddFriendButton } from "./add-friend-button";
+import { ProfileGroups } from "./profile-groups";
 
 function initials(name: string) {
   return name
@@ -53,6 +54,7 @@ export default async function UserProfilePage({
           {profile.bio && (
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">{profile.bio}</p>
           )}
+          <ProfileGroups userId={profile.id} />
           <AddFriendButton targetId={profile.id} />
         </>
       )}

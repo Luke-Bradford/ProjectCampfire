@@ -38,6 +38,83 @@ function InviteSection({ groupId }: { groupId: string }) {
   );
 }
 
+function GroupSettings({ groupId }: { groupId: string }) {
+  const { data: group, refetch } = api.groups.get.useQuery({ id: groupId });
+  const [name, setName] = useState<string | null>(null);
+  const [description, setDescription] = useState<string | null>(null);
+  const [discordUrl, setDiscordUrl] = useState<string | null>(null);
+
+  const update = api.groups.update.useMutation({
+    onSuccess: () => {
+      setName(null);
+      setDescription(null);
+      setDiscordUrl(null);
+      void refetch();
+    },
+  });
+
+  if (!group) return null;
+
+  const currentName = name ?? group.name;
+  const currentDescription = description ?? (group.description ?? "");
+  const currentDiscordUrl = discordUrl ?? (group.discordInviteUrl ?? "");
+
+  const isDirty =
+    currentName !== group.name ||
+    currentDescription !== (group.description ?? "") ||
+    currentDiscordUrl !== (group.discordInviteUrl ?? "");
+
+  return (
+    <section className="space-y-4 rounded-lg border p-4">
+      <h2 className="font-semibold">Group settings</h2>
+      <div className="space-y-3">
+        <div className="space-y-1">
+          <label className="text-sm font-medium">Name</label>
+          <Input
+            value={currentName}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={100}
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-sm font-medium">Description</label>
+          <Input
+            value={currentDescription}
+            onChange={(e) => setDescription(e.target.value)}
+            maxLength={500}
+            placeholder="Optional"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-sm font-medium">Discord invite URL</label>
+          <Input
+            value={currentDiscordUrl}
+            onChange={(e) => setDiscordUrl(e.target.value)}
+            placeholder="https://discord.gg/..."
+            type="url"
+          />
+        </div>
+      </div>
+      {isDirty && (
+        <Button
+          size="sm"
+          disabled={update.isPending || !currentName.trim()}
+          onClick={() =>
+            update.mutate({
+              id: groupId,
+              name: currentName.trim(),
+              description: currentDescription,
+              discordInviteUrl: currentDiscordUrl,
+            })
+          }
+        >
+          {update.isPending ? "Saving…" : "Save changes"}
+        </Button>
+      )}
+    </section>
+  );
+}
+
 export default function GroupPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -51,6 +128,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   if (isLoading) return <p className="text-muted-foreground">Loading…</p>;
   if (!group) return <p className="text-muted-foreground">Group not found.</p>;
 
+  const isAdmin = group.myRole === "owner" || group.myRole === "admin";
+
   return (
     <div className="space-y-8">
       <div className="flex items-start justify-between">
@@ -58,6 +137,16 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           <h1 className="text-2xl font-bold">{group.name}</h1>
           {group.description && (
             <p className="mt-1 text-muted-foreground">{group.description}</p>
+          )}
+          {group.discordInviteUrl && (
+            <a
+              href={group.discordInviteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-flex items-center gap-1 text-sm text-indigo-500 hover:underline"
+            >
+              Join Discord
+            </a>
           )}
         </div>
         {group.myRole !== "owner" && (
@@ -74,6 +163,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       </div>
 
       <InviteSection groupId={id} />
+
+      {isAdmin && <GroupSettings groupId={id} />}
 
       <section className="space-y-3">
         <h2 className="font-semibold">
