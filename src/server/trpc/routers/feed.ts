@@ -14,39 +14,40 @@ export const feedRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const me = ctx.user.id;
 
-      // Friends
-      const friendRows = await db
-        .select()
-        .from(friendships)
-        .where(
-          and(
-            or(eq(friendships.requesterId, me), eq(friendships.addresseeId, me)),
-            eq(friendships.status, "accepted")
-          )
-        );
+      const [friendRows, blockedRows, memberRows] = await Promise.all([
+        // Friends
+        db
+          .select({ requesterId: friendships.requesterId, addresseeId: friendships.addresseeId })
+          .from(friendships)
+          .where(
+            and(
+              or(eq(friendships.requesterId, me), eq(friendships.addresseeId, me)),
+              eq(friendships.status, "accepted")
+            )
+          ),
+        // Blocked users (both directions)
+        db
+          .select({ requesterId: friendships.requesterId, addresseeId: friendships.addresseeId })
+          .from(friendships)
+          .where(
+            and(
+              or(eq(friendships.requesterId, me), eq(friendships.addresseeId, me)),
+              eq(friendships.status, "blocked")
+            )
+          ),
+        // Groups I'm in
+        db
+          .select({ groupId: groupMemberships.groupId })
+          .from(groupMemberships)
+          .where(eq(groupMemberships.userId, me)),
+      ]);
+
       const friendIds = friendRows.map((r) =>
         r.requesterId === me ? r.addresseeId : r.requesterId
       );
-
-      // Blocked users (both directions)
-      const blockedRows = await db
-        .select()
-        .from(friendships)
-        .where(
-          and(
-            or(eq(friendships.requesterId, me), eq(friendships.addresseeId, me)),
-            eq(friendships.status, "blocked")
-          )
-        );
       const blockedIds = blockedRows.map((r) =>
         r.requesterId === me ? r.addresseeId : r.requesterId
       );
-
-      // Groups I'm in
-      const memberRows = await db
-        .select({ groupId: groupMemberships.groupId })
-        .from(groupMemberships)
-        .where(eq(groupMemberships.userId, me));
       const myGroupIds = memberRows.map((r) => r.groupId);
 
       // Build author filter: my own posts + friends + group posts, minus blocked

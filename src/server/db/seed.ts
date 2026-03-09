@@ -133,10 +133,11 @@ async function main() {
     log(`create user ${u.email}`);
   }
 
-  // Friendships: alice ↔ bob (accepted), alice ↔ carol (accepted)
+  // Friendships: all seed users are friends with each other
   const friendPairs: [string, string][] = [
     ["seed-user-alice", "seed-user-bob"],
     ["seed-user-alice", "seed-user-carol"],
+    ["seed-user-bob", "seed-user-carol"],
   ];
 
   for (const [reqId, addId] of friendPairs) {
