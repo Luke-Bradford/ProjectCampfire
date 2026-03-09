@@ -2,7 +2,7 @@ import type { Job } from "bullmq";
 import sharp from "sharp";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/server/db";
-import { user } from "@/server/db/schema";
+import { user, posts } from "@/server/db/schema";
 import { minio, storageUrl } from "@/server/storage";
 import { env } from "@/env";
 import type { ImageJobPayload } from "@/server/jobs/image-jobs";
@@ -71,16 +71,15 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
 
       // Single atomic UPDATE using Postgres array index assignment.
       // image_urls is 1-based in Postgres, so data.index (0-based) becomes data.index+1.
-      // Postgres auto-extends a NULL or too-short array with NULLs to reach the target
-      // index, so no read or pre-initialization is required.
+      // Verified on Postgres 16: assigning to any index on a NULL or empty array succeeds
+      // and extends the array with NULLs as needed (e.g. NULL → [2:2]={x}, {}→{NULL,x}).
       // Both the index and the URL are parameterized — no sql.raw used.
       // This avoids the read-modify-write race when multiple images for the same post
       // are processed concurrently.
+      // posts._.name references the Drizzle schema so a table rename produces a type error.
       const pgIndex = data.index + 1;
       await db.execute(
-        sql`UPDATE posts
-            SET image_urls[${pgIndex}] = ${storageUrl(outKey)}
-            WHERE id = ${data.postId}`,
+        sql`UPDATE ${posts} SET image_urls[${pgIndex}] = ${storageUrl(outKey)} WHERE id = ${data.postId}`,
       );
 
       console.log(`[image] post image processed for post ${data.postId}[${data.index}] → ${outKey}`);
