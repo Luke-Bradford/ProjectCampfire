@@ -30,6 +30,18 @@ Must be self-contained for a reviewer with no codebase context:
 - **Known tradeoffs**: document deliberate limitations before the reviewer finds them.
   Use a "Known tradeoffs" section. Verified behaviour claims must state how they were verified.
 
+## Bug tracking convention
+
+When a bug is found (in testing, in prod, or reported by the user):
+
+1. **Create a GitHub issue** with label `bug` (+ relevant epic label).
+   - Title: `bug: <short description>`
+   - Body: what the symptom was, root cause, how it was fixed, commit SHA.
+2. **Reference the original feature** — if the bug was introduced by a known PR/commit, link it.
+3. **Close the issue** once fixed, with the fix commit in the close comment or body.
+
+This applies even when the fix is trivial and already committed. The record exists for accountability, regression tracking, and pattern recognition across bugs.
+
 ## After pushing a PR — mandatory PR watch loop
 
 Immediately after every `git push` that creates or updates a PR:
