@@ -46,7 +46,14 @@ do {
 if ($health -ne 'healthy') { Write-Fail "Postgres did not become healthy in time" }
 Write-OK "Postgres healthy"
 
-# 4. Start Next.js dev server as a detached process with its own window
+# 4. Run database migrations
+Write-Step "Running database migrations..."
+Set-Location $root
+pnpm db:migrate 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) { Write-Fail "db:migrate failed" }
+Write-OK "Migrations applied"
+
+# 5. Start Next.js dev server as a detached process with its own window
 Write-Step "Starting Next.js dev server..."
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$root'; pnpm dev" -WindowStyle Minimized
 Write-OK "Next.js started"
