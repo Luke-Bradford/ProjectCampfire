@@ -135,7 +135,9 @@ function StepProfile({
         return;
       }
       // result is a data URL: "data:<mime>;base64,<data>"
-      const base64 = result.split(",")[1] ?? "";
+      // Use indexOf to handle any commas inside the base64 payload
+      const commaIdx = result.indexOf(",");
+      const base64 = commaIdx !== -1 ? result.slice(commaIdx + 1) : "";
       if (!base64) {
         setFileError("Failed to read the file. Please try again.");
         return;
