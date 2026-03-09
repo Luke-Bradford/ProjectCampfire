@@ -2,22 +2,9 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Kill port 3000",
-      "type": "shell",
-      "command": "powershell -Command \"$p = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess; if ($p) { Stop-Process -Id $p -Force -ErrorAction SilentlyContinue; Start-Sleep 1 }; Write-Host 'Port 3000 clear'\"",
-      "isBackground": false,
-      "presentation": {
-        "group": "devservers",
-        "reveal": "silent",
-        "panel": "dedicated"
-      },
-      "problemMatcher": []
-    },
-    {
       "label": "Next.js dev server",
       "type": "shell",
-      "command": "pnpm dev",
-      "dependsOn": ["Kill port 3000"],
+      "command": "powershell -File scripts/kill-port.ps1 && pnpm dev",
       "isBackground": true,
       "problemMatcher": {
         "pattern": {
