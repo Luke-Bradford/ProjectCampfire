@@ -130,9 +130,10 @@ export const feedRouter = createTRPCRouter({
         groupId: z.string().optional(),
         // imageKeys: raw MinIO keys returned by /api/upload/post-image, one per image slot.
         // Pattern: posts/{userId}/{uploadId}/{cuid}-raw
+        // userId: mixed-case alphanumeric (better-auth format). uploadId/cuid: lowercase alphanumeric (cuid2).
         // Shape validated by regex; ownership verified by prefix check in the mutation.
         imageKeys: z
-          .array(z.string().regex(/^posts\/[a-z0-9]+\/[a-z0-9]{10,}\/[a-z0-9]+-raw$/))
+          .array(z.string().regex(/^posts\/[A-Za-z0-9]+\/[A-Za-z0-9]{10,}\/[a-z0-9]+-raw$/))
           .max(4)
           .optional(),
       })

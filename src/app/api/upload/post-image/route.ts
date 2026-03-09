@@ -6,7 +6,8 @@ import { assertRateLimit } from "@/server/ratelimit";
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB — must match validateImage in storage.ts
 // uploadId is a client-generated cuid used only to namespace the MinIO path.
-const UPLOAD_ID_RE = /^[a-z0-9]{10,}$/;
+// better-auth user IDs use mixed-case alphanumeric — pattern must allow uppercase.
+const UPLOAD_ID_RE = /^[A-Za-z0-9]{10,}$/;
 
 export async function POST(req: NextRequest) {
   // Auth
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
 
   // Re-parse the accumulated bytes as FormData using the original Content-Type (multipart boundary).
   const contentType = req.headers.get("content-type") ?? "";
-  const bodyBuffer = Buffer.concat(chunks.map((c) => Buffer.from(c)));
+  const bodyBuffer = Buffer.concat(chunks);
   const formData = await new Request("http://localhost", {
     method: "POST",
     headers: { "content-type": contentType },
