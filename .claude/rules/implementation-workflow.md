@@ -39,3 +39,8 @@ to read other files. Specifically:
   in the description rather than in a comment thread after the fact.
 - **Keep the description current.** If a round of review causes significant design changes,
   update the PR description to reflect the final state — not just the original intent.
+- **Document conscious tradeoffs.** If you are knowingly accepting a limitation (e.g. an
+  unbounded query that's fine at MVP scale, a fire-and-forget with a recovery mechanism,
+  a pattern that looks risky but is safe given other constraints), name it explicitly in
+  the PR description under a "Known tradeoffs" section. This prevents the review agent
+  from escalating warnings to blockers across multiple rounds.

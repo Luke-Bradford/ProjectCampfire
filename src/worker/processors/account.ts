@@ -65,9 +65,12 @@ export async function processAccountJob(job: Job<AccountJobPayload>) {
     case "sweep_unscrubbed": {
       // Find accounts that are soft-deleted but whose scrub job never ran
       // (e.g. Redis was down when deleteAccount fired). Re-enqueue each one.
+      // Capped at 100 per sweep to avoid overwhelming Redis on burst recovery;
+      // subsequent hourly runs will drain any larger backlog.
       const unscrubbed = await db.query.user.findMany({
         where: and(isNotNull(user.deletedAt), eq(user.piiScrubbed, false)),
         columns: { id: true },
+        limit: 100,
       });
 
       if (unscrubbed.length === 0) break;
