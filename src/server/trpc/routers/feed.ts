@@ -147,14 +147,26 @@ export const feedRouter = createTRPCRouter({
       await db.update(comments).set({ deletedAt: new Date() }).where(eq(comments.id, input.id));
     }),
 
-  // Toggle like on a post (CAMP-089)
+  // Toggle like on a post or comment (CAMP-089)
   toggleLike: protectedProcedure
-    .input(z.object({ postId: z.string() }))
+    .input(
+      z.union([
+        z.object({ postId: z.string(), commentId: z.undefined().optional() }),
+        z.object({ commentId: z.string(), postId: z.undefined().optional() }),
+      ]).refine(
+        (v) => Boolean(v.postId) !== Boolean(v.commentId),
+        "Exactly one of postId or commentId must be provided"
+      )
+    )
     .mutation(async ({ ctx, input }) => {
+      const targetCol = input.postId
+        ? eq(reactions.postId, input.postId)
+        : eq(reactions.commentId, input.commentId!);
       const existing = await db.query.reactions.findFirst({
         where: and(
           eq(reactions.userId, ctx.user.id),
-          eq(reactions.postId, input.postId)
+          eq(reactions.type, "like"),
+          targetCol
         ),
         columns: { id: true },
       });
@@ -165,7 +177,8 @@ export const feedRouter = createTRPCRouter({
       await db.insert(reactions).values({
         id: createId(),
         userId: ctx.user.id,
-        postId: input.postId,
+        postId: input.postId ?? null,
+        commentId: input.commentId ?? null,
         type: "like",
       });
       return { liked: true };
