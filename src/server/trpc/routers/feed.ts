@@ -16,13 +16,17 @@ export const feedRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const me = ctx.user.id;
 
-      // Parse compound cursor
+      // Parse compound cursor "<isoTimestamp>_<postId>"
       let cursorDate: Date | undefined;
       let cursorId: string | undefined;
       if (input.cursor) {
         const sep = input.cursor.lastIndexOf("_");
+        if (sep === -1) throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid cursor" });
         cursorDate = new Date(input.cursor.slice(0, sep));
         cursorId = input.cursor.slice(sep + 1);
+        if (isNaN(cursorDate.getTime()) || !cursorId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid cursor" });
+        }
       }
 
       const [friendRows, blockedRows, memberRows] = await Promise.all([
@@ -153,18 +157,16 @@ export const feedRouter = createTRPCRouter({
     }),
 
   // Edit own comment (CAMP-088)
+  // Single UPDATE with ownership + soft-delete check to avoid TOCTOU between check and write.
   editComment: protectedProcedure
     .input(z.object({ id: z.string(), body: z.string().min(1).max(1000) }))
     .mutation(async ({ ctx, input }) => {
-      const comment = await db.query.comments.findFirst({
-        where: and(eq(comments.id, input.id), eq(comments.authorId, ctx.user.id), isNull(comments.deletedAt)),
-        columns: { id: true },
-      });
-      if (!comment) throw new TRPCError({ code: "NOT_FOUND" });
-      await db
+      const [updated] = await db
         .update(comments)
         .set({ body: input.body, editedAt: new Date() })
-        .where(eq(comments.id, input.id));
+        .where(and(eq(comments.id, input.id), eq(comments.authorId, ctx.user.id), isNull(comments.deletedAt)))
+        .returning({ id: comments.id });
+      if (!updated) throw new TRPCError({ code: "NOT_FOUND" });
     }),
 
   // Delete own comment

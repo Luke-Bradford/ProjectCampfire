@@ -59,6 +59,16 @@ function CommentRow({
     if (editing) textareaRef.current?.focus();
   }, [editing]);
 
+  // Sync editBody if comment body changes from a parent refetch while not editing
+  useEffect(() => {
+    if (!editing) setEditBody(comment.body);
+  }, [comment.body, editing]);
+
+  function cancelEdit() {
+    setEditing(false);
+    setEditBody(comment.body);
+  }
+
   const likeCount = comment.reactions.filter((r) => r.type === "like").length;
   const hasLiked = comment.reactions.some((r) => r.type === "like" && r.userId === currentUserId);
   const isOwn = comment.author.id === currentUserId;
@@ -79,7 +89,7 @@ function CommentRow({
               if (trimmed && trimmed !== comment.body) {
                 editComment.mutate({ id: comment.id, body: trimmed });
               } else {
-                setEditing(false);
+                cancelEdit();
               }
             }}
             className="flex gap-2"
@@ -91,7 +101,7 @@ function CommentRow({
               onChange={(e) => setEditBody(e.target.value)}
               className="min-h-0 resize-none text-sm"
               onKeyDown={(e) => {
-                if (e.key === "Escape") { setEditing(false); setEditBody(comment.body); }
+                if (e.key === "Escape") cancelEdit();
               }}
             />
             <div className="flex flex-col gap-1">
@@ -102,7 +112,7 @@ function CommentRow({
                 type="button"
                 size="sm"
                 variant="ghost"
-                onClick={() => { setEditing(false); setEditBody(comment.body); }}
+                onClick={cancelEdit}
               >
                 Cancel
               </Button>
