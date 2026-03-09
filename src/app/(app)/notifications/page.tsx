@@ -105,7 +105,8 @@ export default function NotificationsPage() {
       <ul className="space-y-1">
         {notifs.map((n) => {
           const data = n.data as NotifData;
-          const isPendingRequest = n.type === "friend_request_received";
+          // Show Accept/Decline only while unread — once acted on, onDone marks it read
+          const isPendingRequest = n.type === "friend_request_received" && !n.readAt;
           return (
             <li
               key={n.id}
