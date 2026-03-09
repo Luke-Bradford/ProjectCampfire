@@ -165,6 +165,14 @@ export const feedRouter = createTRPCRouter({
           input.imageKeys.map((key, index) => enqueueProcessPostImage(id, key, index))
         );
       }
+      // Detect the first URL in the post body and enqueue OG tag fetch.
+      // Post is visible immediately; embedMetadata populates asynchronously.
+      // Only one URL per post (one embed per product spec).
+      const urlMatch = /https?:\/\/[^\s<>"]+/i.exec(input.body);
+      if (urlMatch) {
+        const { enqueueOgFetch } = await import("@/server/jobs/og-fetch-jobs");
+        await enqueueOgFetch(id, urlMatch[0]);
+      }
       return { id };
     }),
 
