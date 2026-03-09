@@ -2,13 +2,12 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
-import { uploadImage, ImageValidationError } from "@/server/storage";
+import { uploadImage, ImageValidationError, ALLOWED_IMAGE_MIME_TYPES } from "@/server/storage";
 import { enqueueProcessAvatar, enqueueProcessPostImage } from "@/server/jobs/image-jobs";
 
-const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
-type AllowedMimeType = (typeof ALLOWED_MIME_TYPES)[number];
-
 const MAX_POST_IMAGES = 4;
+// Base64 overhead is ~4/3 — 5 MB raw → ~6.67 MB base64. Allow a small margin.
+const MAX_BASE64_BYTES = 7_200_000;
 
 function toBuffer(base64: string): Buffer {
   return Buffer.from(base64, "base64");
@@ -17,8 +16,8 @@ function toBuffer(base64: string): Buffer {
 function imageInput() {
   return z.object({
     /** Base64-encoded image data (no data URI prefix). */
-    data: z.string().min(1),
-    mimeType: z.enum(ALLOWED_MIME_TYPES),
+    data: z.string().min(1).max(MAX_BASE64_BYTES),
+    mimeType: z.enum(ALLOWED_IMAGE_MIME_TYPES),
   });
 }
 
@@ -68,7 +67,7 @@ export const uploadRouter = createTRPCRouter({
       const key = `posts/${input.postId}/${input.index}-${createId()}-raw`;
 
       try {
-        await uploadImage(key, buffer, input.image.mimeType as AllowedMimeType);
+        await uploadImage(key, buffer, input.image.mimeType);
       } catch (err) {
         if (err instanceof ImageValidationError) {
           throw new TRPCError({ code: "BAD_REQUEST", message: err.message });
