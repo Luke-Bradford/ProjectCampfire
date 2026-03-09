@@ -1,4 +1,6 @@
 $port = 3000
+
+# Kill any process holding port 3000
 $connections = netstat -ano | Select-String ":$port\s"
 $pids = $connections | ForEach-Object {
     ($_ -split '\s+')[-1]
@@ -10,7 +12,15 @@ if ($pids) {
         Stop-Process -Id $p -Force -ErrorAction SilentlyContinue
     }
     Start-Sleep -Seconds 1
-} else {
-    Write-Host "Port $port is clear"
 }
+
+# Also kill any orphaned node processes from previous sessions
+# (Next.js spawns multiple node workers that survive terminal closure)
+$orphans = Get-Process node -ErrorAction SilentlyContinue
+if ($orphans) {
+    Write-Host "Killing $($orphans.Count) orphaned node process(es)"
+    $orphans | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+}
+
 Write-Host "Port $port clear"
