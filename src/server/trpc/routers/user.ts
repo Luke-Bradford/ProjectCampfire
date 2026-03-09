@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -146,16 +146,13 @@ export const userRouter = createTRPCRouter({
           throw new TRPCError({ code: "BAD_REQUEST", message: "Account already deleted." });
         }
 
-        // Revoke all OTHER sessions immediately (forces logout on other devices).
-        // The current session is excluded so it remains valid for the duration of
-        // this HTTP response — deleting it mid-request risks the response being
-        // dropped if any middleware touches the session row on the way out.
-        // Post-response, the current session is harmless: protectedProcedure now
-        // checks deletedAt on every request, so any subsequent call with this
-        // token gets a 401 immediately. The scrub job cleans up the row later.
-        await tx.delete(session).where(
-          and(eq(session.userId, userId), ne(session.id, ctx.session.id)),
-        );
+        // Revoke all sessions immediately — this device and all others.
+        // Any in-flight request using the current token will complete (the
+        // session row is read at request start, before this transaction commits).
+        // The client is redirected to /login on success so the deleted session
+        // token is never reused. New session creation is blocked by the
+        // better-auth databaseHook in src/server/auth/index.ts.
+        await tx.delete(session).where(eq(session.userId, userId));
 
         // Revoke OAuth credentials so they can't be used to re-authenticate
         await tx.delete(account).where(eq(account.userId, userId));

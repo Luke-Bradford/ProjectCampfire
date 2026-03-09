@@ -31,18 +31,56 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get PR comments
+        run: |
+          gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            --jq '[.[] | "### Comment by " + .user.login + " at " + .created_at + "\n" + .body] | join("\n\n---\n\n")' \
+            > pr_comments.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get linked issue
+        run: |
+          # Extract issue number from PR body (looks for CAMP-NNN or #NNN patterns)
+          ISSUE_NUM=$(gh pr view ${{ github.event.pull_request.number }} --json body -q '.body' \
+            | grep -oP '(?<=Closes #|closes #|Fixes #|fixes #|Resolves #|resolves #)\d+' | head -1)
+          if [ -n "$ISSUE_NUM" ]; then
+            gh issue view "$ISSUE_NUM" --repo ${{ github.repository }} \
+              --json title,body -q '"# Issue #" + ($ISSUE_NUM|tostring) + ": " + .title + "\n\n" + .body' \
+              --argjson ISSUE_NUM "$ISSUE_NUM" > linked_issue.txt 2>/dev/null || echo "(issue not found)" > linked_issue.txt
+          else
+            echo "(no linked issue found in PR body)" > linked_issue.txt
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build request body
         run: |
-          python3 - <<'PYEOF'
-          import json
+          cat > build_prompt.py << 'PYEOF'
+          import json, os
 
           diff = open('pr.diff').read()
           desc = open('pr_desc.txt').read()
+          comments_raw = open('pr_comments.txt').read().strip()
+          issue = open('linked_issue.txt').read().strip()
+
+          comments_section = (
+              "## PR Comment History (previous review rounds and author responses)\n\n"
+              + (comments_raw if comments_raw else "(no comments yet)")
+          )
+
+          issue_section = "## Linked Issue / Ticket\n\n" + issue
 
           prompt = (
               "You are a strict senior code reviewer. Your job is to find real problems — not to be encouraging.\n\n"
-              "PR Description:\n" + desc + "\n\n"
-              "**What to check:**\n"
+              "This may not be a first review — read the PR comment history carefully. "
+              "Do NOT raise issues that have already been discussed and resolved in the comment thread. "
+              "Do NOT re-raise concerns that the author has already explained and justified. "
+              "Focus only on issues that are genuinely unaddressed in the current diff.\n\n"
+              + issue_section + "\n\n"
+              + "## PR Description\n\n" + desc + "\n\n"
+              + comments_section + "\n\n"
+              "## What to check\n"
               "1. **Correctness** — Does the logic do what the description claims? Off-by-one errors, wrong conditions, missing edge cases?\n"
               "2. **Security** — Missing auth checks, exposed data, unvalidated input reaching the DB?\n"
               "3. **tRPC / data layer** — Input validated with Zod? Business logic in server, not component?\n"
@@ -59,8 +97,21 @@ jobs:
               "### Verdict\n"
               "One of: **APPROVE**, **REQUEST CHANGES**, or **NEEDS DISCUSSION**.\n\n"
               "Be direct. If the code is fine, say so briefly. Do not pad the review with praise.\n\n"
-              "Diff:\n```diff\n" + diff + "\n```"
+              "## Diff\n```diff\n" + diff + "\n```"
           )
+
+          payload = {
+              "model": "claude-opus-4-6",
+              "max_tokens": 4096,
+              "messages": [{"role": "user", "content": prompt}]
+          }
+
+          with open('request.json', 'w') as f:
+              json.dump(payload, f)
+
+          print(f"Request written: {len(diff)} chars of diff, {len(comments_raw)} chars of comments, {len(prompt)} chars total prompt")
+          PYEOF
+          python3 build_prompt.py
 
           payload = {
               "model": "claude-opus-4-6",
