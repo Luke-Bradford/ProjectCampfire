@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { api } from "@/trpc/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -16,6 +16,7 @@ type CommentData = {
   id: string;
   body: string;
   createdAt: Date;
+  editedAt: Date | null;
   deletedAt: Date | null;
   author: PostAuthor;
   reactions: { id: string; userId: string; type: string }[];
@@ -41,11 +42,26 @@ function CommentRow({
   currentUserId: string;
   onRefresh: () => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [editBody, setEditBody] = useState(comment.body);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const deleteComment = api.feed.deleteComment.useMutation({ onSuccess: onRefresh });
+  const editComment = api.feed.editComment.useMutation({
+    onSuccess: () => {
+      setEditing(false);
+      onRefresh();
+    },
+  });
   const toggleLike = api.feed.toggleLike.useMutation({ onSuccess: onRefresh });
+
+  useEffect(() => {
+    if (editing) textareaRef.current?.focus();
+  }, [editing]);
 
   const likeCount = comment.reactions.filter((r) => r.type === "like").length;
   const hasLiked = comment.reactions.some((r) => r.type === "like" && r.userId === currentUserId);
+  const isOwn = comment.author.id === currentUserId;
 
   return (
     <div className="flex gap-2">
@@ -55,15 +71,55 @@ function CommentRow({
       </Avatar>
       <div className="flex-1 space-y-0.5">
         <p className="px-1 text-xs font-medium">{comment.author.name}</p>
-        <div className="rounded-lg bg-muted px-3 py-2 text-sm">
-          {comment.body}
-        </div>
+        {editing ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const trimmed = editBody.trim();
+              if (trimmed && trimmed !== comment.body) {
+                editComment.mutate({ id: comment.id, body: trimmed });
+              } else {
+                setEditing(false);
+              }
+            }}
+            className="flex gap-2"
+          >
+            <Textarea
+              ref={textareaRef}
+              rows={1}
+              value={editBody}
+              onChange={(e) => setEditBody(e.target.value)}
+              className="min-h-0 resize-none text-sm"
+              onKeyDown={(e) => {
+                if (e.key === "Escape") { setEditing(false); setEditBody(comment.body); }
+              }}
+            />
+            <div className="flex flex-col gap-1">
+              <Button type="submit" size="sm" disabled={!editBody.trim() || editComment.isPending}>
+                Save
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => { setEditing(false); setEditBody(comment.body); }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <div className="rounded-lg bg-muted px-3 py-2 text-sm">
+            {comment.body}
+          </div>
+        )}
         <div className="flex items-center gap-2 px-1">
           <span
             className="text-xs text-muted-foreground"
             title={new Date(comment.createdAt).toLocaleString()}
           >
             {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
+            {comment.editedAt && <span className="ml-1">(edited)</span>}
           </span>
           <button
             className={`text-xs ${hasLiked ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
@@ -72,13 +128,21 @@ function CommentRow({
           >
             {hasLiked ? "♥" : "♡"}{likeCount > 0 && ` ${likeCount}`}
           </button>
-          {comment.author.id === currentUserId && (
-            <button
-              className="text-xs text-muted-foreground hover:text-destructive"
-              onClick={() => deleteComment.mutate({ id: comment.id })}
-            >
-              Delete
-            </button>
+          {isOwn && !editing && (
+            <>
+              <button
+                className="text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setEditing(true)}
+              >
+                Edit
+              </button>
+              <button
+                className="text-xs text-muted-foreground hover:text-destructive"
+                onClick={() => deleteComment.mutate({ id: comment.id })}
+              >
+                Delete
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -126,6 +190,7 @@ export function PostCard({
             <p className="text-xs text-muted-foreground">
               {post.author.username ? `@${post.author.username} · ` : ""}
               {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}
+              {post.editedAt && <span className="ml-1">(edited)</span>}
               {post.group && (
                 <> · <span className="font-medium">{post.group.name}</span></>
               )}

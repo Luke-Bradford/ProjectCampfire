@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, asc, desc, eq, isNull, or, inArray, ne } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt, or, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -9,8 +9,9 @@ import { assertRateLimit } from "@/server/ratelimit";
 
 export const feedRouter = createTRPCRouter({
   // Unified feed: friends + groups, block-filtered, cursor-paginated (CAMP-096)
+  // cursor is an ISO timestamp — posts older than cursor are returned next page
   list: protectedProcedure
-    .input(z.object({ cursor: z.string().optional(), limit: z.number().min(1).max(50).default(20) }))
+    .input(z.object({ cursor: z.string().datetime().optional(), limit: z.number().min(1).max(50).default(20) }))
     .query(async ({ ctx, input }) => {
       const me = ctx.user.id;
 
@@ -60,8 +61,8 @@ export const feedRouter = createTRPCRouter({
             visibleAuthorIds.length > 0 ? inArray(posts.authorId, visibleAuthorIds) : undefined,
             myGroupIds.length > 0 ? inArray(posts.groupId, myGroupIds) : undefined
           ),
-          // Cursor
-          input.cursor ? ne(posts.id, input.cursor) : undefined
+          // Cursor: fetch posts older than the last seen createdAt
+          input.cursor ? lt(posts.createdAt, new Date(input.cursor)) : undefined
         ),
         orderBy: [desc(posts.createdAt)],
         limit: input.limit + 1,
@@ -83,7 +84,7 @@ export const feedRouter = createTRPCRouter({
 
       const hasMore = feedPosts.length > input.limit;
       const items = hasMore ? feedPosts.slice(0, input.limit) : feedPosts;
-      const nextCursor = hasMore ? items[items.length - 1]?.id : undefined;
+      const nextCursor = hasMore ? items[items.length - 1]?.createdAt.toISOString() : undefined;
 
       return { items, nextCursor };
     }),
@@ -133,6 +134,21 @@ export const feedRouter = createTRPCRouter({
         body: input.body,
       });
       return { id };
+    }),
+
+  // Edit own comment (CAMP-088)
+  editComment: protectedProcedure
+    .input(z.object({ id: z.string(), body: z.string().min(1).max(1000) }))
+    .mutation(async ({ ctx, input }) => {
+      const comment = await db.query.comments.findFirst({
+        where: and(eq(comments.id, input.id), eq(comments.authorId, ctx.user.id), isNull(comments.deletedAt)),
+        columns: { id: true },
+      });
+      if (!comment) throw new TRPCError({ code: "NOT_FOUND" });
+      await db
+        .update(comments)
+        .set({ body: input.body, editedAt: new Date() })
+        .where(eq(comments.id, input.id));
     }),
 
   // Delete own comment
