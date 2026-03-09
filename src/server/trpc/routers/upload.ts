@@ -1,7 +1,10 @@
 import { z } from "zod";
+import { and, eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
+import { db } from "@/server/db";
+import { posts } from "@/server/db/schema";
 import { uploadImage, ImageValidationError, ALLOWED_IMAGE_MIME_TYPES } from "@/server/storage";
 import { enqueueProcessAvatar, enqueueProcessPostImage } from "@/server/jobs/image-jobs";
 
@@ -53,6 +56,7 @@ export const uploadRouter = createTRPCRouter({
    * Upload one image for a post (call up to 4 times).
    * index (0–3) determines its position in the post's imageUrls array.
    * The caller is responsible for creating the post first and passing its id.
+   * Only the post's author may attach images.
    */
   postImage: protectedProcedure
     .input(
@@ -62,7 +66,13 @@ export const uploadRouter = createTRPCRouter({
         image: imageInput(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const post = await db.query.posts.findFirst({
+        where: and(eq(posts.id, input.postId), eq(posts.authorId, ctx.user.id)),
+        columns: { id: true },
+      });
+      if (!post) throw new TRPCError({ code: "NOT_FOUND" });
+
       const buffer = toBuffer(input.image.data);
       const key = `posts/${input.postId}/${input.index}-${createId()}-raw`;
 

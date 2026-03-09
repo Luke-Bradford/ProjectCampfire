@@ -71,12 +71,16 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
 
       // Single atomic UPDATE using Postgres array index assignment.
       // image_urls is 1-based in Postgres, so data.index (0-based) becomes data.index+1.
-      // Both the index and the URL are passed as parameterized values — no sql.raw used.
+      // Postgres auto-extends a NULL or too-short array with NULLs to reach the target
+      // index, so no read or pre-initialization is required.
+      // Both the index and the URL are parameterized — no sql.raw used.
       // This avoids the read-modify-write race when multiple images for the same post
       // are processed concurrently.
       const pgIndex = data.index + 1;
       await db.execute(
-        sql`UPDATE posts SET image_urls[${pgIndex}] = ${storageUrl(outKey)} WHERE id = ${data.postId}`,
+        sql`UPDATE posts
+            SET image_urls[${pgIndex}] = ${storageUrl(outKey)}
+            WHERE id = ${data.postId}`,
       );
 
       console.log(`[image] post image processed for post ${data.postId}[${data.index}] → ${outKey}`);
