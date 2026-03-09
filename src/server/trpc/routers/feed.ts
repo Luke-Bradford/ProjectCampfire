@@ -9,11 +9,21 @@ import { assertRateLimit } from "@/server/ratelimit";
 
 export const feedRouter = createTRPCRouter({
   // Unified feed: friends + groups, block-filtered, cursor-paginated (CAMP-096)
-  // cursor is an ISO timestamp — posts older than cursor are returned next page
+  // cursor encodes "<isoTimestamp>_<postId>" for stable tie-breaking when two posts share createdAt.
+  // Condition: (createdAt < t) OR (createdAt = t AND id < id) — no posts silently skipped.
   list: protectedProcedure
-    .input(z.object({ cursor: z.string().datetime().optional(), limit: z.number().min(1).max(50).default(20) }))
+    .input(z.object({ cursor: z.string().optional(), limit: z.number().min(1).max(50).default(20) }))
     .query(async ({ ctx, input }) => {
       const me = ctx.user.id;
+
+      // Parse compound cursor
+      let cursorDate: Date | undefined;
+      let cursorId: string | undefined;
+      if (input.cursor) {
+        const sep = input.cursor.lastIndexOf("_");
+        cursorDate = new Date(input.cursor.slice(0, sep));
+        cursorId = input.cursor.slice(sep + 1);
+      }
 
       const [friendRows, blockedRows, memberRows] = await Promise.all([
         // Friends
@@ -61,8 +71,13 @@ export const feedRouter = createTRPCRouter({
             visibleAuthorIds.length > 0 ? inArray(posts.authorId, visibleAuthorIds) : undefined,
             myGroupIds.length > 0 ? inArray(posts.groupId, myGroupIds) : undefined
           ),
-          // Cursor: fetch posts older than the last seen createdAt
-          input.cursor ? lt(posts.createdAt, new Date(input.cursor)) : undefined
+          // Compound cursor: (createdAt < t) OR (createdAt = t AND id < cursorId)
+          cursorDate && cursorId
+            ? or(
+                lt(posts.createdAt, cursorDate),
+                and(eq(posts.createdAt, cursorDate), lt(posts.id, cursorId))
+              )
+            : undefined
         ),
         orderBy: [desc(posts.createdAt)],
         limit: input.limit + 1,
@@ -84,7 +99,8 @@ export const feedRouter = createTRPCRouter({
 
       const hasMore = feedPosts.length > input.limit;
       const items = hasMore ? feedPosts.slice(0, input.limit) : feedPosts;
-      const nextCursor = hasMore ? items[items.length - 1]?.createdAt.toISOString() : undefined;
+      const last = items[items.length - 1];
+      const nextCursor = hasMore && last ? `${last.createdAt.toISOString()}_${last.id}` : undefined;
 
       return { items, nextCursor };
     }),

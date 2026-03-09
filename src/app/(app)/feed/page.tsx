@@ -1,43 +1,23 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
 import { api } from "@/trpc/react";
 import { PostComposer } from "@/components/feed/post-composer";
 import { PostCard } from "@/components/feed/post-card";
 
-type FeedItem = Parameters<typeof PostCard>[0]["post"];
-
 export default function FeedPage() {
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
-  const [allItems, setAllItems] = useState<FeedItem[]>([]);
-  const isLoadMore = useRef(false);
-
   const { data: me } = api.user.me.useQuery();
-  const { data, refetch, isLoading, isFetching } = api.feed.list.useQuery({ limit: 20, cursor });
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, refetch } =
+    api.feed.list.useInfiniteQuery(
+      { limit: 20 },
+      { getNextPageParam: (lastPage) => lastPage.nextCursor }
+    );
 
-  useEffect(() => {
-    if (!data) return;
-    if (isLoadMore.current) {
-      setAllItems((prev) => [...prev, ...data.items]);
-    } else {
-      setAllItems(data.items);
-    }
-    isLoadMore.current = false;
-  }, [data]);
+  const allItems = data?.pages.flatMap((p) => p.items) ?? [];
+  const isEmpty = !isLoading && allItems.length === 0;
 
   function refresh() {
-    isLoadMore.current = false;
-    setCursor(undefined);
     void refetch();
   }
-
-  function loadMore() {
-    if (!data?.nextCursor) return;
-    isLoadMore.current = true;
-    setCursor(data.nextCursor);
-  }
-
-  const isEmpty = !isLoading && allItems.length === 0;
 
   return (
     <div className="space-y-4 max-w-2xl mx-auto">
@@ -62,14 +42,14 @@ export default function FeedPage() {
         />
       ))}
 
-      {data?.nextCursor && (
+      {hasNextPage && (
         <div className="flex justify-center pt-2">
           <button
             className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
-            disabled={isFetching}
-            onClick={loadMore}
+            disabled={isFetchingNextPage}
+            onClick={() => void fetchNextPage()}
           >
-            {isFetching ? "Loading…" : "Load more"}
+            {isFetchingNextPage ? "Loading…" : "Load more"}
           </button>
         </div>
       )}
