@@ -101,6 +101,7 @@ export const feedRouter = createTRPCRouter({
         authorId: ctx.user.id,
         body: input.body,
         groupId: input.groupId ?? null,
+        imageUrls: [],
       });
       return { id };
     }),
