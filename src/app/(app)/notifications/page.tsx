@@ -60,11 +60,22 @@ export default function NotificationsPage() {
   });
   const markOne = api.notifications.markRead.useMutation({ onSuccess: () => void refetch() });
 
-  // Auto-mark all read on page load — clears the bell badge
+  // Auto-mark non-actionable notifications read on page load — clears the bell badge.
+  // Friend request notifications are excluded: they stay unread until accepted/declined.
   useEffect(() => {
-    markAll.mutate();
+    const hasActionable = notifs.some(
+      (n) => n.type === "friend_request_received" && !n.readAt
+    );
+    if (!hasActionable) {
+      markAll.mutate();
+    } else {
+      // Mark only non-friend-request unread notifications
+      notifs
+        .filter((n) => n.type !== "friend_request_received" && !n.readAt)
+        .forEach((n) => markOne.mutate({ id: n.id }));
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [notifs.length]);
 
   const unreadCount = notifs.filter((n) => !n.readAt).length;
 
@@ -88,7 +99,7 @@ export default function NotificationsPage() {
       <ul className="space-y-1">
         {notifs.map((n) => {
           const data = n.data as NotifData;
-          const isPendingRequest = n.type === "friend_request_received" && !n.readAt;
+          const isPendingRequest = n.type === "friend_request_received";
           return (
             <li
               key={n.id}

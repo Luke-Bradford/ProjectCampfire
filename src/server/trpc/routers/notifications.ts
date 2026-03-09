@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, count, desc, eq, isNull } from "drizzle-orm";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
 import { notifications } from "@/server/db/schema";
@@ -7,14 +7,13 @@ import { notifications } from "@/server/db/schema";
 export const notificationsRouter = createTRPCRouter({
   // Unread count for the bell badge (CAMP-120)
   unreadCount: protectedProcedure.query(async ({ ctx }) => {
-    const rows = await db.query.notifications.findMany({
-      where: and(
-        eq(notifications.userId, ctx.user.id),
-        isNull(notifications.readAt)
-      ),
-      columns: { id: true },
-    });
-    return { count: rows.length };
+    const [row] = await db
+      .select({ count: count() })
+      .from(notifications)
+      .where(
+        and(eq(notifications.userId, ctx.user.id), isNull(notifications.readAt))
+      );
+    return { count: row?.count ?? 0 };
   }),
 
   // Full list, newest first (CAMP-120)
