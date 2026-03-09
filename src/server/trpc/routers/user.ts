@@ -150,7 +150,9 @@ export const userRouter = createTRPCRouter({
         // The current session is excluded so it remains valid for the duration of
         // this HTTP response — deleting it mid-request risks the response being
         // dropped if any middleware touches the session row on the way out.
-        // The scrub job (and the auth hook) handle the current session cleanup.
+        // Post-response, the current session is harmless: protectedProcedure now
+        // checks deletedAt on every request, so any subsequent call with this
+        // token gets a 401 immediately. The scrub job cleans up the row later.
         await tx.delete(session).where(
           and(eq(session.userId, userId), ne(session.id, ctx.session.id)),
         );
