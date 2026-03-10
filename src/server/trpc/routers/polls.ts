@@ -102,7 +102,9 @@ export const pollsRouter = createTRPCRouter({
       if (input.closesAt) {
         const delay = new Date(input.closesAt).getTime() - Date.now();
         if (delay > 0) {
-          void enqueueClosePoll(id, delay);
+          void enqueueClosePoll(id, delay).catch((err: unknown) =>
+            console.error(`[poll] failed to enqueue close_poll for ${id}:`, err),
+          );
         }
       }
 

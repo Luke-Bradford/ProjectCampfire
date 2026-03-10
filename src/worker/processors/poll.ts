@@ -30,7 +30,11 @@ export async function processPollJob(job: Job<PollJobPayload>): Promise<void> {
         break;
       }
       console.log(`[poll] sweep_overdue_polls: closing ${overdue.length} overdue poll(s)`);
-      await Promise.all(overdue.map((p) => closePoll(p.id)));
+      const results = await Promise.allSettled(overdue.map((p) => closePoll(p.id)));
+      const failures = results.filter((r) => r.status === "rejected");
+      if (failures.length > 0) {
+        console.error(`[poll] sweep_overdue_polls: ${failures.length} poll(s) failed to close`);
+      }
       break;
     }
 
@@ -42,24 +46,35 @@ export async function processPollJob(job: Job<PollJobPayload>): Promise<void> {
 
 /**
  * Close a poll: set status=closed and notify voters by email.
- * Idempotent — if the poll is already closed, this is a no-op.
+ * Idempotent — if the poll is already closed (or doesn't exist), this is a no-op.
+ *
+ * The UPDATE includes `status = 'open'` in the WHERE clause so the check-then-act
+ * is atomic at the DB level, eliminating the TOCTOU race between a concurrent
+ * manual close and this worker job.
  */
 async function closePoll(pollId: string): Promise<void> {
   const poll = await db.query.polls.findFirst({
     where: eq(polls.id, pollId),
-    columns: { id: true, status: true, question: true, groupId: true, eventId: true },
+    columns: { id: true, question: true, groupId: true, eventId: true },
   });
 
   if (!poll) {
     console.warn(`[poll] close_poll: poll ${pollId} not found — skipping`);
     return;
   }
-  if (poll.status === "closed") {
+
+  // Atomically close only if still open — prevents double-notification if the
+  // creator closed manually between the findFirst above and this update.
+  const [updated] = await db
+    .update(polls)
+    .set({ status: "closed" })
+    .where(and(eq(polls.id, pollId), eq(polls.status, "open")))
+    .returning({ id: polls.id });
+
+  if (!updated) {
     console.log(`[poll] close_poll: poll ${pollId} already closed — skipping`);
     return;
   }
-
-  await db.update(polls).set({ status: "closed" }).where(eq(polls.id, pollId));
   console.log(`[poll] closed poll ${pollId}`);
 
   // Resolve groupId for the email notification
