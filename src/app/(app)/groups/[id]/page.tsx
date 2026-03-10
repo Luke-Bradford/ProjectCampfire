@@ -6,6 +6,7 @@ import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { GroupOverlapView } from "@/components/availability/group-overlap-view";
 
 function initials(name: string) {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -200,6 +201,14 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-semibold">Availability</h2>
+        <p className="text-xs text-muted-foreground">
+          Green slots show when everyone is free. Click one to propose a session.
+        </p>
+        <GroupOverlapView groupId={id} />
       </section>
     </div>
   );
