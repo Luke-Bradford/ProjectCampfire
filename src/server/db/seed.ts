@@ -272,7 +272,7 @@ async function main() {
       continue;
     }
     await db.insert(availabilitySchedules).values({
-      id: `seed-avail-${userId}`,
+      id: `seed-avail-${userId.replace("seed-user-", "")}`,
       userId,
       timezone: "UTC",
       slots,

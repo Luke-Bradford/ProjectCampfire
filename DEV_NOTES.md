@@ -23,7 +23,7 @@ All have password: **`password123`**
 
 | Email | Username | Notes |
 |---|---|---|
-| alice@campfire.local | @alice | Owner of "Friday Night Squad", friends with everyone. Free Mon/Wed/Fri/Sat evenings. |
+| alice@campfire.local | @alice | Owner of "Friday Night Squad". Free Mon/Wed/Fri/Sat evenings. |
 | bob@campfire.local | @bob | Member of "Friday Night Squad". Free Tue/Thu/Fri/Sat, late nights. |
 | carol@campfire.local | @carol | Member of "Friday Night Squad". Free Sun/Mon/Wed/Fri evenings. |
 | dan@campfire.local | @dan | Member of "Friday Night Squad". Free Sun/Mon/Fri/Sat, early evenings. |
