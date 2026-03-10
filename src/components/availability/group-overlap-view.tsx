@@ -97,21 +97,32 @@ function buildMemberSlots(slots: ComputedSlot[]): MemberSlots {
   return result;
 }
 
-/** For each date, compute the set of slot indices where ALL selected members are available */
-function computeOverlap(
+/**
+ * For each date and slot index, count how many selected members are available.
+ * Returns a map of date → (slotIndex → count).
+ */
+function computeOverlapCounts(
   members: Array<{ slots: MemberSlots }>,
   dates: string[]
-): Record<string, Set<number>> {
-  const result: Record<string, Set<number>> = {};
+): Record<string, Map<number, number>> {
+  const result: Record<string, Map<number, number>> = {};
   for (const date of dates) {
-    const sets = members.map((m) => m.slots[date] ?? new Set<number>());
-    if (sets.length === 0) { result[date] = new Set(); continue; }
-    const intersection = new Set<number>();
-    const first = sets[0]!;
-    for (const idx of first) {
-      if (sets.every((s) => s.has(idx))) intersection.add(idx);
+    const counts = new Map<number, number>();
+    for (const m of members) {
+      for (const idx of m.slots[date] ?? new Set<number>()) {
+        counts.set(idx, (counts.get(idx) ?? 0) + 1);
+      }
     }
-    result[date] = intersection;
+    result[date] = counts;
+  }
+  return result;
+}
+
+/** Extract slot indices where count >= minCount */
+function slotsWithMinCount(counts: Map<number, number>, minCount: number): Set<number> {
+  const result = new Set<number>();
+  for (const [idx, count] of counts) {
+    if (count >= minCount) result.add(idx);
   }
   return result;
 }
@@ -169,7 +180,7 @@ function ProposeDialog({
       onClose();
       setTitle("");
       setError("");
-      router.push(`/events/${id}`);
+      router.push(`/events/${id}?created=1`);
     },
     onError: (e) => setError(e.message),
   });
@@ -230,15 +241,25 @@ function ProposeDialog({
 function DayColumn({
   dateStr,
   memberData,
-  overlapSlots,
+  overlapCounts,
+  totalActiveMembers,
   onClickOverlap,
 }: {
   dateStr: string;
   memberData: Array<{ userId: string; band: string; slots: MemberSlots }>;
-  overlapSlots: Set<number>;
+  overlapCounts: Map<number, number>;
+  totalActiveMembers: number;
   onClickOverlap: (startIdx: number, endIdx: number) => void;
 }) {
-  const overlapRanges = mergeSlots(overlapSlots);
+  // Green: all active members (or ≥3 if group is large). Yellow: ≥2.
+  const greenThreshold = Math.max(2, totalActiveMembers);
+  const greenSlots = slotsWithMinCount(overlapCounts, greenThreshold);
+  const yellowSlots = slotsWithMinCount(overlapCounts, 2);
+  // Yellow ranges excludes slots already covered by green
+  const yellowOnly = new Set([...yellowSlots].filter((i) => !greenSlots.has(i)));
+
+  const greenRanges = mergeSlots(greenSlots);
+  const yellowRanges = mergeSlots(yellowOnly);
 
   return (
     <div className="relative flex-1 min-w-0 border-l" style={{ height: SLOTS_PER_DAY * SLOT_HEIGHT_PX }}>
@@ -259,7 +280,7 @@ function DayColumn({
         return ranges.map(([start, end]) => (
           <div
             key={`${userId}-${start}-${end}`}
-            className={`absolute border-l-2 ${band} opacity-80`}
+            className={`absolute border-l-2 ${band} opacity-60`}
             style={{
               top: start * SLOT_HEIGHT_PX,
               height: (end - start) * SLOT_HEIGHT_PX,
@@ -270,18 +291,33 @@ function DayColumn({
         ));
       })}
 
-      {/* Overlap highlight (all members free) */}
-      {overlapRanges.map(([start, end]) => (
+      {/* Yellow: 2+ members overlap */}
+      {yellowRanges.map(([start, end]) => (
         <button
-          key={`${start}-${end}`}
+          key={`y-${start}-${end}`}
+          className="absolute left-0 right-0 bg-yellow-300/20 hover:bg-yellow-300/35 border border-yellow-400/50 rounded cursor-pointer transition-colors z-10"
+          style={{
+            top: start * SLOT_HEIGHT_PX + 1,
+            height: (end - start) * SLOT_HEIGHT_PX - 2,
+          }}
+          title={`${slotIndexToTime(start)} – ${slotIndexToTime(end)} — 2+ members free`}
+          onClick={() => onClickOverlap(start, end)}
+          aria-label={`2+ members free ${slotIndexToTime(start)}–${slotIndexToTime(end)}, click to propose session`}
+        />
+      ))}
+
+      {/* Green: all active members overlap (or 3+) */}
+      {greenRanges.map(([start, end]) => (
+        <button
+          key={`g-${start}-${end}`}
           className="absolute left-0 right-0 bg-green-400/30 hover:bg-green-400/50 border border-green-500/60 rounded cursor-pointer transition-colors z-10"
           style={{
             top: start * SLOT_HEIGHT_PX + 1,
             height: (end - start) * SLOT_HEIGHT_PX - 2,
           }}
-          title={`${slotIndexToTime(start)} – ${slotIndexToTime(end)} — click to propose session`}
+          title={`${slotIndexToTime(start)} – ${slotIndexToTime(end)} — everyone free, click to propose session`}
           onClick={() => onClickOverlap(start, end)}
-          aria-label={`Overlap ${slotIndexToTime(start)}–${slotIndexToTime(end)}, click to propose session`}
+          aria-label={`Everyone free ${slotIndexToTime(start)}–${slotIndexToTime(end)}, click to propose session`}
         />
       ))}
     </div>
@@ -356,8 +392,8 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
     [memberSlotData, disabledIds]
   );
 
-  const overlapByDate = useMemo(
-    () => computeOverlap(activeMembers, weekDates),
+  const overlapCountsByDate = useMemo(
+    () => computeOverlapCounts(activeMembers, weekDates),
     [activeMembers, weekDates]
   );
 
@@ -425,21 +461,22 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
         </button>
       </div>
 
-      {/* Grid */}
+      {/* Grid — header is sticky inside the scroll container so both share the
+          same width context and scrollbar gutter. */}
       <div className="rounded-lg border overflow-hidden">
-        {/* Day headers */}
-        <div className="flex border-b bg-muted/30">
-          <div className="w-10 shrink-0" />
-          {weekDates.map((d) => (
-            <div key={d} className="flex-1 min-w-0 border-l px-1 py-1.5 text-center">
-              <p className="text-xs font-medium">{format(parseISO(d), "EEE")}</p>
-              <p className="text-xs text-muted-foreground">{format(parseISO(d), "d")}</p>
-            </div>
-          ))}
-        </div>
+        <div className="overflow-y-auto" style={{ maxHeight: "520px" }}>
+          {/* Sticky day headers */}
+          <div className="sticky top-0 z-20 flex border-b bg-muted/30">
+            <div className="w-10 shrink-0" />
+            {weekDates.map((d) => (
+              <div key={d} className="flex-1 min-w-0 border-l px-1 py-1.5 text-center">
+                <p className="text-xs font-medium">{format(parseISO(d), "EEE")}</p>
+                <p className="text-xs text-muted-foreground">{format(parseISO(d), "d")}</p>
+              </div>
+            ))}
+          </div>
 
-        {/* Scrollable time grid */}
-        <div className="overflow-y-auto" style={{ maxHeight: "480px" }}>
+          {/* Time grid */}
           <div className="flex">
             <TimeAxis />
             {weekDates.map((dateStr) => (
@@ -447,7 +484,8 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
                 key={dateStr}
                 dateStr={dateStr}
                 memberData={activeMembers.map((m) => ({ userId: m.user.id, band: m.color.band, slots: m.slots }))}
-                overlapSlots={overlapByDate[dateStr] ?? new Set()}
+                overlapCounts={overlapCountsByDate[dateStr] ?? new Map()}
+                totalActiveMembers={activeMembers.length}
                 onClickOverlap={(start, end) => handleClickOverlap(dateStr, start, end)}
               />
             ))}
@@ -459,6 +497,10 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
           <span className="flex items-center gap-1">
             <span className="inline-block h-3 w-3 rounded-sm bg-blue-400/50 border border-blue-500" />
             Member available
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block h-3 w-3 rounded-sm bg-yellow-300/40 border border-yellow-400/60" />
+            2+ free
           </span>
           <span className="flex items-center gap-1">
             <span className="inline-block h-3 w-3 rounded-sm bg-green-400/40 border border-green-500/60" />
