@@ -10,7 +10,7 @@
  * No database table required — tokens are self-contained.
  */
 
-import { createHmac } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import { env } from "@/env";
 
 export type RsvpTokenPayload = {
@@ -65,10 +65,11 @@ export function verifyRsvpToken(token: string): RsvpTokenPayload | null {
     string, string, string, string, string
   ];
 
-  // Verify signature
+  // Verify signature — constant-time comparison to prevent timing oracle attacks
   const message = segments.slice(0, 4).join(SEP);
-  const expectedSig = hmac(message);
-  if (sig !== expectedSig) return null;
+  const sigBuf = Buffer.from(sig, "base64url");
+  const expectedBuf = Buffer.from(hmac(message), "base64url");
+  if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) return null;
 
   // Check expiry
   const expires = Number(rawExpires);
