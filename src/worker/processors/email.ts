@@ -5,6 +5,7 @@ import { user } from "@/server/db/schema";
 import type { NotificationPrefs } from "@/server/db/schema";
 import { sendEmail } from "@/server/email";
 import type { EmailJobPayload } from "@/server/jobs/email-jobs";
+import { createRsvpToken } from "@/server/rsvp-token";
 import { env } from "@/env";
 
 type Prefs = NotificationPrefs;
@@ -138,15 +139,19 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
       const recipients = await getRecipients(data.recipientUserIds);
       for (const r of recipients) {
         if (!pref(r.notificationPrefs as Prefs, "emailEventRsvpReminder")) continue;
+        const yesToken = createRsvpToken({ eventId: data.eventId, userId: r.id, status: "yes" });
+        const noToken = createRsvpToken({ eventId: data.eventId, userId: r.id, status: "no" });
+        const maybeToken = createRsvpToken({ eventId: data.eventId, userId: r.id, status: "maybe" });
+        const rsvpBase = `${appUrl()}/rsvp?token=`;
         await sendEmail({
           to: r.email,
           subject: safeSubject(`RSVP reminder: ${data.eventTitle}`),
-          text: `Hi ${strip(r.name)},\n\nHave you had a chance to RSVP to "${strip(data.eventTitle)}" in ${strip(data.groupName)}?\n\nView event: ${appUrl()}/events/${data.eventId}`,
+          text: `Hi ${strip(r.name)},\n\nHave you had a chance to RSVP to "${strip(data.eventTitle)}" in ${strip(data.groupName)}?\n\nGoing: ${rsvpBase}${yesToken}\nNot going: ${rsvpBase}${noToken}\nMaybe: ${rsvpBase}${maybeToken}\n\nView event: ${appUrl()}/events/${data.eventId}`,
           html: htmlEmail(
             `RSVP reminder: ${esc(data.eventTitle)}`,
-            `<p>Hi ${esc(r.name)},</p><p>Have you had a chance to RSVP to <strong>${esc(data.eventTitle)}</strong> in <strong>${esc(data.groupName)}</strong>?</p>`,
+            `<p>Hi ${esc(r.name)},</p><p>Have you had a chance to RSVP to <strong>${esc(data.eventTitle)}</strong> in <strong>${esc(data.groupName)}</strong>?</p><p style="margin-top:16px">Click a button to RSVP without logging in:</p><p style="margin-top:12px"><a href="${rsvpBase}${yesToken}" style="background:#16a34a;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-weight:600;margin-right:8px">Going</a><a href="${rsvpBase}${maybeToken}" style="background:#ca8a04;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-weight:600;margin-right:8px">Maybe</a><a href="${rsvpBase}${noToken}" style="background:#dc2626;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-weight:600">Not going</a></p>`,
             `${appUrl()}/events/${data.eventId}`,
-            "RSVP now"
+            "View event"
           ),
         });
       }
