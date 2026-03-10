@@ -136,8 +136,10 @@ function CommentRow({
             title={new Date(comment.createdAt).toLocaleString()}
           >
             {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
-            {comment.editedAt && <span className="ml-1">(edited)</span>}
           </span>
+          {comment.editedAt && (
+            <span className="text-xs text-muted-foreground">(edited)</span>
+          )}
           <button
             className={`text-xs ${hasLiked ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
             onClick={() => toggleLike.mutate({ commentId: comment.id })}

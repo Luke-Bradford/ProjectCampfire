@@ -83,6 +83,7 @@ function GroupSettings({ group, onSaved }: { group: GroupData; onSaved: () => vo
           <Input
             value={currentName}
             onChange={(e) => setName(e.target.value)}
+            onBlur={(e) => setName(e.target.value.trim())}
             maxLength={100}
           />
         </div>
