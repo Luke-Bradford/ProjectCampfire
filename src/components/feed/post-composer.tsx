@@ -17,6 +17,7 @@ type SelectedImage = {
   preview: string;
   key: string | null; // MinIO raw key after upload; null = uploading
   error: string | null;
+  abort: AbortController;
 };
 
 export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string; eventId?: string; onPosted: () => void }) {
@@ -58,6 +59,7 @@ export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string;
       preview: URL.createObjectURL(file),
       key: null,
       error: ALLOWED_TYPES.includes(file.type) ? null : `Unsupported type "${file.type}"`,
+      abort: new AbortController(),
     }));
 
     setImages((prev) => [...prev, ...toAdd]);
@@ -83,7 +85,7 @@ export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string;
     fd.append("postId", img.uploadId);
 
     try {
-      const res = await fetch("/api/upload/post-image", { method: "POST", body: fd });
+      const res = await fetch("/api/upload/post-image", { method: "POST", body: fd, signal: img.abort.signal });
       const json = (await res.json()) as { key?: string; error?: string };
       setImages((prev) =>
         prev.map((i) =>
@@ -92,7 +94,9 @@ export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string;
             : i
         )
       );
-    } catch {
+    } catch (err) {
+      // Silently ignore aborted uploads — the image was removed by the user
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setImages((prev) =>
         prev.map((i) =>
           i.uploadId === img.uploadId ? { ...i, error: "Upload failed. Try again." } : i
@@ -104,7 +108,10 @@ export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string;
   function removeImage(uploadId: string) {
     setImages((prev) => {
       const img = prev.find((i) => i.uploadId === uploadId);
-      if (img) URL.revokeObjectURL(img.preview);
+      if (img) {
+        img.abort.abort();
+        URL.revokeObjectURL(img.preview);
+      }
       return prev.filter((i) => i.uploadId !== uploadId);
     });
   }
