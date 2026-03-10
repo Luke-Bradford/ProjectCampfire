@@ -164,11 +164,22 @@ export const eventsRouter = createTRPCRouter({
             .filter((id) => !rsvpdIds.has(id));
 
           const msUntilEvent = confirmedStartsAt.getTime() - Date.now();
-          const reminderDelay = msUntilEvent - 24 * 60 * 60 * 1000;
-          if (reminderDelay > 0 && unrsvpdIds.length > 0) {
+
+          // T-24h reminder
+          const reminder24hDelay = msUntilEvent - 24 * 60 * 60 * 1000;
+          if (reminder24hDelay > 0 && unrsvpdIds.length > 0) {
             void enqueueEventRsvpReminder(
               { eventId: input.id, eventTitle: event.title, groupName, recipientUserIds: unrsvpdIds },
-              reminderDelay
+              reminder24hDelay
+            );
+          }
+
+          // T-1h reminder (CAMP-129)
+          const reminder1hDelay = msUntilEvent - 60 * 60 * 1000;
+          if (reminder1hDelay > 0 && unrsvpdIds.length > 0) {
+            void enqueueEventRsvpReminder(
+              { eventId: input.id, eventTitle: event.title, groupName, recipientUserIds: unrsvpdIds },
+              reminder1hDelay
             );
           }
         }
