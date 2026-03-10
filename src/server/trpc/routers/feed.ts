@@ -7,6 +7,7 @@ import { db } from "@/server/db";
 import { posts, comments, reactions, friendships, groupMemberships, events } from "@/server/db/schema";
 import { assertRateLimit } from "@/server/ratelimit";
 import { enqueueOgFetch } from "@/server/jobs/og-fetch-jobs";
+import { enqueueProcessCommentImage } from "@/server/jobs/image-jobs";
 
 export const feedRouter = createTRPCRouter({
   // Unified feed: friends + groups, block-filtered, cursor-paginated (CAMP-096)
@@ -240,15 +241,46 @@ export const feedRouter = createTRPCRouter({
 
   // Add a comment (CAMP-088)
   comment: protectedProcedure
-    .input(z.object({ postId: z.string(), body: z.string().min(1).max(1000) }))
+    .input(z.object({
+      postId: z.string(),
+      body: z.string().min(1).max(1000),
+      // imageKeys: raw MinIO keys returned by /api/upload/post-image (same route).
+      // Max 1 image per comment. Pattern: posts/{userId}/{uploadId}/{cuid}-raw
+      // Ownership verified by prefix check (same as post images).
+      imageKeys: z
+        .array(z.string().regex(/^posts\/[A-Za-z0-9]+\/[A-Za-z0-9]{10,}\/[a-z0-9]+-raw$/))
+        .max(1)
+        .optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
+      // Verify the post exists and is not soft-deleted.
+      const post = await db.query.posts.findFirst({
+        where: and(eq(posts.id, input.postId), isNull(posts.deletedAt)),
+        columns: { id: true },
+      });
+      if (!post) throw new TRPCError({ code: "NOT_FOUND", message: "Post not found." });
+
+      if (input.imageKeys?.length) {
+        const prefix = `posts/${ctx.user.id}/`;
+        const alien = input.imageKeys.find((k) => !k.startsWith(prefix));
+        if (alien) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Image does not belong to you." });
+        }
+      }
       const id = createId();
       await db.insert(comments).values({
         id,
         postId: input.postId,
         authorId: ctx.user.id,
         body: input.body,
+        // Only set imageUrls placeholder when images are expected — avoids storing [] on text-only comments.
+        imageUrls: input.imageKeys?.length ? [] : undefined,
       });
+      if (input.imageKeys?.length) {
+        await Promise.all(
+          input.imageKeys.map((key, index) => enqueueProcessCommentImage(id, key, index))
+        );
+      }
       return { id };
     }),
 

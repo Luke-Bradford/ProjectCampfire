@@ -2,13 +2,15 @@ import type { Job } from "bullmq";
 import sharp from "sharp";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/server/db";
-import { user, posts } from "@/server/db/schema";
+import { user, posts, comments } from "@/server/db/schema";
 import { minio, storageUrl } from "@/server/storage";
 import { env } from "@/env";
 import type { ImageJobPayload } from "@/server/jobs/image-jobs";
 
 const AVATAR_SIZE = 256; // px, square
 const POST_IMAGE_MAX = 1280; // px, longest edge
+const MAX_POST_IMAGES = 4; // must match Zod .max() in feed.create
+const MAX_COMMENT_IMAGES = 1; // must match Zod .max() in feed.comment
 
 async function downloadFromMinio(key: string): Promise<Buffer> {
   const stream = await minio.getObject(env.MINIO_BUCKET, key);
@@ -87,7 +89,7 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
           UPDATE ${posts}
           SET image_urls = (
             SELECT array_agg(CASE WHEN g.i = ${pgIndex} THEN ${url} ELSE a.v END ORDER BY g.i)
-            FROM generate_series(1, 4) AS g(i)
+            FROM generate_series(1, ${MAX_POST_IMAGES}) AS g(i)
             LEFT JOIN unnest(COALESCE(image_urls, ARRAY[]::text[])) WITH ORDINALITY AS a(v, i)
               ON a.i = g.i
           )
@@ -96,6 +98,39 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
       });
 
       console.log(`[image] post image processed for post ${data.postId}[${data.index}] → ${outKey}`);
+      break;
+    }
+
+    case "process_comment_image": {
+      const raw = await downloadFromMinio(data.key);
+      const processed = await sharp(raw)
+        .resize(POST_IMAGE_MAX, POST_IMAGE_MAX, { fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 85 })
+        .toBuffer();
+
+      const outKey = processedKey(data.key);
+      await uploadProcessed(outKey, processed);
+
+      // Same SELECT FOR UPDATE + generate_series pattern as process_post_image.
+      // Comments support up to 1 image (index is always 0), but the array approach
+      // is kept consistent so the pattern is familiar and index could be extended.
+      const pgIndex = data.index + 1;
+      const url = storageUrl(outKey);
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT id FROM ${comments} WHERE id = ${data.commentId} FOR UPDATE`);
+        await tx.execute(sql`
+          UPDATE ${comments}
+          SET image_urls = (
+            SELECT array_agg(CASE WHEN g.i = ${pgIndex} THEN ${url} ELSE a.v END ORDER BY g.i)
+            FROM generate_series(1, ${MAX_COMMENT_IMAGES}) AS g(i)
+            LEFT JOIN unnest(COALESCE(image_urls, ARRAY[]::text[])) WITH ORDINALITY AS a(v, i)
+              ON a.i = g.i
+          )
+          WHERE id = ${data.commentId}
+        `);
+      });
+
+      console.log(`[image] comment image processed for comment ${data.commentId}[${data.index}] → ${outKey}`);
       break;
     }
 
