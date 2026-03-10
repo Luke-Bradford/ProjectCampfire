@@ -2,7 +2,7 @@ import type { Job } from "bullmq";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/server/db";
 import { user, session, account } from "@/server/db/schema";
-import { accountQueue } from "@/server/jobs/account-jobs";
+import { getAccountQueue } from "@/server/jobs/account-jobs";
 import type { AccountJobPayload } from "@/server/jobs/account-jobs";
 
 export async function processAccountJob(job: Job<AccountJobPayload>) {
@@ -79,7 +79,7 @@ export async function processAccountJob(job: Job<AccountJobPayload>) {
         unscrubbed.map((u) =>
           // Deterministic jobId deduplicates: if a scrub job is already queued
           // for this user, BullMQ will not add a second one.
-          accountQueue.add(
+          getAccountQueue().add(
             "scrub_account",
             { type: "scrub_account", userId: u.id },
             { jobId: `scrub-${u.id}` },
@@ -91,7 +91,8 @@ export async function processAccountJob(job: Job<AccountJobPayload>) {
     }
 
     default: {
-      console.warn("Unknown account job type:", (data as { type: string }).type);
+      const _exhaustive: never = data;
+      console.warn("Unknown account job type:", (_exhaustive as { type: string }).type);
     }
   }
 }

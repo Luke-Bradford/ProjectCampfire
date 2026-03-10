@@ -4,7 +4,7 @@ import { processEmailJob } from "./processors/email";
 import { processAccountJob } from "./processors/account";
 import { processImageJob } from "./processors/image";
 import { processOgFetchJob } from "./processors/og-fetch";
-import { accountQueue } from "@/server/jobs/account-jobs";
+import { getAccountQueue } from "@/server/jobs/account-jobs";
 import { imageQueue } from "@/server/jobs/image-jobs";
 import type { EmailJobPayload } from "@/server/jobs/email-jobs";
 import type { AccountJobPayload } from "@/server/jobs/account-jobs";
@@ -39,7 +39,7 @@ new Worker<AccountJobPayload>(
 // Hourly sweeper: finds deleted accounts where the scrub job was lost (e.g. Redis
 // was down during deleteAccount) and re-enqueues them. This is the fallback
 // recovery mechanism for the fire-and-forget enqueue in the tRPC mutation.
-accountQueue.add(
+getAccountQueue().add(
   "sweep_unscrubbed",
   { type: "sweep_unscrubbed" },
   { repeat: { every: 60 * 60 * 1000 }, jobId: "sweep_unscrubbed" },
