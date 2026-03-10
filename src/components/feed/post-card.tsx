@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Image from "next/image";
 import type { EmbedMetadata } from "@/server/db/schema/posts";
 import { formatDistanceToNow } from "date-fns";
 import { api } from "@/trpc/react";
@@ -341,14 +342,19 @@ export function PostCard({
       {imageUrls.length > 0 && (
         <div className={`grid gap-1 ${imageUrls.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
           {imageUrls.map((url, i) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <div
               key={i}
-              src={url}
-              alt=""
-              className="w-full rounded object-cover"
-              style={{ maxHeight: imageUrls.length === 1 ? "400px" : "200px" }}
-            />
+              className="relative w-full overflow-hidden rounded"
+              style={{ height: imageUrls.length === 1 ? "400px" : "200px" }}
+            >
+              <Image
+                src={url}
+                alt=""
+                fill
+                className="object-cover"
+                sizes={imageUrls.length === 1 ? "100vw" : "50vw"}
+              />
+            </div>
           ))}
         </div>
       )}
