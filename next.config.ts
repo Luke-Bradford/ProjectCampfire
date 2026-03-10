@@ -22,9 +22,10 @@ function minioRemotePattern(): NonNullable<NonNullable<NextConfig["images"]>["re
   }
   const hostname = process.env.MINIO_ENDPOINT ?? "localhost";
   const port = process.env.MINIO_PORT ?? "9000";
-  const protocol =
-    process.env.NODE_ENV === "production" ? "https" : "http";
-  return { protocol, hostname, port, pathname: "/**" };
+  // Default to http — self-hosted MinIO can run plain HTTP even in production
+  // (e.g. behind a TLS-terminating reverse proxy). If HTTPS is needed, set
+  // MINIO_PUBLIC_URL=https://... and this branch won't be reached.
+  return { protocol: "http" as const, hostname, port, pathname: "/**" };
 }
 
 const nextConfig: NextConfig = {

@@ -342,19 +342,19 @@ export function PostCard({
       {imageUrls.length > 0 && (
         <div className={`grid gap-1 ${imageUrls.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
           {imageUrls.map((url, i) => (
-            <div
+            <Image
               key={i}
-              className="relative w-full overflow-hidden rounded"
-              style={{ height: imageUrls.length === 1 ? "400px" : "200px" }}
-            >
-              <Image
-                src={url}
-                alt=""
-                fill
-                className="object-cover"
-                sizes={imageUrls.length === 1 ? "100vw" : "50vw"}
-              />
-            </div>
+              src={url}
+              alt=""
+              width={0}
+              height={0}
+              sizes={imageUrls.length === 1 ? "100vw" : "50vw"}
+              className="w-full rounded object-cover"
+              style={{
+                height: "auto",
+                maxHeight: imageUrls.length === 1 ? "400px" : "200px",
+              }}
+            />
           ))}
         </div>
       )}
