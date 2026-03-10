@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,6 @@ import {
 import { PostComposer } from "@/components/feed/post-composer";
 import { PostCard } from "@/components/feed/post-card";
 import { format } from "date-fns";
-import { useState } from "react";
 
 // ── Types from router inference ───────────────────────────────────────────────
 
@@ -129,36 +128,189 @@ function PollCard({
   );
 }
 
+// ── Game option slot with search + quick-add ──────────────────────────────────
+
+type GameOption = { label: string; gameId?: string };
+
+function GameOptionSlot({
+  index,
+  value,
+  onChange,
+  onRemove,
+  canRemove,
+}: {
+  index: number;
+  value: GameOption;
+  onChange: (v: GameOption) => void;
+  onRemove: () => void;
+  canRemove: boolean;
+}) {
+  const [query, setQuery] = useState(value.gameId ? "" : value.label);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [quickAddMode, setQuickAddMode] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const searchEnabled = query.trim().length >= 1 && !value.gameId;
+  const { data: results, isFetching } = api.games.search.useQuery(
+    { query: query.trim() },
+    { enabled: searchEnabled, staleTime: 10_000 }
+  );
+
+  const quickAdd = api.games.create.useMutation({
+    onSuccess: (data) => {
+      onChange({ label: query.trim(), gameId: data.id });
+      setShowDropdown(false);
+      setQuickAddMode(false);
+    },
+  });
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  // If a game is selected, show its label as a chip
+  if (value.gameId) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm bg-muted/50">
+        <span className="flex-1 truncate">{value.label}</span>
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-destructive text-xs shrink-0"
+          onClick={() => { onChange({ label: "" }); setQuery(""); }}
+        >
+          ×
+        </button>
+        {canRemove && (
+          <button type="button" className="text-muted-foreground hover:text-destructive text-xs shrink-0" onClick={onRemove}>
+            Remove
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div className="flex gap-2">
+        <Input
+          placeholder={`Game ${index + 1} — type to search`}
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setShowDropdown(true); onChange({ label: e.target.value }); }}
+          onFocus={() => { if (query.trim()) setShowDropdown(true); }}
+          autoComplete="off"
+        />
+        {canRemove && (
+          <button type="button" className="text-xs text-muted-foreground hover:text-destructive shrink-0" onClick={onRemove}>
+            Remove
+          </button>
+        )}
+      </div>
+
+      {showDropdown && query.trim().length >= 1 && (
+        <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow-md text-sm overflow-hidden">
+          {isFetching && <p className="px-3 py-2 text-muted-foreground">Searching…</p>}
+          {!isFetching && results?.map((g) => (
+            <button
+              key={g.id}
+              type="button"
+              className="w-full text-left px-3 py-2 hover:bg-accent flex items-center gap-2"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onChange({ label: g.title, gameId: g.id }); setShowDropdown(false); setQuery(""); }}
+            >
+              {g.coverUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={g.coverUrl} alt="" className="h-8 w-6 rounded object-cover shrink-0" />
+              )}
+              <span className="truncate">{g.title}</span>
+            </button>
+          ))}
+          {!isFetching && results?.length === 0 && !quickAddMode && (
+            <div className="px-3 py-2 text-muted-foreground">
+              No results.{" "}
+              <button
+                type="button"
+                className="text-primary hover:underline"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setQuickAddMode(true)}
+              >
+                Add &ldquo;{query.trim()}&rdquo; as new game
+              </button>
+            </div>
+          )}
+          {quickAddMode && (
+            <div className="px-3 py-2 flex items-center justify-between gap-2">
+              <span className="text-sm truncate">Add &ldquo;{query.trim()}&rdquo; to catalog?</span>
+              <div className="flex gap-2 shrink-0">
+                <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setQuickAddMode(false)}>Cancel</button>
+                <button
+                  type="button"
+                  className="text-xs text-primary hover:underline"
+                  disabled={quickAdd.isPending}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => quickAdd.mutate({ title: query.trim() })}
+                >
+                  {quickAdd.isPending ? "Adding…" : "Add"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Create poll dialog ────────────────────────────────────────────────────────
 
 function CreatePollDialog({ eventId, groupId, onCreated }: { eventId: string; groupId: string; onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState("");
   const [type, setType] = useState<"time_slot" | "game" | "custom">("custom");
+  // Plain text options (custom / time_slot)
   const [options, setOptions] = useState(["", ""]);
+  // Game options (game type)
+  const [gameOptions, setGameOptions] = useState<GameOption[]>([{ label: "" }, { label: "" }]);
   const [error, setError] = useState("");
 
+  function resetForm() {
+    setQuestion(""); setOptions(["", ""]); setGameOptions([{ label: "" }, { label: "" }]); setError("");
+  }
+
   const create = api.polls.create.useMutation({
-    onSuccess: () => { setOpen(false); setQuestion(""); setOptions(["", ""]); onCreated(); },
+    onSuccess: () => { setOpen(false); resetForm(); onCreated(); },
     onError: (e) => setError(e.message),
   });
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    const filtered = options.filter((o) => o.trim());
-    if (filtered.length < 2) { setError("Need at least 2 options."); return; }
-    create.mutate({
-      eventId,
-      groupId,
-      type,
-      question,
-      options: filtered.map((label, i) => ({ label, sortOrder: i })),
-    });
+
+    if (type === "game") {
+      const filtered = gameOptions.filter((o) => o.label.trim());
+      if (filtered.length < 2) { setError("Need at least 2 game options."); return; }
+      create.mutate({
+        eventId, groupId, type, question,
+        options: filtered.map((o, i) => ({ label: o.label, gameId: o.gameId, sortOrder: i })),
+      });
+    } else {
+      const filtered = options.filter((o) => o.trim());
+      if (filtered.length < 2) { setError("Need at least 2 options."); return; }
+      create.mutate({
+        eventId, groupId, type, question,
+        options: filtered.map((label, i) => ({ label, sortOrder: i })),
+      });
+    }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">Add poll</Button>
       </DialogTrigger>
@@ -179,21 +331,44 @@ function CreatePollDialog({ eventId, groupId, onCreated }: { eventId: string; gr
           </div>
           <div className="space-y-2">
             <Label htmlFor="poll-q">Question</Label>
-            <Input id="poll-q" required value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="e.g. When works for everyone?" />
+            <Input id="poll-q" required value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="e.g. What should we play?" />
           </div>
           <div className="space-y-2">
             <Label>Options</Label>
-            {options.map((opt, i) => (
-              <Input key={i} value={opt} placeholder={`Option ${i + 1}`}
-                onChange={(e) => setOptions(options.map((o, j) => j === i ? e.target.value : o))} />
-            ))}
-            <button type="button" onClick={() => setOptions([...options, ""])}
-              className="text-xs text-muted-foreground hover:text-foreground">
-              + Add option
-            </button>
+            {type === "game" ? (
+              <>
+                {gameOptions.map((opt, i) => (
+                  <GameOptionSlot
+                    key={i}
+                    index={i}
+                    value={opt}
+                    onChange={(v) => setGameOptions(gameOptions.map((o, j) => j === i ? v : o))}
+                    onRemove={() => setGameOptions(gameOptions.filter((_, j) => j !== i))}
+                    canRemove={gameOptions.length > 2}
+                  />
+                ))}
+                {gameOptions.length < 20 && (
+                  <button type="button" onClick={() => setGameOptions([...gameOptions, { label: "" }])}
+                    className="text-xs text-muted-foreground hover:text-foreground">
+                    + Add game
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                {options.map((opt, i) => (
+                  <Input key={i} value={opt} placeholder={`Option ${i + 1}`}
+                    onChange={(e) => setOptions(options.map((o, j) => j === i ? e.target.value : o))} />
+                ))}
+                <button type="button" onClick={() => setOptions([...options, ""])}
+                  className="text-xs text-muted-foreground hover:text-foreground">
+                  + Add option
+                </button>
+              </>
+            )}
           </div>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => { setOpen(false); resetForm(); }}>Cancel</Button>
             <Button type="submit" disabled={!question.trim() || create.isPending}>
               {create.isPending ? "Creating…" : "Create poll"}
             </Button>
