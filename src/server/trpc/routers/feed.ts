@@ -253,6 +253,13 @@ export const feedRouter = createTRPCRouter({
         .optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      // Verify the post exists and is not soft-deleted.
+      const post = await db.query.posts.findFirst({
+        where: and(eq(posts.id, input.postId), isNull(posts.deletedAt)),
+        columns: { id: true },
+      });
+      if (!post) throw new TRPCError({ code: "NOT_FOUND", message: "Post not found." });
+
       if (input.imageKeys?.length) {
         const prefix = `posts/${ctx.user.id}/`;
         const alien = input.imageKeys.find((k) => !k.startsWith(prefix));
@@ -266,7 +273,8 @@ export const feedRouter = createTRPCRouter({
         postId: input.postId,
         authorId: ctx.user.id,
         body: input.body,
-        imageUrls: [],
+        // Only set imageUrls placeholder when images are expected — avoids storing [] on text-only comments.
+        imageUrls: input.imageKeys?.length ? [] : undefined,
       });
       if (input.imageKeys?.length) {
         await Promise.all(

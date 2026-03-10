@@ -17,6 +17,15 @@ function initials(name: string) {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 }
 
+type CommentImageUpload = {
+  uploadId: string;
+  file: File;
+  preview: string;
+  key: string | null;
+  error: string | null;
+  abort: AbortController;
+};
+
 type PostAuthor = { id: string; name: string; username: string | null; image: string | null };
 type CommentData = {
   id: string;
@@ -208,14 +217,7 @@ export function PostCard({
 }) {
   const [showComments, setShowComments] = useState(false);
   const [commentBody, setCommentBody] = useState("");
-  const [commentImage, setCommentImage] = useState<{
-    uploadId: string;
-    file: File;
-    preview: string;
-    key: string | null;
-    error: string | null;
-    abort: AbortController;
-  } | null>(null);
+  const [commentImage, setCommentImage] = useState<CommentImageUpload | null>(null);
   const [commentImageUploading, setCommentImageUploading] = useState(false);
   const commentFileInputRef = useRef<HTMLInputElement>(null);
   const [editingPost, setEditingPost] = useState(false);
@@ -322,7 +324,7 @@ export function PostCard({
     commentImage?.abort.abort();
     if (commentImage) URL.revokeObjectURL(commentImage.preview);
 
-    const img = {
+    const img: CommentImageUpload = {
       uploadId: createId(),
       file,
       preview: URL.createObjectURL(file),
@@ -334,7 +336,7 @@ export function PostCard({
     if (!img.error) void uploadCommentImage(img);
   }
 
-  async function uploadCommentImage(img: typeof commentImage & object) {
+  async function uploadCommentImage(img: CommentImageUpload) {
     setCommentImageUploading(true);
     const fd = new FormData();
     fd.append("file", img.file);

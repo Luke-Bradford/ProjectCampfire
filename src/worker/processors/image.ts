@@ -9,6 +9,8 @@ import type { ImageJobPayload } from "@/server/jobs/image-jobs";
 
 const AVATAR_SIZE = 256; // px, square
 const POST_IMAGE_MAX = 1280; // px, longest edge
+const MAX_POST_IMAGES = 4; // must match Zod .max() in feed.create
+const MAX_COMMENT_IMAGES = 1; // must match Zod .max() in feed.comment
 
 async function downloadFromMinio(key: string): Promise<Buffer> {
   const stream = await minio.getObject(env.MINIO_BUCKET, key);
@@ -87,7 +89,7 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
           UPDATE ${posts}
           SET image_urls = (
             SELECT array_agg(CASE WHEN g.i = ${pgIndex} THEN ${url} ELSE a.v END ORDER BY g.i)
-            FROM generate_series(1, 4) AS g(i)
+            FROM generate_series(1, ${MAX_POST_IMAGES}) AS g(i)
             LEFT JOIN unnest(COALESCE(image_urls, ARRAY[]::text[])) WITH ORDINALITY AS a(v, i)
               ON a.i = g.i
           )
@@ -120,7 +122,7 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
           UPDATE ${comments}
           SET image_urls = (
             SELECT array_agg(CASE WHEN g.i = ${pgIndex} THEN ${url} ELSE a.v END ORDER BY g.i)
-            FROM generate_series(1, 1) AS g(i)
+            FROM generate_series(1, ${MAX_COMMENT_IMAGES}) AS g(i)
             LEFT JOIN unnest(COALESCE(image_urls, ARRAY[]::text[])) WITH ORDINALITY AS a(v, i)
               ON a.i = g.i
           )
