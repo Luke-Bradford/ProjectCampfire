@@ -1,31 +1,48 @@
 import type { NextConfig } from "next";
 
+type RemotePattern = NonNullable<NonNullable<NextConfig["images"]>["remotePatterns"]>[number];
+
 /**
- * Derive a next/image remotePatterns entry for the MinIO origin so that
- * post images can use <Image> instead of <img>.
+ * Derive next/image remotePatterns entries for MinIO.
  *
- * Priority:
- *   1. MINIO_PUBLIC_URL — the browser-facing base URL (e.g. http://localhost:9000/campfire).
- *      Used when MINIO_ENDPOINT is a Docker-internal hostname unreachable by browsers.
- *   2. MINIO_ENDPOINT + MINIO_PORT — the direct hostname/port.
+ * /_next/image fetches the src URL server-side. In Docker Compose, the app
+ * container must use the internal hostname (e.g. "minio") to reach MinIO,
+ * not the browser-facing "localhost". We therefore allow both:
+ *   1. MINIO_PUBLIC_URL origin — what storageUrl() stores; the server-reachable base.
+ *   2. MINIO_ENDPOINT + MINIO_PORT — the direct internal hostname, so that URLs
+ *      stored before MINIO_PUBLIC_URL was configured also continue to work.
+ *
+ * Browsers never fetch MinIO directly — they always go through /_next/image.
  */
-function minioRemotePattern(): NonNullable<NonNullable<NextConfig["images"]>["remotePatterns"]>[number] {
+function minioRemotePatterns(): RemotePattern[] {
+  const patterns: RemotePattern[] = [];
+
   const publicUrl = process.env.MINIO_PUBLIC_URL;
   if (publicUrl) {
     const u = new URL(publicUrl);
-    return {
+    patterns.push({
       protocol: u.protocol.replace(":", "") as "http" | "https",
       hostname: u.hostname,
       ...(u.port ? { port: u.port } : {}),
       pathname: "/**",
-    };
+    });
   }
+
+  // Also allow the direct endpoint so URLs stored before MINIO_PUBLIC_URL was set
+  // (or in non-Docker environments) continue to be accepted.
   const hostname = process.env.MINIO_ENDPOINT ?? "localhost";
   const port = process.env.MINIO_PORT ?? "9000";
-  // Default to http — self-hosted MinIO can run plain HTTP even in production
-  // (e.g. behind a TLS-terminating reverse proxy). If HTTPS is needed, set
-  // MINIO_PUBLIC_URL=https://... and this branch won't be reached.
-  return { protocol: "http" as const, hostname, port, pathname: "/**" };
+  // Note: this dedup is a best-effort check on hostname + port string equality.
+  // It does not normalise default ports (80/443 without explicit port), so it may
+  // add a redundant entry in edge cases — harmless (allowlist is additive).
+  const alreadyCovered = patterns.some(
+    (p) => p.hostname === hostname && (p.port ?? "") === port
+  );
+  if (!alreadyCovered) {
+    patterns.push({ protocol: "http" as const, hostname, port, pathname: "/**" });
+  }
+
+  return patterns;
 }
 
 const nextConfig: NextConfig = {
@@ -37,7 +54,7 @@ const nextConfig: NextConfig = {
   },
   transpilePackages: ["@fullcalendar"],
   images: {
-    remotePatterns: [minioRemotePattern()],
+    remotePatterns: minioRemotePatterns(),
   },
 };
 
