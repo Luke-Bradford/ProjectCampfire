@@ -282,7 +282,11 @@ function CreatePollDialog({ eventId, groupId, onCreated, forceOpen, onForceOpenC
 }) {
   const [open, setOpen] = useState(false);
 
-  // Allow external callers (e.g. the post-create nudge banner) to open the dialog
+  // Allow external callers (e.g. the post-create nudge banner) to open the dialog.
+  // Note: the parent must reset forceOpen to false when onForceOpenChange(false) is
+  // called, otherwise a future true→true transition won't re-fire this effect.
+  // Today's only caller (the nudge banner) hides itself before setting forceOpen,
+  // so re-triggering from the banner is impossible — this is intentional.
   useEffect(() => {
     if (forceOpen) setOpen(true);
   }, [forceOpen]);
@@ -449,11 +453,16 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const searchParams = useSearchParams();
   const utils = api.useUtils();
 
-  // Post-create nudge: show once when arriving from the propose-session dialog
+  // Post-create nudge: show once when arriving from the propose-session dialog.
+  // nudgeChecked ref ensures the effect runs at most once even if searchParams
+  // returns a new object after replaceState triggers a re-render.
+  const nudgeChecked = useRef(false);
   const [showNudge, setShowNudge] = useState(false);
   const [openPollDialog, setOpenPollDialog] = useState(false);
   useEffect(() => {
+    if (nudgeChecked.current) return;
     if (searchParams.get("created") === "1") {
+      nudgeChecked.current = true;
       setShowNudge(true);
       // Strip the param without pushing a new history entry
       const url = new URL(window.location.href);

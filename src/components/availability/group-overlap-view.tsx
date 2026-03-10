@@ -251,7 +251,11 @@ function DayColumn({
   totalActiveMembers: number;
   onClickOverlap: (startIdx: number, endIdx: number) => void;
 }) {
-  // Green: all active members (or ≥3 if group is large). Yellow: ≥2.
+  // Green threshold = all active members, minimum 2.
+  // With 1 active member: green never fires (solo "everyone free" isn't useful).
+  // With exactly 2 active members: green and yellow thresholds are both 2, so
+  // yellow-only slots never appear — any 2-person overlap goes straight to green.
+  // Yellow-only slots only activate with 3+ active members.
   const greenThreshold = Math.max(2, totalActiveMembers);
   const greenSlots = slotsWithMinCount(overlapCounts, greenThreshold);
   const yellowSlots = slotsWithMinCount(overlapCounts, 2);
