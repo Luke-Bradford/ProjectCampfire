@@ -187,7 +187,44 @@ export function PostCard({
   const [editPostBody, setEditPostBody] = useState(post.body ?? "");
   const postTextareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const toggleLike = api.feed.toggleLike.useMutation({ onSuccess: onRefresh });
+  // Optimistic like state — initialised from server data, updated on click.
+  const [optimisticLiked, setOptimisticLiked] = useState<boolean | null>(null);
+  const [optimisticLikeCount, setOptimisticLikeCount] = useState<number | null>(null);
+
+  // Optimistic comments — extra entries appended before the server confirms.
+  const [optimisticComments, setOptimisticComments] = useState<CommentData[]>([]);
+
+  // Keep optimistic state in sync when server data is refreshed.
+  const serverLiked = post.reactions.some((r) => r.userId === currentUserId);
+  const serverLikeCount = post.reactions.filter((r) => r.type === "like").length;
+  useEffect(() => {
+    setOptimisticLiked(null);
+    setOptimisticLikeCount(null);
+  }, [serverLiked, serverLikeCount]);
+  useEffect(() => {
+    setOptimisticComments([]);
+  }, [post.comments]);
+
+  const hasLiked = optimisticLiked ?? serverLiked;
+  const likeCount = optimisticLikeCount ?? serverLikeCount;
+  const allComments = [...post.comments, ...optimisticComments];
+  const commentCount = allComments.length;
+
+  const toggleLike = api.feed.toggleLike.useMutation({
+    onMutate: () => {
+      // Flip immediately — no waiting for the server.
+      setOptimisticLiked(!hasLiked);
+      setOptimisticLikeCount(likeCount + (hasLiked ? -1 : 1));
+    },
+    onError: () => {
+      // Revert and re-fetch authoritative state.
+      setOptimisticLiked(null);
+      setOptimisticLikeCount(null);
+      onRefresh();
+    },
+    onSuccess: onRefresh,
+  });
+
   const deletePost = api.feed.delete.useMutation({
     onSuccess: () => { setEditingPost(false); onRefresh(); },
   });
@@ -196,9 +233,34 @@ export function PostCard({
   });
   const pinPost = api.feed.pinPost.useMutation({ onSuccess: onRefresh });
   const blockUser = api.friends.block.useMutation({ onSuccess: onRefresh });
+
   const addComment = api.feed.comment.useMutation({
-    onSuccess: () => {
+    onMutate: ({ body }) => {
+      // Append a temporary comment so the user sees it immediately.
+      const optimistic: CommentData = {
+        id: `optimistic-${Date.now()}`,
+        body,
+        createdAt: new Date(),
+        editedAt: null,
+        deletedAt: null,
+        author: {
+          id: currentUserId,
+          name: "You",
+          username: null,
+          image: null,
+        },
+        reactions: [],
+      };
       setCommentBody("");
+      setOptimisticComments((prev) => [...prev, optimistic]);
+    },
+    onError: () => {
+      // Remove the optimistic entry and re-fetch.
+      setOptimisticComments([]);
+      onRefresh();
+    },
+    onSuccess: () => {
+      setOptimisticComments([]);
       onRefresh();
     },
   });
@@ -217,9 +279,6 @@ export function PostCard({
     setEditPostBody(post.body ?? "");
   }
 
-  const likeCount = post.reactions.filter((r) => r.type === "like").length;
-  const hasLiked = post.reactions.some((r) => r.userId === currentUserId);
-  const commentCount = post.comments.length;
   const isOwn = post.author.id === currentUserId;
   // Filter out null slots (unprocessed by worker) and any malformed URLs.
   // next/image calls new URL(src) internally — non-absolute or empty strings throw.
@@ -412,6 +471,7 @@ export function PostCard({
         <button
           className={`flex items-center gap-1 text-sm ${hasLiked ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
           onClick={() => toggleLike.mutate({ postId: post.id })}
+          disabled={toggleLike.isPending}
         >
           {hasLiked ? "♥" : "♡"} {likeCount > 0 && likeCount}
         </button>
@@ -426,7 +486,7 @@ export function PostCard({
       {/* Comments */}
       {showComments && (
         <div className="space-y-3 border-t pt-3">
-          {post.comments.map((c) => (
+          {allComments.map((c) => (
             <CommentRow
               key={c.id}
               comment={c}
