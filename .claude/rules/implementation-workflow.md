@@ -18,9 +18,9 @@ When asked to implement or modify something in ProjectCampfire:
 8. Keep routers thin and business logic out of UI components.
 9. If product behavior, schema, or architecture changes, update the relevant docs.
 10. After implementation, ensure the app is in a testable state before considering the task done:
-   - **Schema changes** (new migrations): run `docker compose exec migrate pnpm db:migrate` or instruct the user to run `docker compose up --build` so migrations apply.
-   - **Code-only changes** (no schema): the Docker app container must be rebuilt — run `docker compose up --build -d app` or instruct the user to do so.
-   - **Never leave the app running stale code.** If you cannot trigger the rebuild yourself (e.g. Docker not accessible in this context), explicitly tell the user: "Run `docker compose up --build` to pick up these changes before testing."
+   - **Schema changes** (new migrations): run `docker compose exec migrate pnpm db:migrate`.
+   - **Code-only changes** (no schema): the Docker app container must be rebuilt — run `docker compose up --build -d app`.
+   - **Never leave the app running stale code.** If you cannot trigger the rebuild yourself (e.g. Docker not accessible in this context), make sure you update docker or seek clarification to do so if there is any risk"
 11. After implementation, summarize:
    - what changed
    - affected files
