@@ -208,7 +208,7 @@ function CreatePollDialog({ eventId, groupId, onCreated }: { eventId: string; gr
 
 // ── Event discussion ──────────────────────────────────────────────────────────
 
-function EventDiscussion({ eventId, groupId, currentUserId, isGroupAdmin }: { eventId: string; groupId: string; currentUserId: string; isGroupAdmin: boolean }) {
+function EventDiscussion({ eventId, currentUserId, isGroupAdmin }: { eventId: string; currentUserId: string; isGroupAdmin: boolean }) {
   const { data: eventPosts, refetch } = api.feed.listForEvent.useQuery({ eventId });
 
   function refresh() { void refetch(); }
@@ -216,7 +216,7 @@ function EventDiscussion({ eventId, groupId, currentUserId, isGroupAdmin }: { ev
   return (
     <div className="space-y-3">
       <p className="text-sm font-medium">Discussion</p>
-      <PostComposer groupId={groupId} eventId={eventId} onPosted={refresh} />
+      <PostComposer eventId={eventId} onPosted={refresh} />
       {eventPosts?.length === 0 && (
         <p className="text-sm text-muted-foreground">No posts yet. Start the discussion!</p>
       )}
@@ -363,7 +363,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
       </div>
 
       {/* Discussion */}
-      <EventDiscussion eventId={id} groupId={event.groupId} currentUserId={myUserId} isGroupAdmin={isGroupAdmin} />
+      <EventDiscussion eventId={id} currentUserId={myUserId} isGroupAdmin={isGroupAdmin} />
 
       {/* Status controls (for event creator) */}
       {isEventCreator && (event.status === "open" || event.status === "draft") && (
