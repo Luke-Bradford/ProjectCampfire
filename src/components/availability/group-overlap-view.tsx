@@ -295,7 +295,8 @@ function DayColumn({
         ));
       })}
 
-      {/* Yellow: 2+ members overlap */}
+      {/* Yellow: 2+ members overlap (z-10). Green renders after at z-20 so it
+          paints on top explicitly rather than relying on DOM sibling order. */}
       {yellowRanges.map(([start, end]) => (
         <button
           key={`y-${start}-${end}`}
@@ -310,11 +311,11 @@ function DayColumn({
         />
       ))}
 
-      {/* Green: all active members overlap (or 3+) */}
+      {/* Green: all active members overlap (or 3+) — z-20 keeps it above yellow */}
       {greenRanges.map(([start, end]) => (
         <button
           key={`g-${start}-${end}`}
-          className="absolute left-0 right-0 bg-green-400/30 hover:bg-green-400/50 border border-green-500/60 rounded cursor-pointer transition-colors z-10"
+          className="absolute left-0 right-0 bg-green-400/30 hover:bg-green-400/50 border border-green-500/60 rounded cursor-pointer transition-colors z-20"
           style={{
             top: start * SLOT_HEIGHT_PX + 1,
             height: (end - start) * SLOT_HEIGHT_PX - 2,

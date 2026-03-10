@@ -517,10 +517,18 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
             </Button>
             <Button
               size="sm"
-              onClick={() => { setStatusError(""); updateStatus.mutate({ id, status: "open" }); setShowNudge(false); }}
+              onClick={() => {
+                setStatusError("");
+                // Dismiss the banner only on success — if the mutation fails,
+                // statusError renders in the Event controls section below.
+                updateStatus.mutate(
+                  { id, status: "open" },
+                  { onSuccess: () => setShowNudge(false) }
+                );
+              }}
               disabled={updateStatus.isPending}
             >
-              Open for RSVPs
+              {updateStatus.isPending ? "Opening…" : "Open for RSVPs"}
             </Button>
             <button
               className="text-muted-foreground hover:text-foreground text-xs ml-1"
