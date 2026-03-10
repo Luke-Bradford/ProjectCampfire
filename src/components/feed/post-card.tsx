@@ -187,39 +187,37 @@ export function PostCard({
   const [editPostBody, setEditPostBody] = useState(post.body ?? "");
   const postTextareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Optimistic like state — initialised from server data, updated on click.
-  const [optimisticLiked, setOptimisticLiked] = useState<boolean | null>(null);
-  const [optimisticLikeCount, setOptimisticLikeCount] = useState<number | null>(null);
+  // Optimistic like state — single atom avoids stale-closure issues when
+  // setOptimisticLike uses the functional updater form.
+  // null = show server data; non-null = show optimistic override.
+  const [optimisticLike, setOptimisticLike] = useState<{ liked: boolean; count: number } | null>(null);
 
   // Optimistic comments — extra entries appended before the server confirms.
   const [optimisticComments, setOptimisticComments] = useState<CommentData[]>([]);
 
-  // Keep optimistic state in sync when server data is refreshed.
   const serverLiked = post.reactions.some((r) => r.userId === currentUserId);
   const serverLikeCount = post.reactions.filter((r) => r.type === "like").length;
-  useEffect(() => {
-    setOptimisticLiked(null);
-    setOptimisticLikeCount(null);
-  }, [serverLiked, serverLikeCount]);
-  useEffect(() => {
-    setOptimisticComments([]);
-  }, [post.comments]);
 
-  const hasLiked = optimisticLiked ?? serverLiked;
-  const likeCount = optimisticLikeCount ?? serverLikeCount;
+  // Reset optimistic overrides when server data arrives (reactions array changed).
+  useEffect(() => { setOptimisticLike(null); }, [post.reactions]);
+  useEffect(() => { setOptimisticComments([]); }, [post.comments]);
+
+  const hasLiked = optimisticLike?.liked ?? serverLiked;
+  const likeCount = optimisticLike?.count ?? serverLikeCount;
   const allComments = [...post.comments, ...optimisticComments];
   const commentCount = allComments.length;
 
   const toggleLike = api.feed.toggleLike.useMutation({
     onMutate: () => {
-      // Flip immediately — no waiting for the server.
-      setOptimisticLiked(!hasLiked);
-      setOptimisticLikeCount(likeCount + (hasLiked ? -1 : 1));
+      // Functional updater reads the latest state atomically — no stale closure.
+      setOptimisticLike((prev) => {
+        const currentLiked = prev?.liked ?? serverLiked;
+        const currentCount = prev?.count ?? serverLikeCount;
+        return { liked: !currentLiked, count: currentCount + (currentLiked ? -1 : 1) };
+      });
     },
     onError: () => {
-      // Revert and re-fetch authoritative state.
-      setOptimisticLiked(null);
-      setOptimisticLikeCount(null);
+      setOptimisticLike(null);
       onRefresh();
     },
     onSuccess: onRefresh,
@@ -236,26 +234,26 @@ export function PostCard({
 
   const addComment = api.feed.comment.useMutation({
     onMutate: ({ body }) => {
+      // Capture the current textarea value so we can restore it if the mutation fails.
+      const previousBody = commentBody;
       // Append a temporary comment so the user sees it immediately.
+      // "You" is a placeholder — replaced by the real author name once onRefresh runs.
       const optimistic: CommentData = {
-        id: `optimistic-${Date.now()}`,
+        id: `optimistic-${crypto.randomUUID()}`,
         body,
         createdAt: new Date(),
         editedAt: null,
         deletedAt: null,
-        author: {
-          id: currentUserId,
-          name: "You",
-          username: null,
-          image: null,
-        },
+        author: { id: currentUserId, name: "You", username: null, image: null },
         reactions: [],
       };
       setCommentBody("");
       setOptimisticComments((prev) => [...prev, optimistic]);
+      return { previousBody };
     },
-    onError: () => {
-      // Remove the optimistic entry and re-fetch.
+    onError: (_err, _vars, context) => {
+      // Restore the textarea text and remove the optimistic entry.
+      setCommentBody(context?.previousBody ?? "");
       setOptimisticComments([]);
       onRefresh();
     },
