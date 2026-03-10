@@ -32,6 +32,9 @@ function minioRemotePatterns(): RemotePattern[] {
   // (or in non-Docker environments) continue to be accepted.
   const hostname = process.env.MINIO_ENDPOINT ?? "localhost";
   const port = process.env.MINIO_PORT ?? "9000";
+  // Note: this dedup is a best-effort check on hostname + port string equality.
+  // It does not normalise default ports (80/443 without explicit port), so it may
+  // add a redundant entry in edge cases — harmless (allowlist is additive).
   const alreadyCovered = patterns.some(
     (p) => p.hostname === hostname && (p.port ?? "") === port
   );
