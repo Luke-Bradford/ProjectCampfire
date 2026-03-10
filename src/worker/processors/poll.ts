@@ -103,6 +103,9 @@ async function closePoll(pollId: string): Promise<void> {
     }),
   ]);
 
+  if (!poll.eventId && !groupId) {
+    console.warn(`[poll] poll ${pollId} has no eventId or groupId — CTA will link to app root`);
+  }
   const ctaUrl = poll.eventId
     ? `${env.NEXT_PUBLIC_APP_URL}/events/${poll.eventId}`
     : groupId
