@@ -39,7 +39,7 @@ async function registerRepeatableJob(
       return;
     } catch (err) {
       const isLast = attempt === maxAttempts;
-      const delayMs = Math.min(1000 * 2 ** (attempt - 1), 30_000); // 1s, 2s, 4s, 8s, 16s → capped at 30s
+      const delayMs = Math.min(1000 * 2 ** (attempt - 1), 30_000); // 1s, 2s, 4s, 8s, 16s (30s cap is a safeguard for callers with higher maxAttempts)
       console.error(
         `[worker] failed to register ${label} (attempt ${attempt}/${maxAttempts})${isLast ? " — giving up" : `, retrying in ${delayMs}ms`}:`,
         err,
@@ -86,6 +86,8 @@ new Worker<OgFetchJobPayload>(
   { connection: bullmqConnection }
 );
 
+console.log("Campfire workers started");
+
 // Repeatable jobs — registered with retry so a transient Redis blip at startup
 // doesn't silently disable cleanup jobs. If all retries fail the process throws,
 // which Docker Compose will restart (giving Redis time to recover).
@@ -110,7 +112,7 @@ new Worker<OgFetchJobPayload>(
       )
     ),
   ]);
-  console.log("Campfire workers started");
+  console.log("Campfire repeatable jobs registered");
 })().catch((err: unknown) => {
   console.error("[worker] fatal: could not register repeatable jobs after all retries:", err);
   process.exit(1);
