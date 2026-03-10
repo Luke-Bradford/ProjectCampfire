@@ -36,6 +36,10 @@ export const eventsRouter = createTRPCRouter({
         groupId: z.string(),
         title: z.string().min(1).max(200),
         description: z.string().max(2000).optional(),
+        // Optional pre-filled time from the overlap view (CAMP-053).
+        // Stored on the draft so the organiser can confirm it without retyping.
+        confirmedStartsAt: z.string().datetime().optional(),
+        confirmedEndsAt: z.string().datetime().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -48,6 +52,8 @@ export const eventsRouter = createTRPCRouter({
         description: input.description ?? null,
         createdBy: ctx.user.id,
         status: "draft",
+        confirmedStartsAt: input.confirmedStartsAt ? new Date(input.confirmedStartsAt) : null,
+        confirmedEndsAt: input.confirmedEndsAt ? new Date(input.confirmedEndsAt) : null,
       });
       return { id };
     }),

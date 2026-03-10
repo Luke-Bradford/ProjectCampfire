@@ -5,15 +5,25 @@
  *
  * - Shows each member's available slots as coloured horizontal bands.
  * - Highlights overlap windows (all selected members free) with a green tint.
- * - Click an overlap window to propose a session (creates a draft event and
- *   navigates to it so the organiser can open it for RSVPs immediately).
+ * - Click an overlap window to propose a session (creates a draft event with
+ *   the start/end time pre-filled, then navigates to the event page).
  * - Toggle individual members on/off to narrow the overlap.
+ *
+ * Note: the grid is rendered in UTC. Availability slots returned by the server
+ * are already expressed as UTC ISO timestamps (expanded from the member's local
+ * timezone by expandAvailability on the server). The times shown on the grid
+ * are therefore UTC wall-clock times. This is a known MVP limitation — a future
+ * improvement would convert slot positions to the viewing user's local timezone.
  */
 
 import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { format, addDays, parseISO, startOfWeek, endOfWeek } from "date-fns";
 import { api } from "@/trpc/react";
+import type { inferRouterOutputs } from "@trpc/server";
+import type { AppRouter } from "@/server/trpc/routers/_app";
+
+type RouterOutputs = inferRouterOutputs<AppRouter>;
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Dialog,
@@ -44,6 +54,7 @@ function initials(name: string) {
     .slice(0, 2);
 }
 
+/** Convert an ISO timestamp to a 30-min slot index relative to UTC midnight of dateStr */
 function isoToSlotIndex(iso: string, dateStr: string): number {
   const d = new Date(iso);
   const base = new Date(`${dateStr}T00:00:00Z`);
@@ -63,15 +74,13 @@ function slotIndexToISO(dateStr: string, slotIdx: number): string {
   return base.toISOString();
 }
 
+// ── Types derived from tRPC output (avoids unsafe `as` casts) ─────────────────
+
+type GroupOverlapItem = RouterOutputs["availability"]["groupOverlap"][number];
+type ComputedSlot = GroupOverlapItem["slots"][number];
+
 /** Member availability as a set of slot indices per date */
 type MemberSlots = Record<string, Set<number>>;
-
-type ComputedSlot = {
-  date: string;
-  start: string;
-  end: string;
-  type: "available" | "busy";
-};
 
 function buildMemberSlots(slots: ComputedSlot[]): MemberSlots {
   const result: MemberSlots = {};
@@ -123,14 +132,17 @@ function mergeSlots(slots: Set<number>): Array<[number, number]> {
 }
 
 // ── Colour palette for members ────────────────────────────────────────────────
+// Each entry has a `band` class (used on the availability band) and a `dot`
+// class (used on the toggle button indicator). Keeping them separate avoids
+// fragile string manipulation to derive one from the other.
 
-const MEMBER_COLORS = [
-  "bg-blue-400/50 border-blue-500",
-  "bg-purple-400/50 border-purple-500",
-  "bg-orange-400/50 border-orange-500",
-  "bg-pink-400/50 border-pink-500",
-  "bg-cyan-400/50 border-cyan-500",
-  "bg-yellow-400/50 border-yellow-500",
+const MEMBER_COLORS: Array<{ band: string; dot: string }> = [
+  { band: "bg-blue-400/50 border-blue-500",   dot: "bg-blue-400" },
+  { band: "bg-purple-400/50 border-purple-500", dot: "bg-purple-400" },
+  { band: "bg-orange-400/50 border-orange-500", dot: "bg-orange-400" },
+  { band: "bg-pink-400/50 border-pink-500",   dot: "bg-pink-400" },
+  { band: "bg-cyan-400/50 border-cyan-500",   dot: "bg-cyan-400" },
+  { band: "bg-yellow-400/50 border-yellow-500", dot: "bg-yellow-400" },
 ];
 
 // ── Propose session dialog ────────────────────────────────────────────────────
@@ -161,10 +173,13 @@ function ProposeDialog({
     onError: (e) => setError(e.message),
   });
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
-    create.mutate({ groupId, title, description: undefined });
+    // Pass the overlap start/end as the proposed confirmed time.
+    // The event is created as a draft so the organiser can review and open it
+    // for RSVPs on the event page. The time is pre-filled in the Confirm dialog.
+    create.mutate({ groupId, title, confirmedStartsAt: startsAt, confirmedEndsAt: endsAt });
   }
 
   const startLabel = format(new Date(startsAt), "EEE d MMM, HH:mm");
@@ -177,7 +192,7 @@ function ProposeDialog({
           <DialogTitle>Propose session</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          {startLabel} – {endLabel}
+          {startLabel} – {endLabel} (UTC)
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
@@ -195,7 +210,7 @@ function ProposeDialog({
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            This creates a draft event. You can confirm the time and open it for RSVPs on the event page.
+            Creates a draft event with the selected time pre-filled. Open it for RSVPs on the event page.
           </p>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
@@ -218,7 +233,7 @@ function DayColumn({
   onClickOverlap,
 }: {
   dateStr: string;
-  memberData: Array<{ color: string; slots: MemberSlots }>;
+  memberData: Array<{ band: string; slots: MemberSlots }>;
   overlapSlots: Set<number>;
   onClickOverlap: (startIdx: number, endIdx: number) => void;
 }) {
@@ -226,23 +241,24 @@ function DayColumn({
 
   return (
     <div className="relative flex-1 min-w-0 border-l" style={{ height: SLOTS_PER_DAY * SLOT_HEIGHT_PX }}>
-      {/* Hour lines */}
-      {Array.from({ length: 25 }, (_, h) => (
+      {/* Hour lines — 24 lines for hours 0–23, plus a closing bottom border */}
+      {Array.from({ length: 24 }, (_, h) => (
         <div
           key={h}
           className="absolute left-0 right-0 border-t border-border/40"
           style={{ top: h * HOUR_HEIGHT_PX }}
         />
       ))}
+      <div className="absolute left-0 right-0 border-t border-border/40" style={{ top: 24 * HOUR_HEIGHT_PX }} />
 
       {/* Member availability bands */}
-      {memberData.map(({ color, slots }, memberIdx) => {
+      {memberData.map(({ band, slots }, memberIdx) => {
         const ranges = mergeSlots(slots[dateStr] ?? new Set());
         const laneWidth = 100 / memberData.length;
         return ranges.map(([start, end], i) => (
           <div
             key={`${memberIdx}-${i}`}
-            className={`absolute border-l-2 ${color} opacity-80`}
+            className={`absolute border-l-2 ${band} opacity-80`}
             style={{
               top: start * SLOT_HEIGHT_PX,
               height: (end - start) * SLOT_HEIGHT_PX,
@@ -254,9 +270,9 @@ function DayColumn({
       })}
 
       {/* Overlap highlight (all members free) */}
-      {overlapRanges.map(([start, end], i) => (
+      {overlapRanges.map(([start, end]) => (
         <button
-          key={i}
+          key={`${start}-${end}`}
           className="absolute left-0 right-0 bg-green-400/30 hover:bg-green-400/50 border border-green-500/60 rounded cursor-pointer transition-colors z-10"
           style={{
             top: start * SLOT_HEIGHT_PX + 1,
@@ -276,7 +292,8 @@ function DayColumn({
 function TimeAxis() {
   return (
     <div className="relative shrink-0 w-10 text-right pr-1" style={{ height: SLOTS_PER_DAY * SLOT_HEIGHT_PX }}>
-      {Array.from({ length: 25 }, (_, h) => (
+      {/* Labels for hours 00–23; the closing line at row 24 has no label */}
+      {Array.from({ length: 24 }, (_, h) => (
         <div
           key={h}
           className="absolute right-1 text-[10px] text-muted-foreground leading-none -translate-y-1/2"
@@ -290,13 +307,6 @@ function TimeAxis() {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-
-type Member = {
-  id: string;
-  name: string;
-  username?: string | null;
-  image?: string | null;
-};
 
 export function GroupOverlapView({ groupId }: { groupId: string }) {
   // Week navigation
@@ -330,13 +340,13 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
   // Propose dialog state
   const [proposal, setProposal] = useState<{ startsAt: string; endsAt: string } | null>(null);
 
-  // Compute per-member slot sets
+  // Compute per-member slot sets — typed via RouterOutputs, no unsafe casts
   const memberSlotData = useMemo(() => {
     if (!memberAvailability) return [];
     return memberAvailability.map((m, idx) => ({
-      user: m.user as Member,
+      user: m.user,
       color: MEMBER_COLORS[idx % MEMBER_COLORS.length]!,
-      slots: buildMemberSlots(m.slots as ComputedSlot[]),
+      slots: buildMemberSlots(m.slots),
     }));
   }, [memberAvailability]);
 
@@ -382,9 +392,7 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
                 <AvatarImage src={m.user.image ?? undefined} />
                 <AvatarFallback className="text-[8px]">{initials(m.user.name)}</AvatarFallback>
               </Avatar>
-              <span
-                className={`inline-block h-2 w-2 rounded-full ${m.color.split(" ")[0]!.replace("/50", "")}`}
-              />
+              <span className={`inline-block h-2 w-2 rounded-full ${m.color.dot}`} />
               {m.user.name}
             </button>
           );
@@ -437,7 +445,7 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
               <DayColumn
                 key={dateStr}
                 dateStr={dateStr}
-                memberData={activeMembers.map((m) => ({ color: m.color, slots: m.slots }))}
+                memberData={activeMembers.map((m) => ({ band: m.color.band, slots: m.slots }))}
                 overlapSlots={overlapByDate[dateStr] ?? new Set()}
                 onClickOverlap={(start, end) => handleClickOverlap(dateStr, start, end)}
               />
