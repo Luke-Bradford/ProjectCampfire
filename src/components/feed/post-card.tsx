@@ -195,7 +195,7 @@ export function PostCard({
   // Optimistic comments — extra entries appended before the server confirms.
   const [optimisticComments, setOptimisticComments] = useState<CommentData[]>([]);
 
-  const serverLiked = post.reactions.some((r) => r.userId === currentUserId);
+  const serverLiked = post.reactions.some((r) => r.userId === currentUserId && r.type === "like");
   const serverLikeCount = post.reactions.filter((r) => r.type === "like").length;
 
   // Reset optimistic overrides when server data arrives (reactions array changed).
