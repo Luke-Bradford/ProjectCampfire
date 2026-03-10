@@ -4,6 +4,7 @@ import { db } from "@/server/db";
 import { polls, pollOptions, groups } from "@/server/db/schema";
 import { enqueuePollClosed } from "@/server/jobs/email-jobs";
 import type { PollJobPayload } from "@/server/jobs/poll-jobs";
+import { env } from "@/env";
 
 export async function processPollJob(job: Job<PollJobPayload>): Promise<void> {
   const { data } = job;
@@ -102,12 +103,19 @@ async function closePoll(pollId: string): Promise<void> {
     }),
   ]);
 
+  const ctaUrl = poll.eventId
+    ? `${env.NEXT_PUBLIC_APP_URL}/events/${poll.eventId}`
+    : groupId
+      ? `${env.NEXT_PUBLIC_APP_URL}/groups/${groupId}`
+      : env.NEXT_PUBLIC_APP_URL;
+
   const voterIds = [...new Set(voters.map((v) => v.userId))];
   if (voterIds.length > 0) {
     void enqueuePollClosed({
       pollId,
       pollQuestion: poll.question,
       groupName: group?.name ?? "your group",
+      ctaUrl,
       recipientUserIds: voterIds,
     }).catch((err: unknown) =>
       console.error(`[poll] failed to enqueue poll_closed email for ${pollId}:`, err),

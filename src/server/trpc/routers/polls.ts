@@ -7,6 +7,7 @@ import { db } from "@/server/db";
 import { polls, pollOptions, pollVotes, events, groupMemberships, groups } from "@/server/db/schema";
 import { enqueuePollOpened, enqueuePollClosed } from "@/server/jobs/email-jobs";
 import { enqueueClosePoll } from "@/server/jobs/poll-jobs";
+import { env } from "@/env";
 
 async function assertPollMember(pollId: string, userId: string) {
   const poll = await db.query.polls.findFirst({ where: eq(polls.id, pollId) });
@@ -125,11 +126,16 @@ export const pollsRouter = createTRPCRouter({
         });
         eventTitle = ev?.title;
       }
+      // CTA links to the event page if event-scoped, otherwise the group page.
+      const ctaUrl = input.eventId
+        ? `${env.NEXT_PUBLIC_APP_URL}/events/${input.eventId}`
+        : `${env.NEXT_PUBLIC_APP_URL}/groups/${groupId}`;
       void enqueuePollOpened({
         pollId: id,
         pollQuestion: input.question,
         groupName: group?.name ?? "your group",
         eventTitle,
+        ctaUrl,
         recipientUserIds: members.map((m) => m.userId).filter((uid) => uid !== ctx.user.id),
       });
 
@@ -258,10 +264,14 @@ export const pollsRouter = createTRPCRouter({
         }),
       ]);
       const voterIds = [...new Set(voters.map((v) => v.userId))];
+      const closedCtaUrl = poll.eventId
+        ? `${env.NEXT_PUBLIC_APP_URL}/events/${poll.eventId}`
+        : `${env.NEXT_PUBLIC_APP_URL}/groups/${groupId}`;
       void enqueuePollClosed({
         pollId: input.id,
         pollQuestion: poll.question,
         groupName: group?.name ?? "your group",
+        ctaUrl: closedCtaUrl,
         recipientUserIds: voterIds,
       });
 
