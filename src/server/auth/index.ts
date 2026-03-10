@@ -5,6 +5,30 @@ import { db } from "@/server/db";
 import { user, session, account, verification } from "@/server/db/schema";
 import { env } from "@/env";
 
+/**
+ * Returns false to cancel session creation if the user is soft-deleted,
+ * or undefined to proceed normally.
+ *
+ * Exported for unit testing — the logic lives here so tests exercise
+ * the production code path, not a copy.
+ *
+ * Hook contract (verified against better-auth@1.5.4 dist/db/with-hooks.mjs):
+ *   return false       → cancel session creation (returns null from createWithHooks)
+ *   return { data: x } → use modified session data
+ *   return undefined   → proceed with original session data (our happy path)
+ * On any better-auth version bump, re-verify this contract before upgrading.
+ */
+export async function checkSessionAllowed(userId: string): Promise<false | undefined> {
+  const row = await db.query.user.findFirst({
+    where: eq(user.id, userId),
+    columns: { deletedAt: true },
+  });
+  if (row?.deletedAt) {
+    return false; // cancels session creation
+  }
+  // undefined return → proceed normally
+}
+
 export const auth = betterAuth({
   secret: env.AUTH_SECRET,
   baseURL: env.NEXT_PUBLIC_APP_URL,
@@ -21,24 +45,7 @@ export const auth = betterAuth({
   databaseHooks: {
     session: {
       create: {
-        // Block session creation for soft-deleted accounts. This covers both
-        // email/password sign-in and OAuth re-authentication, preventing a
-        // deleted user from logging back in or having a new session provisioned.
-        // Hook contract (verified against better-auth@1.5.4 dist/db/with-hooks.mjs):
-        //   return false       → cancel session creation (returns null from createWithHooks)
-        //   return { data: x } → use modified session data
-        //   return undefined   → proceed with original session data (our happy path)
-        // If better-auth changes this contract, upgrade with care and re-verify.
-        before: async (newSession) => {
-          const row = await db.query.user.findFirst({
-            where: eq(user.id, newSession.userId),
-            columns: { deletedAt: true },
-          });
-          if (row?.deletedAt) {
-            return false; // cancels session creation
-          }
-          // undefined return → proceed normally
-        },
+        before: (newSession) => checkSessionAllowed(newSession.userId),
       },
     },
   },

@@ -1,57 +1,77 @@
 /**
- * Unit tests for the session creation hook in src/server/auth/index.ts.
+ * Unit tests for checkSessionAllowed — the session creation hook in
+ * src/server/auth/index.ts that blocks soft-deleted accounts from
+ * re-authenticating.
  *
- * The hook blocks session creation for soft-deleted accounts by returning `false`.
- * This is a security-critical gate: if the better-auth hook contract changes
- * (e.g. `false` no longer cancels creation), deleted users could re-authenticate.
+ * These tests import the production function directly so any change to
+ * the logic is caught immediately. The DB module is mocked to keep
+ * tests fast and dependency-free.
  *
- * These tests exercise the hook logic in isolation against a mock DB. They do NOT
- * verify the better-auth hook contract itself — see the comment in index.ts for
- * how to verify that on a better-auth version bump.
+ * NOTE: These tests do NOT verify the better-auth hook contract itself
+ * (i.e. that returning `false` from a `before` hook cancels session
+ * creation). See the comment in index.ts for how to verify that on a
+ * better-auth version bump.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// ── Inline the hook logic so it can be tested without importing better-auth ──
+// Mock the DB before importing the module under test so the module-level
+// `db` reference resolves to the mock.
+vi.mock("@/server/db", () => ({
+  db: {
+    query: {
+      user: {
+        findFirst: vi.fn(),
+      },
+    },
+  },
+}));
 
-async function sessionCreateBefore(
-  newSession: { userId: string },
-  findUser: (id: string) => Promise<{ deletedAt: Date | null } | undefined>
-): Promise<false | undefined> {
-  const row = await findUser(newSession.userId);
-  if (row?.deletedAt) {
-    return false; // cancels session creation
-  }
-  // undefined → proceed normally
-}
+// Mock env so the module can be imported without real env vars set.
+vi.mock("@/env", () => ({
+  env: {
+    AUTH_SECRET: "test-secret-that-is-at-least-32-chars-long",
+    NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+    DATABASE_URL: "postgresql://test",
+  },
+}));
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
+// Mock better-auth to avoid importing its full dependency tree.
+vi.mock("better-auth", () => ({ betterAuth: () => ({}) }));
+vi.mock("better-auth/adapters/drizzle", () => ({ drizzleAdapter: () => ({}) }));
 
-describe("session create before hook", () => {
+import { db } from "@/server/db";
+import { checkSessionAllowed } from "./index";
+
+const mockFindFirst = db.query.user.findFirst as ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  mockFindFirst.mockReset();
+});
+
+describe("checkSessionAllowed", () => {
   it("returns undefined (allow) for an active user", async () => {
-    const findUser = vi.fn().mockResolvedValue({ deletedAt: null });
-    const result = await sessionCreateBefore({ userId: "user-1" }, findUser);
+    mockFindFirst.mockResolvedValue({ deletedAt: null });
+    const result = await checkSessionAllowed("user-1");
     expect(result).toBeUndefined();
-    expect(findUser).toHaveBeenCalledWith("user-1");
   });
 
   it("returns false (block) for a soft-deleted user", async () => {
-    const findUser = vi.fn().mockResolvedValue({ deletedAt: new Date("2024-01-01") });
-    const result = await sessionCreateBefore({ userId: "deleted-user" }, findUser);
+    mockFindFirst.mockResolvedValue({ deletedAt: new Date("2024-01-01") });
+    const result = await checkSessionAllowed("deleted-user");
     expect(result).toBe(false);
   });
 
   it("returns undefined (allow) when the user row is not found", async () => {
-    // Unknown userId: safest to allow and let better-auth handle the missing user.
-    const findUser = vi.fn().mockResolvedValue(undefined);
-    const result = await sessionCreateBefore({ userId: "ghost-user" }, findUser);
+    // Unknown userId: let better-auth handle the missing user — hook's job
+    // is only to gate on soft-deletion, not general user existence.
+    mockFindFirst.mockResolvedValue(undefined);
+    const result = await checkSessionAllowed("ghost-user");
     expect(result).toBeUndefined();
   });
 
   it("propagates DB errors (does not silently swallow them)", async () => {
-    const findUser = vi.fn().mockRejectedValue(new Error("DB connection lost"));
-    await expect(sessionCreateBefore({ userId: "user-1" }, findUser)).rejects.toThrow(
-      "DB connection lost"
-    );
+    mockFindFirst.mockRejectedValue(new Error("DB connection lost"));
+    await expect(checkSessionAllowed("user-1")).rejects.toThrow("DB connection lost");
   });
 });
