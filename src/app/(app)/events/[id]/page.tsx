@@ -262,6 +262,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   if (!event) return <p className="text-muted-foreground text-sm">Event not found.</p>;
 
   const myUserId = me?.id ?? "";
+  const myRsvp = event.rsvps.find((r) => r.user.id === myUserId)?.status ?? null;
   const yesCount = event.rsvps.filter((r) => r.status === "yes").length;
   const maybeCount = event.rsvps.filter((r) => r.status === "maybe").length;
   const noCount = event.rsvps.filter((r) => r.status === "no").length;
@@ -304,7 +305,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
               <Button
                 key={s}
                 size="sm"
-                variant="outline"
+                variant={myRsvp === s ? "default" : "outline"}
                 disabled={upsertRsvp.isPending}
                 onClick={() => upsertRsvp.mutate({ eventId: id, status: s })}
               >
