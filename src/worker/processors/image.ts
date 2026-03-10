@@ -157,6 +157,10 @@ async function sweepOrphanedUploads(): Promise<void> {
     return;
   }
 
-  await minio.removeObjects(bucket, toDelete);
+  // MinIO batch delete is capped at 1000 objects per request. Chunk to be safe.
+  const BATCH_SIZE = 1000;
+  for (let i = 0; i < toDelete.length; i += BATCH_SIZE) {
+    await minio.removeObjects(bucket, toDelete.slice(i, i + BATCH_SIZE));
+  }
   console.log(`[image] sweep_orphaned_uploads: deleted ${toDelete.length} orphaned raw upload(s)`);
 }
