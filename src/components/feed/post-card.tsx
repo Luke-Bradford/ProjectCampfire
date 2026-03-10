@@ -221,7 +221,12 @@ export function PostCard({
   const hasLiked = post.reactions.some((r) => r.userId === currentUserId);
   const commentCount = post.comments.length;
   const isOwn = post.author.id === currentUserId;
-  const imageUrls = (post.imageUrls ?? []).filter((u): u is string => u !== null);
+  // Filter out null slots (unprocessed by worker) and any malformed URLs.
+  // next/image calls new URL(src) internally — non-absolute or empty strings throw.
+  const imageUrls = (post.imageUrls ?? []).filter((u): u is string => {
+    if (!u) return false;
+    try { new URL(u); return true; } catch { return false; }
+  });
 
   return (
     <article className={cn("space-y-3 rounded-lg border p-4", post.pinnedAt && "border-primary/40 bg-primary/5")}>
