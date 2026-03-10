@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -273,8 +273,28 @@ function GameOptionSlot({
 
 // ── Create poll dialog ────────────────────────────────────────────────────────
 
-function CreatePollDialog({ eventId, groupId, onCreated }: { eventId: string; groupId: string; onCreated: () => void }) {
+function CreatePollDialog({ eventId, groupId, onCreated, forceOpen, onForceOpenChange }: {
+  eventId: string;
+  groupId: string;
+  onCreated: () => void;
+  forceOpen?: boolean;
+  onForceOpenChange?: (v: boolean) => void;
+}) {
   const [open, setOpen] = useState(false);
+
+  // Allow external callers (e.g. the post-create nudge banner) to open the dialog.
+  // Note: the parent must reset forceOpen to false when onForceOpenChange(false) is
+  // called, otherwise a future true→true transition won't re-fire this effect.
+  // Today's only caller (the nudge banner) hides itself before setting forceOpen,
+  // so re-triggering from the banner is impossible — this is intentional.
+  useEffect(() => {
+    if (forceOpen) setOpen(true);
+  }, [forceOpen]);
+
+  function handleOpenChange(v: boolean) {
+    setOpen(v);
+    onForceOpenChange?.(v);
+  }
   const [question, setQuestion] = useState("");
   const [type, setType] = useState<"time_slot" | "game" | "custom">("custom");
   // Plain text options (custom / time_slot)
@@ -327,7 +347,7 @@ function CreatePollDialog({ eventId, groupId, onCreated }: { eventId: string; gr
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
+    <Dialog open={open} onOpenChange={(v) => { handleOpenChange(v); if (!v) resetForm(); }}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">Add poll</Button>
       </DialogTrigger>
@@ -430,7 +450,26 @@ function EventDiscussion({ eventId, currentUserId, isGroupAdmin }: { eventId: st
 export default function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const utils = api.useUtils();
+
+  // Post-create nudge: show once when arriving from the propose-session dialog.
+  // nudgeChecked ref ensures the effect runs at most once even if searchParams
+  // returns a new object after replaceState triggers a re-render.
+  const nudgeChecked = useRef(false);
+  const [showNudge, setShowNudge] = useState(false);
+  const [openPollDialog, setOpenPollDialog] = useState(false);
+  useEffect(() => {
+    if (nudgeChecked.current) return;
+    if (searchParams.get("created") === "1") {
+      nudgeChecked.current = true;
+      setShowNudge(true);
+      // Strip the param without pushing a new history entry
+      const url = new URL(window.location.href);
+      url.searchParams.delete("created");
+      window.history.replaceState(null, "", url.toString());
+    }
+  }, [searchParams]);
 
   const { data: me } = api.user.me.useQuery();
   const { data: event, isLoading } = api.events.get.useQuery({ id });
@@ -459,10 +498,48 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const maybeCount = event.rsvps.filter((r) => r.status === "maybe").length;
   const noCount = event.rsvps.filter((r) => r.status === "no").length;
   const isEventCreator = event.createdBy.id === myUserId;
+  const isEventCreatorAndDraft = isEventCreator && event.status === "draft";
   const isGroupAdmin = groupData?.myRole === "owner" || groupData?.myRole === "admin";
 
   return (
     <div className="space-y-6">
+      {/* Post-create nudge banner — shown once after proposing a session from the overlap view */}
+      {showNudge && isEventCreatorAndDraft && (
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+          <p className="font-medium">Session created. What would you like to do next?</p>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => { setOpenPollDialog(true); setShowNudge(false); }}
+            >
+              Add a poll
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setStatusError("");
+                // Dismiss the banner only on success — if the mutation fails,
+                // statusError renders in the Event controls section below.
+                updateStatus.mutate(
+                  { id, status: "open" },
+                  { onSuccess: () => setShowNudge(false) }
+                );
+              }}
+              disabled={updateStatus.isPending}
+            >
+              {updateStatus.isPending ? "Opening…" : "Open for RSVPs"}
+            </Button>
+            <button
+              className="text-muted-foreground hover:text-foreground text-xs ml-1"
+              onClick={() => setShowNudge(false)}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div>
         <button onClick={() => router.back()} className="text-sm text-muted-foreground hover:text-foreground mb-2">
@@ -538,6 +615,8 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
               eventId={id}
               groupId={event.groupId}
               onCreated={() => void utils.events.get.invalidate({ id })}
+              forceOpen={openPollDialog}
+              onForceOpenChange={(v) => { if (!v) setOpenPollDialog(false); }}
             />
           )}
         </div>
