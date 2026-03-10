@@ -187,7 +187,42 @@ export function PostCard({
   const [editPostBody, setEditPostBody] = useState(post.body ?? "");
   const postTextareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const toggleLike = api.feed.toggleLike.useMutation({ onSuccess: onRefresh });
+  // Optimistic like state — single atom avoids stale-closure issues when
+  // setOptimisticLike uses the functional updater form.
+  // null = show server data; non-null = show optimistic override.
+  const [optimisticLike, setOptimisticLike] = useState<{ liked: boolean; count: number } | null>(null);
+
+  // Optimistic comments — extra entries appended before the server confirms.
+  const [optimisticComments, setOptimisticComments] = useState<CommentData[]>([]);
+
+  const serverLiked = post.reactions.some((r) => r.userId === currentUserId && r.type === "like");
+  const serverLikeCount = post.reactions.filter((r) => r.type === "like").length;
+
+  // Reset optimistic overrides when server data arrives (reactions array changed).
+  useEffect(() => { setOptimisticLike(null); }, [post.reactions]);
+  useEffect(() => { setOptimisticComments([]); }, [post.comments]);
+
+  const hasLiked = optimisticLike?.liked ?? serverLiked;
+  const likeCount = optimisticLike?.count ?? serverLikeCount;
+  const allComments = [...post.comments, ...optimisticComments];
+  const commentCount = allComments.length;
+
+  const toggleLike = api.feed.toggleLike.useMutation({
+    onMutate: () => {
+      // Functional updater reads the latest state atomically — no stale closure.
+      setOptimisticLike((prev) => {
+        const currentLiked = prev?.liked ?? serverLiked;
+        const currentCount = prev?.count ?? serverLikeCount;
+        return { liked: !currentLiked, count: currentCount + (currentLiked ? -1 : 1) };
+      });
+    },
+    onError: () => {
+      setOptimisticLike(null);
+      onRefresh();
+    },
+    onSuccess: onRefresh,
+  });
+
   const deletePost = api.feed.delete.useMutation({
     onSuccess: () => { setEditingPost(false); onRefresh(); },
   });
@@ -196,9 +231,34 @@ export function PostCard({
   });
   const pinPost = api.feed.pinPost.useMutation({ onSuccess: onRefresh });
   const blockUser = api.friends.block.useMutation({ onSuccess: onRefresh });
+
   const addComment = api.feed.comment.useMutation({
-    onSuccess: () => {
+    onMutate: ({ body }) => {
+      // Capture the current textarea value so we can restore it if the mutation fails.
+      const previousBody = commentBody;
+      // Append a temporary comment so the user sees it immediately.
+      // "You" is a placeholder — replaced by the real author name once onRefresh runs.
+      const optimistic: CommentData = {
+        id: `optimistic-${crypto.randomUUID()}`,
+        body,
+        createdAt: new Date(),
+        editedAt: null,
+        deletedAt: null,
+        author: { id: currentUserId, name: "You", username: null, image: null },
+        reactions: [],
+      };
       setCommentBody("");
+      setOptimisticComments((prev) => [...prev, optimistic]);
+      return { previousBody };
+    },
+    onError: (_err, _vars, context) => {
+      // Restore the textarea text and remove the optimistic entry.
+      setCommentBody(context?.previousBody ?? "");
+      setOptimisticComments([]);
+      onRefresh();
+    },
+    onSuccess: () => {
+      setOptimisticComments([]);
       onRefresh();
     },
   });
@@ -217,9 +277,6 @@ export function PostCard({
     setEditPostBody(post.body ?? "");
   }
 
-  const likeCount = post.reactions.filter((r) => r.type === "like").length;
-  const hasLiked = post.reactions.some((r) => r.userId === currentUserId);
-  const commentCount = post.comments.length;
   const isOwn = post.author.id === currentUserId;
   // Filter out null slots (unprocessed by worker) and any malformed URLs.
   // next/image calls new URL(src) internally — non-absolute or empty strings throw.
@@ -412,6 +469,7 @@ export function PostCard({
         <button
           className={`flex items-center gap-1 text-sm ${hasLiked ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
           onClick={() => toggleLike.mutate({ postId: post.id })}
+          disabled={toggleLike.isPending}
         >
           {hasLiked ? "♥" : "♡"} {likeCount > 0 && likeCount}
         </button>
@@ -426,7 +484,7 @@ export function PostCard({
       {/* Comments */}
       {showComments && (
         <div className="space-y-3 border-t pt-3">
-          {post.comments.map((c) => (
+          {allComments.map((c) => (
             <CommentRow
               key={c.id}
               comment={c}
