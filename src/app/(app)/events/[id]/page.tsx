@@ -130,7 +130,11 @@ function PollCard({
 
 // ── Game option slot with search + quick-add ──────────────────────────────────
 
-type GameOption = { label: string; gameId?: string };
+type GameOption = { uid: string; label: string; gameId?: string };
+
+function newGameOption(): GameOption {
+  return { uid: crypto.randomUUID(), label: "" };
+}
 
 function GameOptionSlot({
   index,
@@ -158,7 +162,7 @@ function GameOptionSlot({
 
   const quickAdd = api.games.create.useMutation({
     onSuccess: (data) => {
-      onChange({ label: query.trim(), gameId: data.id });
+      onChange({ ...value, label: query.trim(), gameId: data.id });
       setShowDropdown(false);
       setQuickAddMode(false);
     },
@@ -183,7 +187,7 @@ function GameOptionSlot({
         <button
           type="button"
           className="text-muted-foreground hover:text-destructive text-xs shrink-0"
-          onClick={() => { onChange({ label: "" }); setQuery(""); }}
+          onClick={() => { onChange({ ...value, label: "", gameId: undefined }); setQuery(""); }}
         >
           ×
         </button>
@@ -202,7 +206,7 @@ function GameOptionSlot({
         <Input
           placeholder={`Game ${index + 1} — type to search`}
           value={query}
-          onChange={(e) => { setQuery(e.target.value); setShowDropdown(true); onChange({ label: e.target.value }); }}
+          onChange={(e) => { setQuery(e.target.value); setShowDropdown(true); onChange({ ...value, label: e.target.value, gameId: undefined }); }}
           onFocus={() => { if (query.trim()) setShowDropdown(true); }}
           autoComplete="off"
         />
@@ -222,7 +226,7 @@ function GameOptionSlot({
               type="button"
               className="w-full text-left px-3 py-2 hover:bg-accent flex items-center gap-2"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => { onChange({ label: g.title, gameId: g.id }); setShowDropdown(false); setQuery(""); }}
+              onClick={() => { onChange({ ...value, label: g.title, gameId: g.id }); setShowDropdown(false); setQuery(""); }}
             >
               {g.coverUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -275,12 +279,23 @@ function CreatePollDialog({ eventId, groupId, onCreated }: { eventId: string; gr
   const [type, setType] = useState<"time_slot" | "game" | "custom">("custom");
   // Plain text options (custom / time_slot)
   const [options, setOptions] = useState(["", ""]);
-  // Game options (game type)
-  const [gameOptions, setGameOptions] = useState<GameOption[]>([{ label: "" }, { label: "" }]);
+  // Game options (game type) — uid used as stable React key
+  const [gameOptions, setGameOptions] = useState<GameOption[]>([newGameOption(), newGameOption()]);
   const [error, setError] = useState("");
 
   function resetForm() {
-    setQuestion(""); setOptions(["", ""]); setGameOptions([{ label: "" }, { label: "" }]); setError("");
+    setQuestion(""); setOptions(["", ""]); setGameOptions([newGameOption(), newGameOption()]); setError("");
+  }
+
+  function handleTypeChange(t: "time_slot" | "game" | "custom") {
+    setType(t);
+    setError("");
+    // Reset the option list for the newly selected type so stale data doesn't leak across types
+    if (t === "game") {
+      setGameOptions([newGameOption(), newGameOption()]);
+    } else {
+      setOptions(["", ""]);
+    }
   }
 
   const create = api.polls.create.useMutation({
@@ -293,11 +308,13 @@ function CreatePollDialog({ eventId, groupId, onCreated }: { eventId: string; gr
     setError("");
 
     if (type === "game") {
-      const filtered = gameOptions.filter((o) => o.label.trim());
-      if (filtered.length < 2) { setError("Need at least 2 game options."); return; }
+      const filled = gameOptions.filter((o) => o.label.trim());
+      if (filled.length < 2) { setError("Need at least 2 game options."); return; }
+      const missing = filled.filter((o) => !o.gameId);
+      if (missing.length > 0) { setError("Select a game from search results or use 'Add as new game' for each option."); return; }
       create.mutate({
         eventId, groupId, type, question,
-        options: filtered.map((o, i) => ({ label: o.label, gameId: o.gameId, sortOrder: i })),
+        options: filled.map((o, i) => ({ label: o.label, gameId: o.gameId, sortOrder: i })),
       });
     } else {
       const filtered = options.filter((o) => o.trim());
@@ -322,7 +339,7 @@ function CreatePollDialog({ eventId, groupId, onCreated }: { eventId: string; gr
             <Label>Type</Label>
             <div className="flex gap-2 flex-wrap">
               {(["custom", "time_slot", "game"] as const).map((t) => (
-                <button key={t} type="button" onClick={() => setType(t)}
+                <button key={t} type="button" onClick={() => handleTypeChange(t)}
                   className={`rounded-md border px-3 py-1 text-sm transition-colors ${type === t ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
                   {t === "time_slot" ? "Time slot" : t === "game" ? "Game vote" : "Custom"}
                 </button>
@@ -339,7 +356,7 @@ function CreatePollDialog({ eventId, groupId, onCreated }: { eventId: string; gr
               <>
                 {gameOptions.map((opt, i) => (
                   <GameOptionSlot
-                    key={i}
+                    key={opt.uid}
                     index={i}
                     value={opt}
                     onChange={(v) => setGameOptions(gameOptions.map((o, j) => j === i ? v : o))}
@@ -348,7 +365,7 @@ function CreatePollDialog({ eventId, groupId, onCreated }: { eventId: string; gr
                   />
                 ))}
                 {gameOptions.length < 20 && (
-                  <button type="button" onClick={() => setGameOptions([...gameOptions, { label: "" }])}
+                  <button type="button" onClick={() => setGameOptions([...gameOptions, newGameOption()])}
                     className="text-xs text-muted-foreground hover:text-foreground">
                     + Add game
                   </button>
