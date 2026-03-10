@@ -6,7 +6,7 @@ import Link from "next/link";
 type State =
   | { phase: "idle" }
   | { phase: "pending" }
-  | { phase: "success"; eventId: string; statusLabel: string }
+  | { phase: "success"; statusLabel: string }
   | { phase: "error"; message: string };
 
 export function RsvpConfirmButton({
@@ -19,6 +19,7 @@ export function RsvpConfirmButton({
   const [state, setState] = useState<State>({ phase: "idle" });
 
   async function handleConfirm() {
+    if (state.phase === "pending") return;
     setState({ phase: "pending" });
     try {
       const res = await fetch("/api/rsvp", {
@@ -35,7 +36,7 @@ export function RsvpConfirmButton({
         return;
       }
 
-      setState({ phase: "success", eventId: data.eventId, statusLabel });
+      setState({ phase: "success", statusLabel });
     } catch {
       setState({ phase: "error", message: "Network error — please try again." });
     }
@@ -47,12 +48,12 @@ export function RsvpConfirmButton({
         <p className="text-sm font-medium text-green-700 dark:text-green-400">
           ✓ RSVP recorded as <strong>{state.statusLabel}</strong>.
         </p>
-        <Link
-          href={`/events/${state.eventId}`}
-          className="inline-block rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity"
-        >
-          View event
-        </Link>
+        <p className="text-xs text-muted-foreground">
+          To view the full event, log in to Campfire.{" "}
+          <Link href="/login" className="text-primary hover:underline">
+            Log in
+          </Link>
+        </p>
       </div>
     );
   }
