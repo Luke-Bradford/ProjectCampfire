@@ -14,6 +14,10 @@ export const env = createEnv({
     // Public base URL for browser-facing object URLs (e.g. http://localhost:9000/campfire).
     // Required when MINIO_ENDPOINT is a Docker-internal hostname not reachable by browsers.
     MINIO_PUBLIC_URL: z.string().url().optional(),
+    // Whether the MinIO client should connect over TLS. Defaults to false.
+    // Set to true only when MinIO itself is TLS-enabled (not when TLS is terminated by a proxy).
+    // z.coerce.boolean() is intentionally avoided: Boolean("false") === true.
+    MINIO_USE_SSL: z.string().default("false").transform((v) => v === "true" || v === "1"),
     SMTP_HOST: z.string(),
     SMTP_PORT: z.coerce.number().default(587),
     SMTP_USER: z.string().optional(),
@@ -36,6 +40,7 @@ export const env = createEnv({
     MINIO_SECRET_KEY: process.env.MINIO_SECRET_KEY,
     MINIO_BUCKET: process.env.MINIO_BUCKET,
     MINIO_PUBLIC_URL: process.env.MINIO_PUBLIC_URL,
+    MINIO_USE_SSL: process.env.MINIO_USE_SSL,
     SMTP_HOST: process.env.SMTP_HOST,
     SMTP_PORT: process.env.SMTP_PORT,
     SMTP_USER: process.env.SMTP_USER,
