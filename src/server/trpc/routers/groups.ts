@@ -92,7 +92,7 @@ export const groupsRouter = createTRPCRouter({
     .input(
       z.object({
         id: z.string(),
-        name: z.string().min(1).max(100).optional(),
+        name: z.string().trim().min(1).max(100).optional(),
         description: z.string().max(500).optional(),
         discordInviteUrl,
       })
