@@ -94,9 +94,11 @@ export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string;
             : i
         )
       );
-    } catch (err) {
-      // Silently ignore aborted uploads — the image was removed by the user
-      if (err instanceof DOMException && err.name === "AbortError") return;
+    } catch {
+      // Silently ignore aborted uploads — the image was removed by the user.
+      // Check the signal directly rather than the error type: the thrown error
+      // varies across browsers (DOMException vs TypeError).
+      if (img.abort.signal.aborted) return;
       setImages((prev) =>
         prev.map((i) =>
           i.uploadId === img.uploadId ? { ...i, error: "Upload failed. Try again." } : i
