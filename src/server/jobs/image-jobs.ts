@@ -3,7 +3,8 @@ import { bullmqConnection } from "@/server/redis";
 
 export type ImageJobPayload =
   | { type: "process_avatar"; userId: string; key: string }
-  | { type: "process_post_image"; postId: string; key: string; index: number };
+  | { type: "process_post_image"; postId: string; key: string; index: number }
+  | { type: "sweep_orphaned_uploads" };
 
 export const imageQueue = new Queue<ImageJobPayload>("image-processing", {
   connection: bullmqConnection,

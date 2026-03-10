@@ -99,8 +99,64 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
       break;
     }
 
+    case "sweep_orphaned_uploads": {
+      await sweepOrphanedUploads();
+      break;
+    }
+
     default: {
       console.warn("[image] unknown job type:", (data as { type: string }).type);
     }
   }
+}
+
+/** Minimum age (ms) before a raw upload is considered orphaned. */
+const ORPHAN_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * Lists all objects under posts/ and deletes raw uploads that:
+ *   1. are older than ORPHAN_AGE_MS, and
+ *   2. have no corresponding processed (.webp) object
+ *
+ * Processed key = rawKey.replace(/-raw$/, "") + ".webp"
+ * e.g. posts/u1/id1/abc-raw → posts/u1/id1/abc.webp
+ */
+async function sweepOrphanedUploads(): Promise<void> {
+  const bucket = env.MINIO_BUCKET;
+  const now = Date.now();
+
+  // Collect all keys under posts/ (raw and processed alike).
+  const allKeys = new Set<string>();
+  const rawCandidates: { key: string; lastModified: Date }[] = [];
+
+  await new Promise<void>((resolve, reject) => {
+    const stream = minio.listObjects(bucket, "posts/", true);
+    stream.on("data", (obj) => {
+      if (!obj.name) return;
+      allKeys.add(obj.name);
+      if (obj.name.endsWith("-raw") && obj.lastModified) {
+        rawCandidates.push({ key: obj.name, lastModified: obj.lastModified });
+      }
+    });
+    stream.on("error", reject);
+    stream.on("end", resolve);
+  });
+
+  const toDelete: string[] = [];
+  for (const { key, lastModified } of rawCandidates) {
+    const ageMs = now - lastModified.getTime();
+    if (ageMs < ORPHAN_AGE_MS) continue; // too recent — may still be processing
+    const processedKey = key.replace(/-raw$/, "") + ".webp";
+    if (!allKeys.has(processedKey)) {
+      toDelete.push(key);
+    }
+  }
+
+  if (toDelete.length === 0) {
+    console.log("[image] sweep_orphaned_uploads: nothing to delete");
+    return;
+  }
+
+  await minio.removeObjects(bucket, toDelete);
+  console.log(`[image] sweep_orphaned_uploads: deleted ${toDelete.length} orphaned raw upload(s)`);
 }

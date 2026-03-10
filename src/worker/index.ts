@@ -56,6 +56,16 @@ new Worker<ImageJobPayload>(
   { connection: bullmqConnection }
 );
 
+// Daily sweep: delete raw uploads with no processed counterpart older than 24h.
+// Runs every 24 hours. jobId is stable so BullMQ deduplicates across restarts.
+imageQueue.add(
+  "sweep_orphaned_uploads",
+  { type: "sweep_orphaned_uploads" },
+  { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: "sweep_orphaned_uploads" },
+).catch((err: unknown) =>
+  console.error("[worker] failed to register sweep_orphaned_uploads repeatable job:", err),
+);
+
 // OG fetch worker
 new Worker<OgFetchJobPayload>(
   "og-fetch",
