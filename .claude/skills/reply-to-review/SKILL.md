@@ -73,8 +73,8 @@ Each reply must include:
 - The commit SHA where the fix lives
 
 If there are any warnings or nitpicks that aren't critical to this release:
-- Should we ensure these are tracked as a tech debt task for later
-- log a tech debt for any comments which should be thought about later, don't waste the value of the PR comments
+- Create a GitHub issue (label: `tech-debt`) for any comment that identifies a real UX gap, security hardening opportunity, or maintainability concern.
+- Do not silently discard review feedback — either act on it now or track it for later.
 
 ## Step 6 — Update PR description if needed
 
