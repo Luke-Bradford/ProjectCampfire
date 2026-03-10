@@ -6,6 +6,7 @@ import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
 import { polls, pollOptions, pollVotes, events, groupMemberships, groups } from "@/server/db/schema";
 import { enqueuePollOpened, enqueuePollClosed } from "@/server/jobs/email-jobs";
+import { enqueueClosePoll } from "@/server/jobs/poll-jobs";
 
 async function assertPollMember(pollId: string, userId: string) {
   const poll = await db.query.polls.findFirst({ where: eq(polls.id, pollId) });
@@ -94,6 +95,15 @@ export const pollsRouter = createTRPCRouter({
           endsAt: opt.endsAt ? new Date(opt.endsAt) : null,
           sortOrder: opt.sortOrder ?? i,
         });
+      }
+
+      // Schedule auto-close if closesAt is set.
+      // jobId is stable (close_poll:{id}) so re-enqueuing is a safe no-op.
+      if (input.closesAt) {
+        const delay = new Date(input.closesAt).getTime() - Date.now();
+        if (delay > 0) {
+          void enqueueClosePoll(id, delay);
+        }
       }
 
       // Notify group members that a new poll is open

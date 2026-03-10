@@ -4,12 +4,15 @@ import { processEmailJob } from "./processors/email";
 import { processAccountJob } from "./processors/account";
 import { processImageJob } from "./processors/image";
 import { processOgFetchJob } from "./processors/og-fetch";
+import { processPollJob } from "./processors/poll";
 import { getAccountQueue } from "@/server/jobs/account-jobs";
 import { imageQueue } from "@/server/jobs/image-jobs";
+import { getPollQueue } from "@/server/jobs/poll-jobs";
 import type { EmailJobPayload } from "@/server/jobs/email-jobs";
 import type { AccountJobPayload } from "@/server/jobs/account-jobs";
 import type { ImageJobPayload } from "@/server/jobs/image-jobs";
 import type { OgFetchJobPayload } from "@/server/jobs/og-fetch-jobs";
+import type { PollJobPayload } from "@/server/jobs/poll-jobs";
 
 // Queue definitions — imported by other modules to enqueue jobs.
 // accountQueue lives in server/jobs/account-jobs.ts (import from there directly).
@@ -86,6 +89,15 @@ new Worker<OgFetchJobPayload>(
   { connection: bullmqConnection }
 );
 
+// Poll worker (delayed auto-close + overdue sweep)
+new Worker<PollJobPayload>(
+  "poll",
+  async (job) => {
+    await processPollJob(job);
+  },
+  { connection: bullmqConnection }
+);
+
 console.log("Campfire workers started");
 
 // Repeatable jobs — registered with retry so a transient Redis blip at startup
@@ -109,6 +121,16 @@ console.log("Campfire workers started");
         "sweep_orphaned_uploads",
         { type: "sweep_orphaned_uploads" },
         { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: "sweep_orphaned_uploads" },
+      )
+    ),
+    // Every 5 minutes: close any polls whose closesAt has passed but whose
+    // delayed close_poll job was lost (e.g. Redis restart between poll creation
+    // and deadline). This is the recovery mechanism for the delayed jobs.
+    registerRepeatableJob("sweep_overdue_polls", () =>
+      getPollQueue().add(
+        "sweep_overdue_polls",
+        { type: "sweep_overdue_polls" },
+        { repeat: { every: 5 * 60 * 1000 }, jobId: "sweep_overdue_polls" },
       )
     ),
   ]);
