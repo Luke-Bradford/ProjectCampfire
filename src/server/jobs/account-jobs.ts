@@ -14,18 +14,28 @@ export type SweepUnscrubbedPayload = {
 
 export type AccountJobPayload = ScrubAccountPayload | SweepUnscrubbedPayload;
 
-export const accountQueue = new Queue<AccountJobPayload>("account", {
-  connection: bullmqConnection,
-  defaultJobOptions: {
-    attempts: 5,
-    backoff: { type: "exponential", delay: 10_000 },
-    removeOnComplete: 100,
-    removeOnFail: 200,
-  },
-});
+// Lazy singleton — created on first call so that importing this module in a
+// Next.js server context (e.g. via the tRPC user router) does not open a
+// Redis connection on every cold start, only when a job is actually enqueued.
+let _accountQueue: Queue<AccountJobPayload> | undefined;
+
+export function getAccountQueue(): Queue<AccountJobPayload> {
+  if (!_accountQueue) {
+    _accountQueue = new Queue<AccountJobPayload>("account", {
+      connection: bullmqConnection,
+      defaultJobOptions: {
+        attempts: 5,
+        backoff: { type: "exponential", delay: 10_000 },
+        removeOnComplete: 100,
+        removeOnFail: 200,
+      },
+    });
+  }
+  return _accountQueue;
+}
 
 export function enqueueScrubAccount(userId: string) {
-  return accountQueue.add(
+  return getAccountQueue().add(
     "scrub_account",
     { type: "scrub_account", userId },
     // Small delay so the HTTP response completes before the job fires
