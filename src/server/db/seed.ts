@@ -12,10 +12,11 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { hashPassword } from "better-auth/crypto";
 import * as schema from "./schema";
+import type { WeeklySlots } from "./schema";
 
 config({ path: ".env" });
 
-const { user, account, friendships, groups, groupMemberships, posts, comments, games, gameOwnerships } = schema;
+const { user, account, friendships, groups, groupMemberships, posts, comments, games, gameOwnerships, availabilitySchedules } = schema;
 
 const db = drizzle(postgres(process.env.DATABASE_URL!), { schema });
 
@@ -46,7 +47,70 @@ const SEED_USERS = [
     password: "password123",
     bio: "Indie games and couch co-op.",
   },
+  {
+    id: "seed-user-dan",
+    name: "Dan",
+    username: "dan",
+    email: "dan@campfire.local",
+    password: "password123",
+    bio: "RTS and survival games. Early evenings work best.",
+  },
+  {
+    id: "seed-user-eve",
+    name: "Eve",
+    username: "eve",
+    email: "eve@campfire.local",
+    password: "password123",
+    bio: "Horror games at night. Join if you dare.",
+  },
 ];
+
+// ── Availability schedules ─────────────────────────────────────────────────────
+// Day-of-week: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+// All times in UTC (representative of UK evening, no DST for seed simplicity).
+// Fuzzy starts 18:00–19:30, fuzzy ends 21:30–01:00+1.
+// Designed so Fri+Sat always have 3+ people overlapping around 19:00–22:00.
+
+const SEED_AVAILABILITY: Record<string, WeeklySlots> = {
+  "seed-user-alice": {
+    // Free: Mon, Wed, Fri, Sat
+    1: [{ start: "18:30", end: "22:30", type: "available" }],
+    3: [{ start: "19:00", end: "23:00", type: "available" }],
+    5: [{ start: "18:00", end: "00:00", endDayOffset: 1, type: "available" }],
+    6: [{ start: "18:30", end: "01:00", endDayOffset: 1, type: "available" }],
+  },
+  "seed-user-bob": {
+    // Free: Tue, Thu, Fri, Sat — late-night person
+    2: [{ start: "19:30", end: "01:00", endDayOffset: 1, type: "available" }],
+    4: [{ start: "20:00", end: "23:30", type: "available" }],
+    5: [{ start: "19:00", end: "01:00", endDayOffset: 1, type: "available" }],
+    6: [{ start: "20:00", end: "01:00", endDayOffset: 1, type: "available" }],
+  },
+  "seed-user-carol": {
+    // Free: Mon, Wed, Fri, Sun
+    0: [{ start: "18:00", end: "21:30", type: "available" }],
+    1: [{ start: "18:30", end: "22:00", type: "available" }],
+    3: [{ start: "19:00", end: "22:30", type: "available" }],
+    5: [{ start: "18:30", end: "23:30", type: "available" }],
+  },
+  "seed-user-dan": {
+    // Free: Mon, Fri, Sat, Sun — early evenings
+    0: [{ start: "17:30", end: "21:00", type: "available" }],
+    1: [{ start: "18:00", end: "21:30", type: "available" }],
+    5: [{ start: "18:00", end: "22:30", type: "available" }],
+    6: [{ start: "17:30", end: "23:00", type: "available" }],
+  },
+  "seed-user-eve": {
+    // Free: Wed, Thu, Fri, Sat — horror-night owl
+    3: [{ start: "20:00", end: "01:00", endDayOffset: 1, type: "available" }],
+    4: [{ start: "19:30", end: "00:30", endDayOffset: 1, type: "available" }],
+    5: [{ start: "19:00", end: "01:00", endDayOffset: 1, type: "available" }],
+    6: [{ start: "19:30", end: "01:00", endDayOffset: 1, type: "available" }],
+  },
+};
+
+// IDs of all seed users — used for friendship/membership generation
+const ALL_SEED_USER_IDS = SEED_USERS.map((u) => u.id);
 
 const SEED_GROUP = {
   id: "seed-group-main",
@@ -91,6 +155,12 @@ function log(msg: string) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
+  // Guard: seed data is for local development only.
+  if (process.env.NODE_ENV === "production") {
+    console.error("Seed script must not run in production. Aborting.");
+    process.exit(1);
+  }
+
   console.log("\nSeeding database...\n");
 
   // Users + password accounts
@@ -133,12 +203,13 @@ async function main() {
     log(`create user ${u.email}`);
   }
 
-  // Friendships: all seed users are friends with each other
-  const friendPairs: [string, string][] = [
-    ["seed-user-alice", "seed-user-bob"],
-    ["seed-user-alice", "seed-user-carol"],
-    ["seed-user-bob", "seed-user-carol"],
-  ];
+  // Friendships: all seed users are friends with each other (all-pairs)
+  const friendPairs: [string, string][] = [];
+  for (let i = 0; i < ALL_SEED_USER_IDS.length; i++) {
+    for (let j = i + 1; j < ALL_SEED_USER_IDS.length; j++) {
+      friendPairs.push([ALL_SEED_USER_IDS[i]!, ALL_SEED_USER_IDS[j]!]);
+    }
+  }
 
   for (const [reqId, addId] of friendPairs) {
     const existing = await db.query.friendships.findFirst({
@@ -171,7 +242,7 @@ async function main() {
     log(`skip  group "${SEED_GROUP.name}" (already exists)`);
   }
 
-  // Group memberships — checked individually so they survive user re-creation
+  // Group memberships — all seed users, alice as owner
   const seedMemberships = SEED_USERS.map((u, i) => ({
     userId: u.id,
     role: (i === 0 ? "owner" : "member") as "owner" | "member",
@@ -188,6 +259,25 @@ async function main() {
     }
     await db.insert(groupMemberships).values({ groupId: SEED_GROUP.id, ...m });
     log(`create membership ${m.userId} in ${SEED_GROUP.id}`);
+  }
+
+  // Availability schedules — weekly recurring templates
+  for (const [userId, slots] of Object.entries(SEED_AVAILABILITY)) {
+    const existing = await db.query.availabilitySchedules.findFirst({
+      where: (t, { eq }) => eq(t.userId, userId),
+      columns: { userId: true },
+    });
+    if (existing) {
+      log(`skip  availability schedule for ${userId}`);
+      continue;
+    }
+    await db.insert(availabilitySchedules).values({
+      id: `seed-avail-${userId}`,
+      userId,
+      timezone: "UTC",
+      slots,
+    });
+    log(`create availability schedule for ${userId}`);
   }
 
   // Games
