@@ -234,7 +234,7 @@ function DayColumn({
   onClickOverlap,
 }: {
   dateStr: string;
-  memberData: Array<{ band: string; slots: MemberSlots }>;
+  memberData: Array<{ userId: string; band: string; slots: MemberSlots }>;
   overlapSlots: Set<number>;
   onClickOverlap: (startIdx: number, endIdx: number) => void;
 }) {
@@ -253,12 +253,12 @@ function DayColumn({
       <div className="absolute left-0 right-0 border-t border-border/40" style={{ top: 24 * HOUR_HEIGHT_PX }} />
 
       {/* Member availability bands */}
-      {memberData.map(({ band, slots }, memberIdx) => {
+      {memberData.map(({ userId, band, slots }, memberIdx) => {
         const ranges = mergeSlots(slots[dateStr] ?? new Set());
         const laneWidth = 100 / memberData.length;
-        return ranges.map(([start, end], i) => (
+        return ranges.map(([start, end]) => (
           <div
-            key={`${memberIdx}-${i}`}
+            key={`${userId}-${start}-${end}`}
             className={`absolute border-l-2 ${band} opacity-80`}
             style={{
               top: start * SLOT_HEIGHT_PX,
@@ -446,7 +446,7 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
               <DayColumn
                 key={dateStr}
                 dateStr={dateStr}
-                memberData={activeMembers.map((m) => ({ band: m.color.band, slots: m.slots }))}
+                memberData={activeMembers.map((m) => ({ userId: m.user.id, band: m.color.band, slots: m.slots }))}
                 overlapSlots={overlapByDate[dateStr] ?? new Set()}
                 onClickOverlap={(start, end) => handleClickOverlap(dateStr, start, end)}
               />
