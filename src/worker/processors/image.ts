@@ -69,31 +69,31 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
       const outKey = processedKey(data.key);
       await uploadProcessed(outKey, processed);
 
-      // Atomic UPDATE using generate_series + LEFT JOIN unnest.
-      // Verified on Postgres 16 against all three starting states (NULL, {}, populated array):
-      // always produces a 1-based array regardless of which index is being written.
-      // Direct array index assignment (SET arr[n] = val) produces a subscript-range array
-      // ([n:n]={val}) when n > 1 on a NULL or empty column — breaking downstream consumers.
-      // The generate_series approach fills all 4 slots in one statement and is race-safe:
-      // concurrent jobs each rebuild the full array from the latest DB state within the UPDATE.
-      // Both the index and the URL are parameterized — no sql.raw used.
+      // SELECT FOR UPDATE serialises concurrent jobs for the same post at the DB level.
+      // Without this lock, two concurrent UPDATEs each snapshot image_urls independently
+      // and the last writer silently drops the other's URL (last-writer-wins race).
       //
-      // NULL slots: the array always has 4 elements; unprocessed slots are NULL.
-      // This preserves positional semantics — array_remove(…, NULL) would collapse positions
-      // (e.g. index 2 would shift to index 1 if index 1 is still NULL). Consumers rendering
-      // imageUrls must filter with .filter(Boolean) to skip unprocessed slots.
+      // UPDATE uses generate_series + LEFT JOIN unnest to safely write one slot into a
+      // 4-element array. Direct array index assignment (SET arr[n] = val) produces a
+      // subscript-range array ([n:n]={val}) on NULL/empty columns — breaking consumers.
+      //
+      // NULL slots: unprocessed positions stay NULL. Consumers must .filter(Boolean).
+      // Both index and URL are parameterised — no sql.raw used.
       const pgIndex = data.index + 1;
       const url = storageUrl(outKey);
-      await db.execute(sql`
-        UPDATE ${posts}
-        SET image_urls = (
-          SELECT array_agg(CASE WHEN g.i = ${pgIndex} THEN ${url} ELSE a.v END ORDER BY g.i)
-          FROM generate_series(1, 4) AS g(i)
-          LEFT JOIN unnest(COALESCE(image_urls, ARRAY[]::text[])) WITH ORDINALITY AS a(v, i)
-            ON a.i = g.i
-        )
-        WHERE id = ${data.postId}
-      `);
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT id FROM ${posts} WHERE id = ${data.postId} FOR UPDATE`);
+        await tx.execute(sql`
+          UPDATE ${posts}
+          SET image_urls = (
+            SELECT array_agg(CASE WHEN g.i = ${pgIndex} THEN ${url} ELSE a.v END ORDER BY g.i)
+            FROM generate_series(1, 4) AS g(i)
+            LEFT JOIN unnest(COALESCE(image_urls, ARRAY[]::text[])) WITH ORDINALITY AS a(v, i)
+              ON a.i = g.i
+          )
+          WHERE id = ${data.postId}
+        `);
+      });
 
       console.log(`[image] post image processed for post ${data.postId}[${data.index}] → ${outKey}`);
       break;
