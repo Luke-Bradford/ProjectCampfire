@@ -162,11 +162,11 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
         await sendEmail({
           to: r.email,
           subject: safeSubject(`New poll${context}: ${data.pollQuestion}`),
-          text: `Hi ${strip(r.name)},\n\nA new poll has been opened in ${strip(data.groupName)}${context}:\n\n"${strip(data.pollQuestion)}"\n\nCast your vote: ${appUrl()}/events/${data.pollId}`,
+          text: `Hi ${strip(r.name)},\n\nA new poll has been opened in ${strip(data.groupName)}${context}:\n\n"${strip(data.pollQuestion)}"\n\nCast your vote: ${data.ctaUrl}`,
           html: htmlEmail(
             `New poll in ${esc(data.groupName)}`,
             `<p>Hi ${esc(r.name)},</p><p>A new poll has been opened${contextHtml}:</p><blockquote style="border-left:3px solid #e05f1a;margin:16px 0;padding:8px 16px;color:#444">${esc(data.pollQuestion)}</blockquote>`,
-            `${appUrl()}/events/${data.pollId}`,
+            data.ctaUrl,
             "Vote now"
           ),
         });
@@ -181,11 +181,11 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
         await sendEmail({
           to: r.email,
           subject: safeSubject(`Poll closed: ${data.pollQuestion}`),
-          text: `Hi ${strip(r.name)},\n\nThe poll "${strip(data.pollQuestion)}" in ${strip(data.groupName)} has been closed. Check the results!\n\nView results: ${appUrl()}/events/${data.pollId}`,
+          text: `Hi ${strip(r.name)},\n\nThe poll "${strip(data.pollQuestion)}" in ${strip(data.groupName)} has been closed. Check the results!\n\nView results: ${data.ctaUrl}`,
           html: htmlEmail(
             `Poll closed: results are in`,
             `<p>Hi ${esc(r.name)},</p><p>The poll <strong>&ldquo;${esc(data.pollQuestion)}&rdquo;</strong> in <strong>${esc(data.groupName)}</strong> has been closed.</p>`,
-            `${appUrl()}/events/${data.pollId}`,
+            data.ctaUrl,
             "View results"
           ),
         });

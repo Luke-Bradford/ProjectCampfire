@@ -45,6 +45,8 @@ export type PollOpenedPayload = {
   pollQuestion: string;
   groupName: string;
   eventTitle?: string;
+  /** Deep link to the event or group page where the poll lives. */
+  ctaUrl: string;
   recipientUserIds: string[];
 };
 
@@ -53,6 +55,8 @@ export type PollClosedPayload = {
   pollId: string;
   pollQuestion: string;
   groupName: string;
+  /** Deep link to the event or group page where the poll lives. */
+  ctaUrl: string;
   recipientUserIds: string[]; // users who voted
 };
 
