@@ -80,8 +80,9 @@ async function closePoll(pollId: string): Promise<void> {
   // Resolve groupId for the email notification
   let groupId = poll.groupId;
   if (!groupId && poll.eventId) {
+    const eventId = poll.eventId; // narrow to string (poll.eventId guard above)
     const ev = await db.query.events.findFirst({
-      where: (t) => eq(t.id, poll.eventId!),
+      where: (t) => eq(t.id, eventId),
       columns: { groupId: true },
     });
     groupId = ev?.groupId ?? null;
@@ -108,6 +109,8 @@ async function closePoll(pollId: string): Promise<void> {
       pollQuestion: poll.question,
       groupName: group?.name ?? "your group",
       recipientUserIds: voterIds,
-    });
+    }).catch((err: unknown) =>
+      console.error(`[poll] failed to enqueue poll_closed email for ${pollId}:`, err),
+    );
   }
 }
