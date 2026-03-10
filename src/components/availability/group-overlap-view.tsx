@@ -168,6 +168,7 @@ function ProposeDialog({
     onSuccess: ({ id }) => {
       onClose();
       setTitle("");
+      setError("");
       router.push(`/events/${id}`);
     },
     onError: (e) => setError(e.message),
@@ -186,7 +187,7 @@ function ProposeDialog({
   const endLabel = format(new Date(endsAt), "HH:mm");
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) { setTitle(""); setError(""); onClose(); } }}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Propose session</DialogTitle>

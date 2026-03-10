@@ -40,7 +40,10 @@ export const eventsRouter = createTRPCRouter({
         // Stored on the draft so the organiser can confirm it without retyping.
         confirmedStartsAt: z.string().datetime().optional(),
         confirmedEndsAt: z.string().datetime().optional(),
-      })
+      }).refine(
+        (d) => !d.confirmedStartsAt || !d.confirmedEndsAt || d.confirmedStartsAt < d.confirmedEndsAt,
+        { message: "confirmedStartsAt must be before confirmedEndsAt" }
+      )
     )
     .mutation(async ({ ctx, input }) => {
       await assertMember(input.groupId, ctx.user.id);
