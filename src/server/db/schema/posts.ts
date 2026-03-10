@@ -58,6 +58,7 @@ export const comments = pgTable("comments", {
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
   body: varchar("body", { length: 1000 }).notNull(),
+  imageUrls: text("image_urls").array(),
   editedAt: timestamp("edited_at"),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

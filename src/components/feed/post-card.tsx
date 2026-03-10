@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
+import { createId } from "@paralleldrive/cuid2";
 import type { EmbedMetadata } from "@/server/db/schema/posts";
 import { formatDistanceToNow } from "date-fns";
 import { api } from "@/trpc/react";
@@ -9,6 +10,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
 function initials(name: string) {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -18,6 +21,7 @@ type PostAuthor = { id: string; name: string; username: string | null; image: st
 type CommentData = {
   id: string;
   body: string;
+  imageUrls: (string | null)[] | null;
   createdAt: Date;
   editedAt: Date | null;
   deletedAt: Date | null;
@@ -126,9 +130,30 @@ function CommentRow({
             </div>
           </form>
         ) : (
-          <div className="rounded-lg bg-muted px-3 py-2 text-sm">
-            {comment.body}
-          </div>
+          <>
+            <div className="rounded-lg bg-muted px-3 py-2 text-sm">
+              {comment.body}
+            </div>
+            {(() => {
+              const imgs = (comment.imageUrls ?? []).filter((u): u is string => {
+                if (!u) return false;
+                try { new URL(u); return true; } catch { return false; }
+              });
+              return imgs.length > 0 ? (
+                <div className="mt-1">
+                  <Image
+                    src={imgs[0]}
+                    alt=""
+                    width={0}
+                    height={0}
+                    sizes="50vw"
+                    className="w-full max-w-xs rounded object-cover"
+                    style={{ height: "auto", maxHeight: "200px" }}
+                  />
+                </div>
+              ) : null;
+            })()}
+          </>
         )}
         <div className="flex items-center gap-2 px-1">
           <span
@@ -183,6 +208,16 @@ export function PostCard({
 }) {
   const [showComments, setShowComments] = useState(false);
   const [commentBody, setCommentBody] = useState("");
+  const [commentImage, setCommentImage] = useState<{
+    uploadId: string;
+    file: File;
+    preview: string;
+    key: string | null;
+    error: string | null;
+    abort: AbortController;
+  } | null>(null);
+  const [commentImageUploading, setCommentImageUploading] = useState(false);
+  const commentFileInputRef = useRef<HTMLInputElement>(null);
   const [editingPost, setEditingPost] = useState(false);
   const [editPostBody, setEditPostBody] = useState(post.body ?? "");
   const postTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -241,6 +276,7 @@ export function PostCard({
       const optimistic: CommentData = {
         id: `optimistic-${crypto.randomUUID()}`,
         body,
+        imageUrls: null,
         createdAt: new Date(),
         editedAt: null,
         deletedAt: null,
@@ -275,6 +311,56 @@ export function PostCard({
   function cancelPostEdit() {
     setEditingPost(false);
     setEditPostBody(post.body ?? "");
+  }
+
+  function handleCommentFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    // Abort any in-flight upload for the previous image
+    commentImage?.abort.abort();
+    if (commentImage) URL.revokeObjectURL(commentImage.preview);
+
+    const img = {
+      uploadId: createId(),
+      file,
+      preview: URL.createObjectURL(file),
+      key: null,
+      error: ALLOWED_TYPES.includes(file.type) ? null : `Unsupported type "${file.type}"`,
+      abort: new AbortController(),
+    };
+    setCommentImage(img);
+    if (!img.error) void uploadCommentImage(img);
+  }
+
+  async function uploadCommentImage(img: typeof commentImage & object) {
+    setCommentImageUploading(true);
+    const fd = new FormData();
+    fd.append("file", img.file);
+    fd.append("postId", img.uploadId);
+    try {
+      const res = await fetch("/api/upload/post-image", { method: "POST", body: fd, signal: img.abort.signal });
+      const json = (await res.json()) as { key?: string; error?: string };
+      setCommentImage((prev) =>
+        prev?.uploadId === img.uploadId
+          ? { ...prev, key: json.key ?? null, error: json.error ?? (json.key ? null : "Upload failed") }
+          : prev
+      );
+    } catch {
+      if (img.abort.signal.aborted) return;
+      setCommentImage((prev) =>
+        prev?.uploadId === img.uploadId ? { ...prev, error: "Upload failed. Try again." } : prev
+      );
+    } finally {
+      setCommentImageUploading(false);
+    }
+  }
+
+  function removeCommentImage() {
+    commentImage?.abort.abort();
+    if (commentImage) URL.revokeObjectURL(commentImage.preview);
+    setCommentImage(null);
   }
 
   const isOwn = post.author.id === currentUserId;
@@ -495,20 +581,79 @@ export function PostCard({
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (commentBody.trim()) addComment.mutate({ postId: post.id, body: commentBody.trim() });
+              if (!commentBody.trim()) return;
+              addComment.mutate({
+                postId: post.id,
+                body: commentBody.trim(),
+                imageKeys: commentImage?.key ? [commentImage.key] : undefined,
+              });
+              removeCommentImage();
             }}
-            className="flex gap-2"
+            className="space-y-2"
           >
-            <Textarea
-              placeholder="Write a comment…"
-              rows={1}
-              value={commentBody}
-              onChange={(e) => setCommentBody(e.target.value)}
-              className="min-h-0 resize-none"
-            />
-            <Button type="submit" size="sm" disabled={!commentBody.trim() || addComment.isPending}>
-              Send
-            </Button>
+            {commentImage && (
+              <div className="relative h-20 w-20">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={commentImage.preview} alt="" className="h-full w-full rounded object-cover" />
+                {commentImage.key === null && !commentImage.error && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded bg-black/50 text-xs text-white">
+                    Uploading…
+                  </div>
+                )}
+                {commentImage.error && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded bg-destructive/80 p-1 text-center text-xs text-white leading-tight">
+                    {commentImage.error}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  aria-label="Remove image"
+                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border bg-background text-xs text-muted-foreground hover:text-destructive"
+                  onClick={removeCommentImage}
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Textarea
+                placeholder="Write a comment…"
+                rows={1}
+                value={commentBody}
+                onChange={(e) => setCommentBody(e.target.value)}
+                className="min-h-0 resize-none"
+              />
+              <div className="flex flex-col gap-1">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={
+                    !commentBody.trim() ||
+                    addComment.isPending ||
+                    commentImageUploading ||
+                    (commentImage !== null && commentImage.key === null && !commentImage.error)
+                  }
+                >
+                  Send
+                </Button>
+                {!commentImage && (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => commentFileInputRef.current?.click()}
+                  >
+                    + Photo
+                  </button>
+                )}
+                <input
+                  ref={commentFileInputRef}
+                  type="file"
+                  accept={ALLOWED_TYPES.join(",")}
+                  className="hidden"
+                  onChange={handleCommentFileChange}
+                />
+              </div>
+            </div>
           </form>
         </div>
       )}

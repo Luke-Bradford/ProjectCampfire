@@ -4,6 +4,7 @@ import { bullmqConnection } from "@/server/redis";
 export type ImageJobPayload =
   | { type: "process_avatar"; userId: string; key: string }
   | { type: "process_post_image"; postId: string; key: string; index: number }
+  | { type: "process_comment_image"; commentId: string; key: string; index: number }
   | { type: "sweep_orphaned_uploads" };
 
 export const imageQueue = new Queue<ImageJobPayload>("image-processing", {
@@ -24,6 +25,15 @@ export function enqueueProcessPostImage(postId: string, key: string, index: numb
   return imageQueue.add("process_post_image", {
     type: "process_post_image",
     postId,
+    key,
+    index,
+  });
+}
+
+export function enqueueProcessCommentImage(commentId: string, key: string, index: number) {
+  return imageQueue.add("process_comment_image", {
+    type: "process_comment_image",
+    commentId,
     key,
     index,
   });
