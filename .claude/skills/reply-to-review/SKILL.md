@@ -72,6 +72,10 @@ Each reply must include:
 - What was done (or why the comment was declined)
 - The commit SHA where the fix lives
 
+If there are any warnings or nitpicks that aren't critical to this release:
+- Should we ensure these are tracked as a tech debt task for later
+- log a tech debt for any comments which should be thought about later, don't waste the value of the PR comments
+
 ## Step 6 — Update PR description if needed
 
 If the fix changed the design, security model, or tradeoff profile:
