@@ -20,7 +20,7 @@ When asked to implement or modify something in ProjectCampfire:
 10. After implementation, ensure the app is in a testable state before considering the task done:
    - **Schema changes** (new migrations): run `docker compose exec migrate pnpm db:migrate`.
    - **Code-only changes** (no schema): the Docker app container must be rebuilt — run `docker compose up --build -d app`.
-   - **Never leave the app running stale code.** If you cannot trigger the rebuild yourself (e.g. Docker not accessible in this context), make sure you update docker or seek clarification to do so if there is any risk"
+   - **Never leave the app running stale code.** If you cannot trigger the rebuild yourself (e.g. Docker not accessible in this context), say so explicitly and seek clarification before proceeding.
 11. After implementation, summarize:
    - what changed
    - affected files
