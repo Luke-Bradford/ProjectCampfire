@@ -283,6 +283,12 @@ function getDateParts(date: Date, timezone: string): DateParts {
  *
  * Strategy: treat the string as UTC-0 (naive), then measure the offset between
  * that naive instant and what it looks like in the target timezone, and correct.
+ *
+ * DST caveat: if `localStr` falls in a DST "spring forward" gap (a local time
+ * that does not exist), Intl resolves the ambiguity in an implementation-defined
+ * way, which may shift the result by up to 1 hour. The ±1h idempotency window in
+ * maybeGenerateEvent covers this — at worst, a DST-gap event is generated 1h
+ * off from the intended time, which is acceptable for MVP scheduling.
  */
 function localDateTimeToUtc(localStr: string, timezone: string): Date {
   const naiveUtc = new Date(`${localStr}Z`);

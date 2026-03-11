@@ -337,7 +337,7 @@ export function RecurringTemplatesSection({
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {DAY_NAMES[t.dayOfWeek]}s · {t.startTime}–{t.endTime} {t.timezone}
+                  {(DAY_NAMES[t.dayOfWeek] ?? "Unknown")}s · {t.startTime}–{t.endTime} {t.timezone}
                   {" · "}{t.leadDays}d ahead
                   {t.autoPoll ? " · auto poll" : ""}
                 </p>
