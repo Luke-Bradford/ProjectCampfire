@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, ilike, or } from "drizzle-orm";
+import { and, eq, ilike, inArray, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -124,6 +124,37 @@ export const gamesRouter = createTRPCRouter({
         },
       });
       return rows.map((r) => ({ ...r.game, platform: r.platform, source: r.source }));
+    }),
+
+  // Batch ownership overlap for multiple games within a group (CAMP-104).
+  // Returns a map of gameId → list of { user, platform } for group members who own it.
+  // Used by the poll card to annotate each game option without N+1 queries.
+  ownershipOverlapBatch: protectedProcedure
+    .input(z.object({ gameIds: z.array(z.string()).min(1).max(20), groupId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const { groupMemberships } = await import("@/server/db/schema");
+      const members = await db.query.groupMemberships.findMany({
+        where: eq(groupMemberships.groupId, input.groupId),
+        with: { user: { columns: { id: true, name: true, username: true } } },
+      });
+      const memberIds = members.map((m) => m.userId);
+      if (!memberIds.includes(ctx.user.id)) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      const ownerships = await db.query.gameOwnerships.findMany({
+        where: and(
+          inArray(gameOwnerships.gameId, input.gameIds),
+          inArray(gameOwnerships.userId, memberIds)
+        ),
+        with: { user: { columns: { id: true, name: true, username: true } } },
+      });
+      // Group by gameId
+      const result: Record<string, { user: { id: string; name: string; username: string | null }; platform: string }[]> = {};
+      for (const o of ownerships) {
+        if (!result[o.gameId]) result[o.gameId] = [];
+        result[o.gameId]!.push({ user: o.user, platform: o.platform });
+      }
+      return result;
     }),
 
   // Ownership overlap for a game within a group (CAMP-104)
