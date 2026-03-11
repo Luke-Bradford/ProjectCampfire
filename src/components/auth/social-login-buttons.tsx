@@ -5,23 +5,35 @@ import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { env } from "@/env";
 
-const googleEnabled = env.NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED === "true";
-const discordEnabled = env.NEXT_PUBLIC_DISCORD_OAUTH_ENABLED === "true";
+const googleEnabled = !!env.NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED;
+const discordEnabled = !!env.NEXT_PUBLIC_DISCORD_OAUTH_ENABLED;
 
 export function SocialLoginButtons() {
   const [loading, setLoading] = useState<"google" | "discord" | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   if (!googleEnabled && !discordEnabled) return null;
 
   async function handleSocial(provider: "google" | "discord") {
     setLoading(provider);
-    await authClient.signIn.social({ provider, callbackURL: "/feed" });
-    // On success, better-auth redirects. On error, stop loading.
-    setLoading(null);
+    setError(null);
+    try {
+      await authClient.signIn.social({ provider, callbackURL: "/feed" });
+      // On success, better-auth redirects — this line is unreachable in practice.
+    } catch {
+      setError("Could not connect to provider. Please try again.");
+    } finally {
+      setLoading(null);
+    }
   }
 
   return (
     <div className="flex flex-col gap-2">
+      {error && (
+        <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      )}
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
           <span className="w-full border-t" />

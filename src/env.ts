@@ -39,8 +39,8 @@ export const env = createEnv({
     NEXT_PUBLIC_APP_URL: z.string().url(),
     // Set to "true" when the corresponding server-side OAuth credentials are configured.
     // Controls whether the social login buttons are rendered on the client.
-    NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED: z.string().optional(),
-    NEXT_PUBLIC_DISCORD_OAUTH_ENABLED: z.string().optional(),
+    NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED: z.literal("true").optional(),
+    NEXT_PUBLIC_DISCORD_OAUTH_ENABLED: z.literal("true").optional(),
   },
   runtimeEnv: {
     DATABASE_URL: process.env.DATABASE_URL,
