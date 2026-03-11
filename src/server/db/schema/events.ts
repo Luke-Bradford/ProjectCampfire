@@ -1,4 +1,5 @@
 import {
+  boolean,
   integer,
   pgEnum,
   pgTable,
@@ -41,6 +42,8 @@ export const events = pgTable("events", {
     .notNull()
     .references(() => user.id),
   status: eventStatusEnum("status").notNull().default("draft"),
+  gameId: text("game_id").references(() => games.id, { onDelete: "set null" }),
+  gameOptional: boolean("game_optional").notNull().default(false),
   confirmedStartsAt: timestamp("confirmed_starts_at"),
   confirmedEndsAt: timestamp("confirmed_ends_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

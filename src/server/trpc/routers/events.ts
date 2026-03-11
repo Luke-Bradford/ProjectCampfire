@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { events, eventRsvps, groupMemberships, groups } from "@/server/db/schema";
+import { events, eventRsvps, groupMemberships, groups, games } from "@/server/db/schema";
 import {
   enqueueEventConfirmed,
   enqueueEventCancelled,
@@ -40,6 +40,9 @@ export const eventsRouter = createTRPCRouter({
         // Stored on the draft so the organiser can confirm it without retyping.
         confirmedStartsAt: z.string().datetime().optional(),
         confirmedEndsAt: z.string().datetime().optional(),
+        // Optional game attachment (CAMP-193).
+        gameId: z.string().optional(),
+        gameOptional: z.boolean().default(false),
       }).refine(
         (d) => !d.confirmedStartsAt || !d.confirmedEndsAt || d.confirmedStartsAt < d.confirmedEndsAt,
         { message: "confirmedStartsAt must be before confirmedEndsAt" }
@@ -47,6 +50,13 @@ export const eventsRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       await assertMember(input.groupId, ctx.user.id);
+
+      // Validate gameId exists if provided
+      if (input.gameId) {
+        const game = await db.query.games.findFirst({ where: eq(games.id, input.gameId) });
+        if (!game) throw new TRPCError({ code: "BAD_REQUEST", message: "Game not found." });
+      }
+
       const id = createId();
       await db.insert(events).values({
         id,
@@ -55,6 +65,8 @@ export const eventsRouter = createTRPCRouter({
         description: input.description ?? null,
         createdBy: ctx.user.id,
         status: "draft",
+        gameId: input.gameId ?? null,
+        gameOptional: input.gameOptional,
         confirmedStartsAt: input.confirmedStartsAt ? new Date(input.confirmedStartsAt) : null,
         confirmedEndsAt: input.confirmedEndsAt ? new Date(input.confirmedEndsAt) : null,
       });
@@ -85,6 +97,7 @@ export const eventsRouter = createTRPCRouter({
         where: eq(events.id, input.id),
         with: {
           createdBy: { columns: { id: true, name: true, username: true, image: true } },
+          game: { columns: { id: true, title: true, coverUrl: true } },
           rsvps: {
             with: { user: { columns: { id: true, name: true, username: true, image: true } } },
           },
@@ -243,5 +256,38 @@ export const eventsRouter = createTRPCRouter({
       }
 
       return { eventId: input.eventId, status: input.status };
+    }),
+
+  // Attach or update the game on an event (organiser only) (CAMP-193)
+  attachGame: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        gameId: z.string(),
+        gameOptional: z.boolean().default(false),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const event = await assertEventMember(input.id, ctx.user.id);
+      if (event.createdBy !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      if (event.status === "cancelled") throw new TRPCError({ code: "BAD_REQUEST", message: "Event is cancelled." });
+
+      const game = await db.query.games.findFirst({ where: eq(games.id, input.gameId) });
+      if (!game) throw new TRPCError({ code: "BAD_REQUEST", message: "Game not found." });
+
+      await db.update(events).set({ gameId: input.gameId, gameOptional: input.gameOptional, updatedAt: new Date() }).where(eq(events.id, input.id));
+      return { id: input.id };
+    }),
+
+  // Remove the attached game from an event (organiser only) (CAMP-193)
+  detachGame: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const event = await assertEventMember(input.id, ctx.user.id);
+      if (event.createdBy !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      if (event.status === "cancelled") throw new TRPCError({ code: "BAD_REQUEST", message: "Event is cancelled." });
+
+      await db.update(events).set({ gameId: null, gameOptional: false, updatedAt: new Date() }).where(eq(events.id, input.id));
+      return { id: input.id };
     }),
 });
