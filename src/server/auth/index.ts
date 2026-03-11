@@ -29,6 +29,22 @@ export async function checkSessionAllowed(userId: string): Promise<false | undef
   // undefined return → proceed normally
 }
 
+const socialProviders: Parameters<typeof betterAuth>[0]["socialProviders"] = {};
+
+if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
+  socialProviders.google = {
+    clientId: env.GOOGLE_CLIENT_ID,
+    clientSecret: env.GOOGLE_CLIENT_SECRET,
+  };
+}
+
+if (env.DISCORD_CLIENT_ID && env.DISCORD_CLIENT_SECRET) {
+  socialProviders.discord = {
+    clientId: env.DISCORD_CLIENT_ID,
+    clientSecret: env.DISCORD_CLIENT_SECRET,
+  };
+}
+
 export const auth = betterAuth({
   secret: env.AUTH_SECRET,
   baseURL: env.NEXT_PUBLIC_APP_URL,
@@ -41,6 +57,7 @@ export const auth = betterAuth({
     // Set requireEmailVerification: true when SMTP is configured
     requireEmailVerification: false,
   },
+  socialProviders,
   trustedOrigins: [env.NEXT_PUBLIC_APP_URL],
   databaseHooks: {
     session: {

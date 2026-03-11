@@ -29,9 +29,18 @@ export const env = createEnv({
     // IGDB (via Twitch OAuth) — optional. When set, IGDB search/import is enabled.
     IGDB_CLIENT_ID: z.string().optional(),
     IGDB_CLIENT_SECRET: z.string().optional(),
+    // Social OAuth — optional. When set, the respective provider button appears on login/register.
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
+    DISCORD_CLIENT_ID: z.string().optional(),
+    DISCORD_CLIENT_SECRET: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url(),
+    // Set to "true" when the corresponding server-side OAuth credentials are configured.
+    // Controls whether the social login buttons are rendered on the client.
+    NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED: z.string().optional(),
+    NEXT_PUBLIC_DISCORD_OAUTH_ENABLED: z.string().optional(),
   },
   runtimeEnv: {
     DATABASE_URL: process.env.DATABASE_URL,
@@ -51,8 +60,14 @@ export const env = createEnv({
     EMAIL_FROM: process.env.EMAIL_FROM,
     NODE_ENV: process.env.NODE_ENV,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+    NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED: process.env.NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED,
+    NEXT_PUBLIC_DISCORD_OAUTH_ENABLED: process.env.NEXT_PUBLIC_DISCORD_OAUTH_ENABLED,
     IGDB_CLIENT_ID: process.env.IGDB_CLIENT_ID,
     IGDB_CLIENT_SECRET: process.env.IGDB_CLIENT_SECRET,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID,
+    DISCORD_CLIENT_SECRET: process.env.DISCORD_CLIENT_SECRET,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,
