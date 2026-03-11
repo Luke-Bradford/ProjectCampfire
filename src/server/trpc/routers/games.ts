@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { games, gameOwnerships, groupMemberships, pollOptions, polls, events } from "@/server/db/schema";
+import { games, gameOwnerships, groupMemberships, pollOptions, polls } from "@/server/db/schema";
 import { assertRateLimit } from "@/server/ratelimit";
 
 const PLATFORMS = ["pc", "playstation", "xbox", "nintendo", "other"] as const;
@@ -185,7 +185,7 @@ export const gamesRouter = createTRPCRouter({
       const allPolls = await db.query.polls.findMany({
         where: inArray(polls.id, pollIds),
         with: {
-          event: { columns: { id: true, title: true, status: true } },
+          event: { columns: { id: true, title: true, status: true, groupId: true } },
           options: {
             with: { votes: { columns: { userId: true } } },
             orderBy: (t, { asc }) => [asc(t.sortOrder)],
@@ -197,27 +197,11 @@ export const gamesRouter = createTRPCRouter({
 
       // Filter to only polls that belong to the requested group
       // (a poll belongs to the group if poll.groupId matches, or if its event belongs to the group)
-      const eventGroupCache = new Map<string, string>();
-      const scopedPolls = [];
-      for (const poll of allPolls) {
-        if (poll.groupId === input.groupId) {
-          scopedPolls.push(poll);
-          continue;
-        }
-        if (poll.eventId) {
-          if (!eventGroupCache.has(poll.eventId)) {
-            const ev = await db.query.events.findFirst({
-              where: eq(events.id, poll.eventId),
-              columns: { groupId: true },
-            });
-            if (ev) eventGroupCache.set(poll.eventId, ev.groupId);
-          }
-          if (eventGroupCache.get(poll.eventId) === input.groupId) {
-            scopedPolls.push(poll);
-          }
-        }
-      }
-      return scopedPolls;
+      return allPolls.filter(
+        (poll) =>
+          poll.groupId === input.groupId ||
+          (poll.event && poll.event.groupId === input.groupId)
+      );
     }),
 
   // Ownership overlap for a game within a group (CAMP-104)

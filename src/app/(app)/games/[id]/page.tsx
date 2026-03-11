@@ -28,12 +28,10 @@ function GroupOwnershipSection({
   gameId,
   groupId,
   myUserId,
-  myPlatforms,
 }: {
   gameId: string;
   groupId: string;
   myUserId: string;
-  myPlatforms: string[];
 }) {
   const { data: owners = [], isLoading } = api.games.ownershipOverlap.useQuery(
     { gameId, groupId },
@@ -44,7 +42,7 @@ function GroupOwnershipSection({
 
   const myEntries = owners.filter((o) => o.user.id === myUserId);
   const otherEntries = owners.filter((o) => o.user.id !== myUserId);
-  const nobodyOwns = owners.length === 0 && myPlatforms.length === 0;
+  const nobodyOwns = owners.length === 0;
 
   return (
     <div className="space-y-2">
@@ -63,8 +61,8 @@ function GroupOwnershipSection({
       )}
       {otherEntries.length > 0 && (
         <ul className="space-y-1">
-          {otherEntries.map((o, i) => (
-            <li key={i} className="flex items-center gap-2 text-sm">
+          {otherEntries.map((o) => (
+            <li key={`${o.user.id}-${o.platform}`} className="flex items-center gap-2 text-sm">
               <span>{o.user.name}</span>
               <Badge variant="secondary" className="text-xs">
                 {PLATFORM_LABELS[o.platform] ?? o.platform}
@@ -224,7 +222,6 @@ export default function GameDetailPage({ params }: { params: Promise<{ id: strin
                 gameId={id}
                 groupId={activeGroupId}
                 myUserId={myUserId}
-                myPlatforms={game.myPlatforms}
               />
 
               <div className="space-y-2">
