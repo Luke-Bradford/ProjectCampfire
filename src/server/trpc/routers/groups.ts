@@ -242,25 +242,29 @@ export const groupsRouter = createTRPCRouter({
       if (!targetMembership) {
         throw new TRPCError({ code: "NOT_FOUND", message: "User is not a member of this group." });
       }
-      // Promote target to owner, demote self to admin
-      await db
-        .update(groupMemberships)
-        .set({ role: "owner" })
-        .where(
-          and(
-            eq(groupMemberships.groupId, input.groupId),
-            eq(groupMemberships.userId, input.userId)
-          )
-        );
-      await db
-        .update(groupMemberships)
-        .set({ role: "admin" })
-        .where(
-          and(
-            eq(groupMemberships.groupId, input.groupId),
-            eq(groupMemberships.userId, ctx.user.id)
-          )
-        );
+      // Promote target to owner, demote self to admin — wrapped in a transaction
+      // to prevent a window where the group temporarily has two owners or no owner
+      // if the second update fails.
+      await db.transaction(async (tx) => {
+        await tx
+          .update(groupMemberships)
+          .set({ role: "owner" })
+          .where(
+            and(
+              eq(groupMemberships.groupId, input.groupId),
+              eq(groupMemberships.userId, input.userId)
+            )
+          );
+        await tx
+          .update(groupMemberships)
+          .set({ role: "admin" })
+          .where(
+            and(
+              eq(groupMemberships.groupId, input.groupId),
+              eq(groupMemberships.userId, ctx.user.id)
+            )
+          );
+      });
     }),
 
   // Archive a group — owner only (CAMP-048)
@@ -278,9 +282,10 @@ export const groupsRouter = createTRPCRouter({
       if (!membership || membership.role !== "owner") {
         throw new TRPCError({ code: "FORBIDDEN", message: "Only the owner can archive the group." });
       }
+      const now = new Date();
       await db
         .update(groups)
-        .set({ archivedAt: new Date(), updatedAt: new Date() })
+        .set({ archivedAt: now, updatedAt: now })
         .where(eq(groups.id, input.id));
     }),
 
@@ -298,9 +303,10 @@ export const groupsRouter = createTRPCRouter({
       if (!membership || membership.role !== "owner") {
         throw new TRPCError({ code: "FORBIDDEN", message: "Only the owner can unarchive the group." });
       }
+      const now = new Date();
       await db
         .update(groups)
-        .set({ archivedAt: null, updatedAt: new Date() })
+        .set({ archivedAt: null, updatedAt: now })
         .where(eq(groups.id, input.id));
     }),
 

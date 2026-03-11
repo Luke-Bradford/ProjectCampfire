@@ -24,6 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { MoreHorizontal } from "lucide-react";
 import { GroupOverlapView } from "@/components/availability/group-overlap-view";
 
 function initials(name: string) {
@@ -206,8 +207,10 @@ function GroupSettings({
 export default function GroupPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const { data: me } = api.user.me.useQuery();
   const { data: group, isLoading, refetch } = api.groups.get.useQuery({ id });
   const utils = api.useUtils();
+  const myUserId = me?.id ?? "";
 
   const leave = api.groups.leave.useMutation({
     onSuccess: () => router.push("/groups"),
@@ -230,6 +233,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const isAdmin = group.myRole === "owner" || group.myRole === "admin";
   const isOwner = group.myRole === "owner";
   const isArchived = !!group.archivedAt;
+  const ownerUserId = group.memberships.find((x) => x.role === "owner")?.userId;
 
   return (
     <div className="space-y-8">
@@ -301,12 +305,12 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground capitalize">{m.role}</span>
-                {/* Admin/owner actions — not shown on yourself, not shown on the owner */}
-                {isAdmin && m.userId !== group.memberships.find((x) => x.role === "owner")?.userId && (
+                {/* Admin/owner actions — not shown on yourself or on the owner row */}
+                {isAdmin && m.userId !== ownerUserId && m.userId !== myUserId && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground">
-                        ···
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground" aria-label="Member actions">
+                        <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">

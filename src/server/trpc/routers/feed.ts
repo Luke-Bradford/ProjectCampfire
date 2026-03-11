@@ -192,6 +192,8 @@ export const feedRouter = createTRPCRouter({
         resolvedGroupId = input.groupId;
       }
 
+      await assertRateLimit(`rl:feed:create:${ctx.user.id}`, 10, 60);
+
       // Reject new posts in archived groups
       if (resolvedGroupId) {
         const group = await db.query.groups.findFirst({
@@ -202,8 +204,6 @@ export const feedRouter = createTRPCRouter({
           throw new TRPCError({ code: "BAD_REQUEST", message: "This group is archived." });
         }
       }
-
-      await assertRateLimit(`rl:feed:create:${ctx.user.id}`, 10, 60);
       const id = createId();
       await db.insert(posts).values({
         id,
