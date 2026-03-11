@@ -311,8 +311,9 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground capitalize">{m.role}</span>
-                {/* Admin/owner actions — not shown on yourself or on the owner row */}
-                {isAdmin && m.userId !== ownerUserId && m.userId !== myUserId && (
+                {/* Admin/owner actions — not shown on yourself, the owner, or (if caller is admin) other admins */}
+                {isAdmin && m.userId !== ownerUserId && m.userId !== myUserId &&
+                  !(group.myRole === "admin" && m.role === "admin") && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground" aria-label="Member actions">
