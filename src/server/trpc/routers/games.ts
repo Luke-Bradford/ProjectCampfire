@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { games, gameOwnerships } from "@/server/db/schema";
+import { games, gameOwnerships, groupMemberships } from "@/server/db/schema";
 import { assertRateLimit } from "@/server/ratelimit";
 
 const PLATFORMS = ["pc", "playstation", "xbox", "nintendo", "other"] as const;
@@ -132,7 +132,6 @@ export const gamesRouter = createTRPCRouter({
   ownershipOverlapBatch: protectedProcedure
     .input(z.object({ gameIds: z.array(z.string()).min(1).max(20), groupId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const { groupMemberships } = await import("@/server/db/schema");
       const members = await db.query.groupMemberships.findMany({
         where: eq(groupMemberships.groupId, input.groupId),
         with: { user: { columns: { id: true, name: true, username: true } } },
@@ -141,6 +140,8 @@ export const gamesRouter = createTRPCRouter({
       if (!memberIds.includes(ctx.user.id)) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
+      // memberIds is guaranteed non-empty here (caller is a member).
+      // inArray with an empty array would generate invalid SQL in PostgreSQL.
       const ownerships = await db.query.gameOwnerships.findMany({
         where: and(
           inArray(gameOwnerships.gameId, input.gameIds),
@@ -162,7 +163,6 @@ export const gamesRouter = createTRPCRouter({
     .input(z.object({ gameId: z.string(), groupId: z.string() }))
     .query(async ({ ctx, input }) => {
       // Get all members of the group
-      const { groupMemberships } = await import("@/server/db/schema");
       const members = await db.query.groupMemberships.findMany({
         where: eq(groupMemberships.groupId, input.groupId),
         with: { user: { columns: { id: true, name: true, username: true } } },
