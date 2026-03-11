@@ -19,11 +19,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { format, addDays, parseISO, startOfWeek, endOfWeek } from "date-fns";
-import { api } from "@/trpc/react";
-import type { inferRouterOutputs } from "@trpc/server";
-import type { AppRouter } from "@/server/trpc/routers/_app";
-
-type RouterOutputs = inferRouterOutputs<AppRouter>;
+import { api, type RouterOutputs } from "@/trpc/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Dialog,
