@@ -6,6 +6,24 @@ import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { GroupOverlapView } from "@/components/availability/group-overlap-view";
 
 function initials(name: string) {
@@ -44,13 +62,23 @@ type GroupData = {
   name: string;
   description: string | null;
   discordInviteUrl: string | null;
+  archivedAt: Date | null;
 };
 
-function GroupSettings({ group, onSaved }: { group: GroupData; onSaved: () => void }) {
+function GroupSettings({
+  group,
+  isOwner,
+  onSaved,
+}: {
+  group: GroupData;
+  isOwner: boolean;
+  onSaved: () => void;
+}) {
   const [name, setName] = useState<string | null>(null);
   const [description, setDescription] = useState<string | null>(null);
   const [discordUrl, setDiscordUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmArchive, setConfirmArchive] = useState(false);
 
   const update = api.groups.update.useMutation({
     onSuccess: () => {
@@ -63,17 +91,20 @@ function GroupSettings({ group, onSaved }: { group: GroupData; onSaved: () => vo
     onError: (err) => setError(err.message),
   });
 
+  const archive = api.groups.archive.useMutation({ onSuccess: onSaved, onError: (err) => setError(err.message) });
+  const unarchive = api.groups.unarchive.useMutation({ onSuccess: onSaved, onError: (err) => setError(err.message) });
+
   const currentName = name ?? group.name;
   const currentDescription = description ?? (group.description ?? "");
   const currentDiscordUrl = discordUrl ?? (group.discordInviteUrl ?? "");
 
-  // Only send fields that actually changed to prevent overwriting concurrent edits
   const dirtyFields: Partial<{ name: string; description: string; discordInviteUrl: string }> = {};
   if (currentName !== group.name) dirtyFields.name = currentName.trim();
   if (currentDescription !== (group.description ?? "")) dirtyFields.description = currentDescription;
   if (currentDiscordUrl !== (group.discordInviteUrl ?? "")) dirtyFields.discordInviteUrl = currentDiscordUrl;
 
   const isDirty = Object.keys(dirtyFields).length > 0;
+  const isArchived = !!group.archivedAt;
 
   return (
     <section className="space-y-4 rounded-lg border p-4">
@@ -118,6 +149,56 @@ function GroupSettings({ group, onSaved }: { group: GroupData; onSaved: () => vo
           {update.isPending ? "Saving…" : "Save changes"}
         </Button>
       )}
+
+      {isOwner && (
+        <div className="border-t pt-4 space-y-2">
+          {isArchived ? (
+            <>
+              <p className="text-sm text-muted-foreground">This group is archived. Members can still view content but cannot create new posts or events.</p>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={unarchive.isPending}
+                onClick={() => unarchive.mutate({ id: group.id })}
+              >
+                {unarchive.isPending ? "Restoring…" : "Restore group"}
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">Archiving makes the group read-only. Members can still view content but cannot post or create events.</p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setConfirmArchive(true)}
+              >
+                Archive group
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+
+      <AlertDialog open={confirmArchive} onOpenChange={setConfirmArchive}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive this group?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Members will still be able to view existing content, but no new posts or events can be created. You can restore the group at any time.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { setConfirmArchive(false); archive.mutate({ id: group.id }); }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Archive
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }
@@ -126,9 +207,20 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const { id } = use(params);
   const router = useRouter();
   const { data: group, isLoading, refetch } = api.groups.get.useQuery({ id });
+  const utils = api.useUtils();
 
   const leave = api.groups.leave.useMutation({
     onSuccess: () => router.push("/groups"),
+    onError: (err) => alert(err.message),
+  });
+
+  const removeMember = api.groups.removeMember.useMutation({
+    onSuccess: () => void utils.groups.get.invalidate({ id }),
+    onError: (err) => alert(err.message),
+  });
+
+  const transferOwnership = api.groups.transferOwnership.useMutation({
+    onSuccess: () => void utils.groups.get.invalidate({ id }),
     onError: (err) => alert(err.message),
   });
 
@@ -136,27 +228,32 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   if (!group) return <p className="text-muted-foreground">Group not found.</p>;
 
   const isAdmin = group.myRole === "owner" || group.myRole === "admin";
+  const isOwner = group.myRole === "owner";
+  const isArchived = !!group.archivedAt;
 
   return (
     <div className="space-y-8">
       <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{group.name}</h1>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold">{group.name}</h1>
+            {isArchived && <Badge variant="secondary">Archived</Badge>}
+          </div>
           {group.description && (
-            <p className="mt-1 text-muted-foreground">{group.description}</p>
+            <p className="text-muted-foreground">{group.description}</p>
           )}
           {group.discordInviteUrl && (
             <a
               href={group.discordInviteUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-1 inline-flex items-center gap-1 text-sm text-indigo-500 hover:underline"
+              className="inline-flex items-center gap-1 text-sm text-indigo-500 hover:underline"
             >
               Join Discord
             </a>
           )}
         </div>
-        {group.myRole !== "owner" && (
+        {!isOwner && (
           <Button
             variant="outline"
             size="sm"
@@ -173,15 +270,20 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
 
       {isAdmin && (
         <GroupSettings
-          group={{ id: group.id, name: group.name, description: group.description, discordInviteUrl: group.discordInviteUrl }}
+          group={{
+            id: group.id,
+            name: group.name,
+            description: group.description,
+            discordInviteUrl: group.discordInviteUrl,
+            archivedAt: group.archivedAt ?? null,
+          }}
+          isOwner={isOwner}
           onSaved={() => void refetch()}
         />
       )}
 
       <section className="space-y-3">
-        <h2 className="font-semibold">
-          Members ({group.memberships.length})
-        </h2>
+        <h2 className="font-semibold">Members ({group.memberships.length})</h2>
         <ul className="space-y-2">
           {group.memberships.map((m) => (
             <li key={m.userId} className="flex items-center justify-between rounded-lg border p-3">
@@ -197,7 +299,39 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                   )}
                 </div>
               </div>
-              <span className="text-xs text-muted-foreground capitalize">{m.role}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground capitalize">{m.role}</span>
+                {/* Admin/owner actions — not shown on yourself, not shown on the owner */}
+                {isAdmin && m.userId !== group.memberships.find((x) => x.role === "owner")?.userId && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground">
+                        ···
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {isOwner && (
+                        <>
+                          <DropdownMenuItem
+                            onClick={() => transferOwnership.mutate({ groupId: id, userId: m.userId })}
+                            disabled={transferOwnership.isPending}
+                          >
+                            Transfer ownership
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                        </>
+                      )}
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => removeMember.mutate({ groupId: id, userId: m.userId })}
+                        disabled={removeMember.isPending}
+                      >
+                        Remove from group
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
             </li>
           ))}
         </ul>

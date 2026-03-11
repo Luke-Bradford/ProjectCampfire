@@ -51,6 +51,15 @@ export const eventsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await assertMember(input.groupId, ctx.user.id);
 
+      // Reject new events in archived groups
+      const group = await db.query.groups.findFirst({
+        where: eq(groups.id, input.groupId),
+        columns: { archivedAt: true },
+      });
+      if (group?.archivedAt) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "This group is archived." });
+      }
+
       // Validate gameId exists if provided
       if (input.gameId) {
         const game = await db.query.games.findFirst({ where: eq(games.id, input.gameId) });

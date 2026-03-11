@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { posts, comments, reactions, friendships, groupMemberships, events } from "@/server/db/schema";
+import { posts, comments, reactions, friendships, groupMemberships, events, groups } from "@/server/db/schema";
 import { assertRateLimit } from "@/server/ratelimit";
 import { enqueueOgFetch } from "@/server/jobs/og-fetch-jobs";
 import { enqueueProcessCommentImage } from "@/server/jobs/image-jobs";
@@ -190,6 +190,17 @@ export const feedRouter = createTRPCRouter({
         });
         if (!membership) throw new TRPCError({ code: "FORBIDDEN", message: "Not a member of this group." });
         resolvedGroupId = input.groupId;
+      }
+
+      // Reject new posts in archived groups
+      if (resolvedGroupId) {
+        const group = await db.query.groups.findFirst({
+          where: eq(groups.id, resolvedGroupId),
+          columns: { archivedAt: true },
+        });
+        if (group?.archivedAt) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "This group is archived." });
+        }
       }
 
       await assertRateLimit(`rl:feed:create:${ctx.user.id}`, 10, 60);
