@@ -152,6 +152,9 @@ function GroupEvents({ groupId, groupName }: { groupId: string; groupName: strin
                           {ev.polls.length} poll{ev.polls.length === 1 ? "" : "s"}
                         </span>
                       )}
+                      {ev.gameOptional && (
+                        <span className="text-xs text-muted-foreground">Game optional</span>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">

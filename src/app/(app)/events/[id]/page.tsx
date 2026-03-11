@@ -416,6 +416,104 @@ function CreatePollDialog({ eventId, groupId, onCreated, forceOpen, onForceOpenC
   );
 }
 
+// ── Inline game attach picker (event detail page) ─────────────────────────────
+
+function InlineGameAttachPicker({
+  onPick,
+  isPending,
+}: {
+  onPick: (gameId: string) => void;
+  isPending: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [quickAddMode, setQuickAddMode] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const searchEnabled = query.trim().length >= 1;
+  const { data: results, isFetching } = api.games.search.useQuery(
+    { query: query.trim() },
+    { enabled: searchEnabled, staleTime: 10_000 }
+  );
+
+  const quickAdd = api.games.create.useMutation({
+    onSuccess: (data) => onPick(data.id),
+  });
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <Input
+        placeholder="Search games…"
+        value={query}
+        onChange={(e) => { setQuery(e.target.value); setShowDropdown(true); setQuickAddMode(false); }}
+        onFocus={() => { if (query.trim()) setShowDropdown(true); }}
+        autoComplete="off"
+        disabled={isPending || quickAdd.isPending}
+      />
+      {showDropdown && query.trim().length >= 1 && (
+        <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow-md text-sm overflow-hidden">
+          {isFetching && <p className="px-3 py-2 text-muted-foreground">Searching…</p>}
+          {!isFetching && results?.map((g) => (
+            <button
+              key={g.id}
+              type="button"
+              className="w-full text-left px-3 py-2 hover:bg-accent flex items-center gap-2"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { setShowDropdown(false); onPick(g.id); }}
+            >
+              {g.coverUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={g.coverUrl} alt="" className="h-8 w-6 rounded object-cover shrink-0" />
+              )}
+              <span className="truncate">{g.title}</span>
+            </button>
+          ))}
+          {!isFetching && results?.length === 0 && !quickAddMode && (
+            <div className="px-3 py-2 text-muted-foreground">
+              No results.{" "}
+              <button
+                type="button"
+                className="text-primary hover:underline"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setQuickAddMode(true)}
+              >
+                Add &ldquo;{query.trim()}&rdquo; as new game
+              </button>
+            </div>
+          )}
+          {quickAddMode && (
+            <div className="px-3 py-2 flex items-center justify-between gap-2">
+              <span className="text-sm truncate">Add &ldquo;{query.trim()}&rdquo; to catalog?</span>
+              <div className="flex gap-2 shrink-0">
+                <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setQuickAddMode(false)}>Cancel</button>
+                <button
+                  type="button"
+                  className="text-xs text-primary hover:underline"
+                  disabled={quickAdd.isPending}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => quickAdd.mutate({ title: query.trim() })}
+                >
+                  {quickAdd.isPending ? "Adding…" : "Add"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Event detail page ─────────────────────────────────────────────────────────
 
 // ── Event discussion ──────────────────────────────────────────────────────────
@@ -463,11 +561,18 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
     if (nudgeChecked.current) return;
     if (searchParams.get("created") === "1") {
       nudgeChecked.current = true;
-      setShowNudge(true);
-      // Strip the param without pushing a new history entry
+      // Strip params without pushing a new history entry
       const url = new URL(window.location.href);
       url.searchParams.delete("created");
+      const nudgePoll = url.searchParams.get("nudge") === "poll";
+      url.searchParams.delete("nudge");
       window.history.replaceState(null, "", url.toString());
+      if (nudgePoll) {
+        // "Add poll" was chosen in the propose dialog — open poll dialog immediately.
+        setOpenPollDialog(true);
+      } else {
+        setShowNudge(true);
+      }
     }
   }, [searchParams]);
 
@@ -487,6 +592,15 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
   const updateStatus = api.events.updateStatus.useMutation({
     onSuccess: () => { void utils.events.get.invalidate({ id }); setConfirmOpen(false); },
     onError: (e) => setStatusError(e.message),
+  });
+
+  // Game attach/detach (CAMP-193)
+  const [showGamePicker, setShowGamePicker] = useState(false);
+  const attachGame = api.events.attachGame.useMutation({
+    onSuccess: () => { void utils.events.get.invalidate({ id }); setShowGamePicker(false); },
+  });
+  const detachGame = api.events.detachGame.useMutation({
+    onSuccess: () => void utils.events.get.invalidate({ id }),
   });
 
   if (isLoading) return <p className="text-muted-foreground text-sm">Loading…</p>;
@@ -563,6 +677,79 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
         <p className="text-xs text-muted-foreground mt-1">
           Created by {event.createdBy.name}
         </p>
+      </div>
+
+      {/* Game section (CAMP-193) */}
+      <div className="space-y-2">
+        <p className="text-sm font-medium">Game</p>
+        {event.game ? (
+          <div className="flex items-center gap-3">
+            {event.game.coverUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={event.game.coverUrl} alt="" className="h-12 w-9 rounded object-cover shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="font-medium truncate">{event.game.title}</p>
+              {event.gameOptional && (
+                <span className="text-xs text-muted-foreground">Optional — bring your own choice</span>
+              )}
+            </div>
+            {isEventCreator && event.status !== "cancelled" && (
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowGamePicker(true)}
+                >
+                  Change
+                </button>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-destructive"
+                  disabled={detachGame.isPending}
+                  onClick={() => detachGame.mutate({ id })}
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                Game TBD
+              </span>
+            </div>
+            {isEventCreator && event.status !== "cancelled" && !showGamePicker && (
+              <button
+                type="button"
+                className="text-xs text-primary hover:underline shrink-0"
+                onClick={() => setShowGamePicker(true)}
+              >
+                + Add game
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Inline game picker for attach/change */}
+        {showGamePicker && isEventCreator && (
+          <div className="rounded-md border p-3 space-y-2">
+            <p className="text-xs text-muted-foreground">Search for a game to attach</p>
+            <InlineGameAttachPicker
+              onPick={(gameId) => attachGame.mutate({ id, gameId })}
+              isPending={attachGame.isPending}
+            />
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setShowGamePicker(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
 
       {/* RSVP */}

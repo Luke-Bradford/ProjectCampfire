@@ -71,6 +71,7 @@ export const reactionsRelations = relations(reactions, ({ one }) => ({
 export const gamesRelations = relations(games, ({ many }) => ({
   ownerships: many(gameOwnerships),
   pollOptions: many(pollOptions),
+  events: many(events),
 }));
 
 export const gameOwnershipsRelations = relations(gameOwnerships, ({ one }) => ({
@@ -93,6 +94,7 @@ export const availabilityOverridesRelations = relations(availabilityOverrides, (
 export const eventsRelations = relations(events, ({ one, many }) => ({
   group: one(groups, { fields: [events.groupId], references: [groups.id] }),
   createdBy: one(user, { fields: [events.createdBy], references: [user.id] }),
+  game: one(games, { fields: [events.gameId], references: [games.id] }),
   rsvps: many(eventRsvps),
   polls: many(polls),
 }));

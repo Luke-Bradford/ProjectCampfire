@@ -16,7 +16,7 @@
  * improvement would convert slot positions to the viewing user's local timezone.
  */
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { format, addDays, parseISO, startOfWeek, endOfWeek } from "date-fns";
 import { api } from "@/trpc/react";
@@ -156,7 +156,115 @@ const MEMBER_COLORS: Array<{ band: string; dot: string }> = [
   { band: "bg-yellow-400/50 border-yellow-500", dot: "bg-yellow-400" },
 ];
 
+// ── Inline game search picker (used in ProposeDialog step 2) ─────────────────
+
+type PickedGame = { id: string; title: string; coverUrl?: string | null };
+
+function GamePicker({
+  onPick,
+}: {
+  onPick: (game: PickedGame) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [quickAddMode, setQuickAddMode] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const searchEnabled = query.trim().length >= 1;
+  const { data: results, isFetching } = api.games.search.useQuery(
+    { query: query.trim() },
+    { enabled: searchEnabled, staleTime: 10_000 }
+  );
+
+  const quickAdd = api.games.create.useMutation({
+    onSuccess: (data) => {
+      onPick({ id: data.id, title: query.trim() });
+    },
+  });
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <Input
+        placeholder="Search games…"
+        value={query}
+        onChange={(e) => { setQuery(e.target.value); setShowDropdown(true); setQuickAddMode(false); }}
+        onFocus={() => { if (query.trim()) setShowDropdown(true); }}
+        autoComplete="off"
+        autoFocus
+      />
+      {showDropdown && query.trim().length >= 1 && (
+        <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow-md text-sm overflow-hidden">
+          {isFetching && <p className="px-3 py-2 text-muted-foreground">Searching…</p>}
+          {!isFetching && results?.map((g) => (
+            <button
+              key={g.id}
+              type="button"
+              className="w-full text-left px-3 py-2 hover:bg-accent flex items-center gap-2"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { setShowDropdown(false); onPick({ id: g.id, title: g.title, coverUrl: g.coverUrl }); }}
+            >
+              {g.coverUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={g.coverUrl} alt="" className="h-8 w-6 rounded object-cover shrink-0" />
+              )}
+              <span className="truncate">{g.title}</span>
+            </button>
+          ))}
+          {!isFetching && results?.length === 0 && !quickAddMode && (
+            <div className="px-3 py-2 text-muted-foreground">
+              No results.{" "}
+              <button
+                type="button"
+                className="text-primary hover:underline"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setQuickAddMode(true)}
+              >
+                Add &ldquo;{query.trim()}&rdquo; as new game
+              </button>
+            </div>
+          )}
+          {quickAddMode && (
+            <div className="px-3 py-2 flex items-center justify-between gap-2">
+              <span className="text-sm truncate">Add &ldquo;{query.trim()}&rdquo; to catalog?</span>
+              <div className="flex gap-2 shrink-0">
+                <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setQuickAddMode(false)}>Cancel</button>
+                <button
+                  type="button"
+                  className="text-xs text-primary hover:underline"
+                  disabled={quickAdd.isPending}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => quickAdd.mutate({ title: query.trim() })}
+                >
+                  {quickAdd.isPending ? "Adding…" : "Add"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Propose session dialog ────────────────────────────────────────────────────
+//
+// Step 1: enter title → Next
+// Step 2: choose Add poll / Pick game / Decide later
+//   - "Add poll": create event then navigate with ?created=1&nudge=poll
+//   - "Pick game": show inline game search, then create event with gameId
+//   - "Decide later": create event immediately (existing behaviour)
+
+type ProposeStep = "title" | "game_choice" | "pick_game";
 
 function ProposeDialog({
   open,
@@ -172,33 +280,58 @@ function ProposeDialog({
   endsAt: string;
 }) {
   const router = useRouter();
+  const [step, setStep] = useState<ProposeStep>("title");
   const [title, setTitle] = useState("");
+  const [pickedGame, setPickedGame] = useState<PickedGame | null>(null);
   const [error, setError] = useState("");
+
+  function reset() {
+    setStep("title");
+    setTitle("");
+    setPickedGame(null);
+    setError("");
+  }
+
+  // Capture the intended navigation suffix before the mutation fires.
+  // Using a ref avoids reading stale closure state in onSuccess (which runs
+  // after reset() has already set step back to "title").
+  const pendingSuffixRef = useRef("?created=1");
 
   const create = api.events.create.useMutation({
     onSuccess: ({ id }) => {
+      const suffix = pendingSuffixRef.current;
+      reset();
       onClose();
-      setTitle("");
-      setError("");
-      router.push(`/events/${id}?created=1`);
+      router.push(`/events/${id}${suffix}`);
     },
     onError: (e) => setError(e.message),
   });
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  function createEvent(opts: { gameId?: string; addPoll?: boolean } = {}) {
     setError("");
-    // Pass the overlap start/end as the proposed confirmed time.
-    // The event is created as a draft so the organiser can review and open it
-    // for RSVPs on the event page. The time is pre-filled in the Confirm dialog.
-    create.mutate({ groupId, title, confirmedStartsAt: startsAt, confirmedEndsAt: endsAt });
+    // Determine the navigation suffix before the mutation fires so onSuccess
+    // reads the correct intent even after reset() has run.
+    if (opts.gameId) {
+      pendingSuffixRef.current = "?created=1";
+    } else if (opts.addPoll) {
+      pendingSuffixRef.current = "?created=1&nudge=poll";
+    } else {
+      pendingSuffixRef.current = "?created=1";
+    }
+    create.mutate({
+      groupId,
+      title,
+      confirmedStartsAt: startsAt,
+      confirmedEndsAt: endsAt,
+      gameId: opts.gameId,
+    });
   }
 
   const startLabel = format(new Date(startsAt), "EEE d MMM, HH:mm");
   const endLabel = format(new Date(endsAt), "HH:mm");
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) { setTitle(""); setError(""); onClose(); } }}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) { reset(); onClose(); } }}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Propose session</DialogTitle>
@@ -206,31 +339,124 @@ function ProposeDialog({
         <p className="text-sm text-muted-foreground">
           {startLabel} – {endLabel} (UTC)
         </p>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="propose-title">Event title</Label>
-            <Input
-              id="propose-title"
-              placeholder="e.g. Friday Night Session"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              autoFocus
-            />
+
+        {error && (
+          <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
+        )}
+
+        {/* Step 1: title */}
+        {step === "title" && (
+          <form
+            onSubmit={(e) => { e.preventDefault(); if (title.trim()) setStep("game_choice"); }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="propose-title">Event title</Label>
+              <Input
+                id="propose-title"
+                placeholder="e.g. Friday Night Session"
+                required
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+              <Button type="submit" disabled={!title.trim()}>Next</Button>
+            </div>
+          </form>
+        )}
+
+        {/* Step 2: game choice */}
+        {step === "game_choice" && (
+          <div className="space-y-3">
+            <p className="text-sm font-medium">What are you playing?</p>
+            <div className="grid gap-2">
+              <Button
+                variant="outline"
+                className="justify-start h-auto py-3 px-4"
+                onClick={() => setStep("pick_game")}
+              >
+                <div className="text-left">
+                  <p className="font-medium">Pick a game</p>
+                  <p className="text-xs text-muted-foreground font-normal">Attach a specific game to the session</p>
+                </div>
+              </Button>
+              <Button
+                variant="outline"
+                className="justify-start h-auto py-3 px-4"
+                disabled={create.isPending}
+                onClick={() => createEvent({ addPoll: true })}
+              >
+                <div className="text-left">
+                  <p className="font-medium">Add a poll</p>
+                  <p className="text-xs text-muted-foreground font-normal">Let the group vote on what to play</p>
+                </div>
+              </Button>
+              <Button
+                variant="outline"
+                className="justify-start h-auto py-3 px-4"
+                disabled={create.isPending}
+                onClick={() => createEvent()}
+              >
+                <div className="text-left">
+                  <p className="font-medium">Decide later</p>
+                  <p className="text-xs text-muted-foreground font-normal">Create the event now, add game info after</p>
+                </div>
+              </Button>
+            </div>
+            <div className="flex justify-start">
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setStep("title")}
+              >
+                ← Back
+              </button>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Creates a draft event with the selected time pre-filled. Open it for RSVPs on the event page.
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={!title.trim() || create.isPending}>
-              {create.isPending ? "Creating…" : "Create event"}
-            </Button>
+        )}
+
+        {/* Step 3: pick game */}
+        {step === "pick_game" && (
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Search for a game</p>
+            {pickedGame ? (
+              <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm bg-muted/50">
+                {pickedGame.coverUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={pickedGame.coverUrl} alt="" className="h-8 w-6 rounded object-cover shrink-0" />
+                )}
+                <span className="flex-1 truncate">{pickedGame.title}</span>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-destructive text-xs shrink-0"
+                  onClick={() => setPickedGame(null)}
+                >
+                  ×
+                </button>
+              </div>
+            ) : (
+              <GamePicker onPick={(g) => setPickedGame(g)} />
+            )}
+            <div className="flex justify-between items-center">
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => { setPickedGame(null); setStep("game_choice"); }}
+              >
+                ← Back
+              </button>
+              <Button
+                disabled={!pickedGame || create.isPending}
+                onClick={() => { if (pickedGame) createEvent({ gameId: pickedGame.id }); }}
+              >
+                {create.isPending ? "Creating…" : "Create event"}
+              </Button>
+            </div>
           </div>
-        </form>
+        )}
       </DialogContent>
     </Dialog>
   );
