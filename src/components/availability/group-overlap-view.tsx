@@ -472,7 +472,7 @@ function DayColumn({
   onClickOverlap,
 }: {
   dateStr: string;
-  memberData: Array<{ userId: string; band: string; slots: MemberSlots }>;
+  memberData: Array<{ userId: string; band: string; slots: MemberSlots; hidden: boolean }>;
   overlapCounts: Map<number, number>;
   totalActiveMembers: number;
   onClickOverlap: (startIdx: number, endIdx: number) => void;
@@ -503,23 +503,46 @@ function DayColumn({
       ))}
       <div className="absolute left-0 right-0 border-t border-border/40" style={{ top: 24 * HOUR_HEIGHT_PX }} />
 
-      {/* Member availability bands */}
-      {memberData.map(({ userId, band, slots }, memberIdx) => {
-        const ranges = mergeSlots(slots[dateStr] ?? new Set());
-        const laneWidth = 100 / memberData.length;
-        return ranges.map(([start, end]) => (
-          <div
-            key={`${userId}-${start}-${end}`}
-            className={`absolute border-l-2 ${band} opacity-60`}
-            style={{
-              top: start * SLOT_HEIGHT_PX,
-              height: (end - start) * SLOT_HEIGHT_PX,
-              left: `${memberIdx * laneWidth}%`,
-              width: `${laneWidth}%`,
-            }}
-          />
-        ));
-      })}
+      {/* Member availability bands.
+          Hidden members render full-width at opacity-15 behind the visible
+          lanes so the viewer can still reference their schedule. Visible members
+          are split into side-by-side lanes (existing behaviour). */}
+      {(() => {
+        const visibleMembers = memberData.filter((m) => !m.hidden);
+        const laneWidth = visibleMembers.length > 0 ? 100 / visibleMembers.length : 100;
+        const visibleIndexMap = new Map(visibleMembers.map((m, i) => [m.userId, i]));
+        return memberData.map(({ userId, band, slots, hidden }) => {
+          const ranges = mergeSlots(slots[dateStr] ?? new Set());
+          if (hidden) {
+            // Full-width faint band behind visible lanes
+            return ranges.map(([start, end]) => (
+              <div
+                key={`${userId}-${start}-${end}`}
+                className={`absolute border-l-2 ${band} opacity-15`}
+                style={{
+                  top: start * SLOT_HEIGHT_PX,
+                  height: (end - start) * SLOT_HEIGHT_PX,
+                  left: 0,
+                  width: "100%",
+                }}
+              />
+            ));
+          }
+          const memberIdx = visibleIndexMap.get(userId) ?? 0;
+          return ranges.map(([start, end]) => (
+            <div
+              key={`${userId}-${start}-${end}`}
+              className={`absolute border-l-2 ${band} opacity-60`}
+              style={{
+                top: start * SLOT_HEIGHT_PX,
+                height: (end - start) * SLOT_HEIGHT_PX,
+                left: `${memberIdx * laneWidth}%`,
+                width: `${laneWidth}%`,
+              }}
+            />
+          ));
+        });
+      })()}
 
       {/* Yellow: 2+ members overlap (z-10). Green renders after at z-20 so it
           paints on top explicitly rather than relying on DOM sibling order. */}
@@ -546,9 +569,9 @@ function DayColumn({
             top: start * SLOT_HEIGHT_PX + 1,
             height: (end - start) * SLOT_HEIGHT_PX - 2,
           }}
-          title={`${slotIndexToTime(start)} – ${slotIndexToTime(end)} — everyone free, click to propose session`}
+          title={`${slotIndexToTime(start)} – ${slotIndexToTime(end)} — all included members free, click to propose session`}
           onClick={() => onClickOverlap(start, end)}
-          aria-label={`Everyone free ${slotIndexToTime(start)}–${slotIndexToTime(end)}, click to propose session`}
+          aria-label={`All included members free ${slotIndexToTime(start)}–${slotIndexToTime(end)}, click to propose session`}
         />
       ))}
     </div>
@@ -595,10 +618,22 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
     { staleTime: 60_000 }
   );
 
-  // Which members are toggled on
-  const [disabledIds, setDisabledIds] = useState<Set<string>>(new Set());
-  const toggleMember = useCallback((id: string) => {
-    setDisabledIds((prev) => {
+  // Two independent member filter states (CAMP-192):
+  // - hiddenIds: band not drawn on grid (cosmetic only)
+  // - excludedIds: not counted toward the green/yellow overlap threshold
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+  const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
+
+  const toggleHidden = useCallback((id: string) => {
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleExcluded = useCallback((id: string) => {
+    setExcludedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
@@ -618,14 +653,15 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
     }));
   }, [memberAvailability]);
 
-  const activeMembers = useMemo(
-    () => memberSlotData.filter((m) => !disabledIds.has(m.user.id)),
-    [memberSlotData, disabledIds]
+  // Members included in the overlap threshold calculation (not excluded)
+  const overlapMembers = useMemo(
+    () => memberSlotData.filter((m) => !excludedIds.has(m.user.id)),
+    [memberSlotData, excludedIds]
   );
 
   const overlapCountsByDate = useMemo(
-    () => computeOverlapCounts(activeMembers, weekDates),
-    [activeMembers, weekDates]
+    () => computeOverlapCounts(overlapMembers, weekDates),
+    [overlapMembers, weekDates]
   );
 
   function handleClickOverlap(dateStr: string, startIdx: number, endIdx: number) {
@@ -646,25 +682,64 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
 
   return (
     <div className="space-y-4">
-      {/* Member toggles */}
-      <div className="flex flex-wrap gap-2">
-        {memberSlotData.map((m) => {
-          const active = !disabledIds.has(m.user.id);
-          return (
+      {/* Member filter chips.
+          Each chip has two actions:
+          - Click the name/avatar area: toggle visibility (show/hide band)
+          - Click the coloured dot: toggle overlap inclusion (counts toward threshold)
+          Default: everyone visible + included in overlap. */}
+      <div className="space-y-1.5">
+        <div className="flex flex-wrap gap-2">
+          {memberSlotData.map((m) => {
+            const isHidden = hiddenIds.has(m.user.id);
+            const isExcluded = excludedIds.has(m.user.id);
+            return (
+              <div
+                key={m.user.id}
+                className={`flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium transition-opacity ${isHidden ? "opacity-40" : "opacity-100"}`}
+              >
+                {/* Dot = overlap inclusion toggle */}
+                <button
+                  type="button"
+                  title={isExcluded ? "Excluded from overlap — click to include" : "Included in overlap — click to exclude"}
+                  aria-label={isExcluded ? `Include ${m.user.name} in overlap` : `Exclude ${m.user.name} from overlap`}
+                  onClick={() => toggleExcluded(m.user.id)}
+                  className={`inline-block h-2.5 w-2.5 rounded-full shrink-0 transition-opacity ${isExcluded ? "opacity-25" : "opacity-100"} ${m.color.dot}`}
+                />
+                {/* Name/avatar = visibility toggle */}
+                <button
+                  type="button"
+                  title={isHidden ? "Band hidden — click to show" : "Click to hide band"}
+                  aria-label={isHidden ? `Show ${m.user.name}'s availability band` : `Hide ${m.user.name}'s availability band`}
+                  onClick={() => toggleHidden(m.user.id)}
+                  className="flex items-center gap-1 min-w-0"
+                >
+                  <Avatar className="h-4 w-4 shrink-0">
+                    <AvatarImage src={m.user.image ?? undefined} />
+                    <AvatarFallback className="text-[8px]">{initials(m.user.name)}</AvatarFallback>
+                  </Avatar>
+                  <span className="truncate">{m.user.name}</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        {/* Overlap scope label — shown when the threshold subset differs from all members */}
+        {excludedIds.size > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Showing overlap for:{" "}
+            <span className="font-medium text-foreground">
+              {overlapMembers.map((m) => m.user.name).join(", ") || "no one"}
+            </span>
+            {" "}·{" "}
             <button
-              key={m.user.id}
-              onClick={() => toggleMember(m.user.id)}
-              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-opacity ${active ? "opacity-100" : "opacity-40"}`}
+              type="button"
+              className="text-primary hover:underline"
+              onClick={() => setExcludedIds(new Set())}
             >
-              <Avatar className="h-4 w-4">
-                <AvatarImage src={m.user.image ?? undefined} />
-                <AvatarFallback className="text-[8px]">{initials(m.user.name)}</AvatarFallback>
-              </Avatar>
-              <span className={`inline-block h-2 w-2 rounded-full ${m.color.dot}`} />
-              {m.user.name}
+              Reset
             </button>
-          );
-        })}
+          </p>
+        )}
       </div>
 
       {noOneHasSchedule && (
@@ -714,9 +789,14 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
               <DayColumn
                 key={dateStr}
                 dateStr={dateStr}
-                memberData={activeMembers.map((m) => ({ userId: m.user.id, band: m.color.band, slots: m.slots }))}
+                memberData={memberSlotData.map((m) => ({
+                  userId: m.user.id,
+                  band: m.color.band,
+                  slots: m.slots,
+                  hidden: hiddenIds.has(m.user.id),
+                }))}
                 overlapCounts={overlapCountsByDate[dateStr] ?? new Map()}
-                totalActiveMembers={activeMembers.length}
+                totalActiveMembers={overlapMembers.length}
                 onClickOverlap={(start, end) => handleClickOverlap(dateStr, start, end)}
               />
             ))}
@@ -735,7 +815,7 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
           </span>
           <span className="flex items-center gap-1">
             <span className="inline-block h-3 w-3 rounded-sm bg-green-400/40 border border-green-500/60" />
-            Everyone free — click to propose
+            All included members free — click to propose
           </span>
         </div>
       </div>
