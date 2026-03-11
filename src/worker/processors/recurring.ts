@@ -67,23 +67,18 @@ type RecurringTemplate = typeof recurringTemplates.$inferSelect;
  * template's timezone without relying on the server's local timezone.
  */
 function candidateDates(template: RecurringTemplate): string[] {
-  // Extract today's date components in the template's timezone
   const now = new Date();
-  const parts = getDateParts(now, template.timezone);
-  // todayOffset: number of days since a reference Sunday
-  const todayDow = parts.weekday; // 0–6
-
   const dates: string[] = [];
 
-  // Build a candidate for each possible occurrence within the lead window
+  // Build a candidate for each possible occurrence within the lead window.
+  // Use Intl.DateTimeFormat (via getDateParts) to extract the weekday in the
+  // template's timezone — arithmetic like (todayDow + offset) % 7 is incorrect
+  // near UTC midnight where adding days in UTC != adding days in local time.
   for (let offset = 0; offset <= template.leadDays; offset++) {
-    // What day-of-week is (today + offset)?
-    const candidateDow = (todayDow + offset) % 7;
-    if (candidateDow === template.dayOfWeek) {
-      // Build the local date string (YYYY-MM-DD) for this candidate
-      const candidateUtc = new Date(now);
-      candidateUtc.setUTCDate(candidateUtc.getUTCDate() + offset);
-      const candidateParts = getDateParts(candidateUtc, template.timezone);
+    const candidateUtc = new Date(now);
+    candidateUtc.setUTCDate(candidateUtc.getUTCDate() + offset);
+    const candidateParts = getDateParts(candidateUtc, template.timezone);
+    if (candidateParts.weekday === template.dayOfWeek) {
       dates.push(
         `${candidateParts.year}-${pad(candidateParts.month)}-${pad(candidateParts.day)}`
       );
