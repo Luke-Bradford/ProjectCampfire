@@ -11,6 +11,15 @@ const TIME_REGEX = /^\d{2}:\d{2}$/;
 const TIME = z.string().regex(TIME_REGEX, "Time must be HH:MM");
 const GENERATED_STATUS = z.enum(["draft", "open"]);
 
+/** Validate that a string is a recognised IANA timezone. Throws a Zod error if not. */
+const TIMEZONE = z.string().min(1).max(64).superRefine((tz, ctx) => {
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone: tz });
+  } catch {
+    ctx.addIssue({ code: "custom", message: `Unknown timezone: ${tz}` });
+  }
+});
+
 async function assertAdminOrOwner(groupId: string, userId: string) {
   const m = await db.query.groupMemberships.findFirst({
     where: and(eq(groupMemberships.groupId, groupId), eq(groupMemberships.userId, userId)),
@@ -52,7 +61,7 @@ export const recurringRouter = createTRPCRouter({
         dayOfWeek: DAY_OF_WEEK,
         startTime: TIME,
         endTime: TIME,
-        timezone: z.string().min(1).max(64),
+        timezone: TIMEZONE,
         leadDays: z.number().int().min(1).max(30).default(7),
         autoPoll: z.boolean().default(false),
         generatedEventStatus: GENERATED_STATUS.default("draft"),
@@ -98,7 +107,7 @@ export const recurringRouter = createTRPCRouter({
         dayOfWeek: DAY_OF_WEEK.optional(),
         startTime: TIME.optional(),
         endTime: TIME.optional(),
-        timezone: z.string().min(1).max(64).optional(),
+        timezone: TIMEZONE.optional(),
         leadDays: z.number().int().min(1).max(30).optional(),
         autoPoll: z.boolean().optional(),
         generatedEventStatus: GENERATED_STATUS.optional(),
@@ -113,7 +122,12 @@ export const recurringRouter = createTRPCRouter({
       if (!template) throw new TRPCError({ code: "NOT_FOUND" });
       await assertAdminOrOwner(template.groupId, ctx.user.id);
 
-      const { id, ...fields } = input;
+      // Strip undefined values — Drizzle may interpret undefined as NULL
+      const { id, ...rawFields } = input;
+      const fields = Object.fromEntries(
+        Object.entries(rawFields).filter(([, v]) => v !== undefined)
+      ) as Partial<typeof rawFields>;
+
       await db
         .update(recurringTemplates)
         .set({ ...fields, updatedAt: new Date() })
