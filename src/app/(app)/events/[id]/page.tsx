@@ -34,6 +34,7 @@ type RsvpStatus = keyof typeof RSVP_LABELS;
 
 function PollCard({
   poll,
+  groupId,
   myUserId,
   onVote,
 }: {
@@ -43,14 +44,17 @@ function PollCard({
     status: string;
     allowMultipleVotes: string;
     createdBy: string;
+    type: string;
     options: {
       id: string;
       label: string;
+      gameId?: string | null;
       votes: { userId: string }[];
       startsAt?: Date | string | null;
       endsAt?: Date | string | null;
     }[];
   };
+  groupId: string;
   myUserId: string;
   onVote: () => void;
 }) {
@@ -60,6 +64,15 @@ function PollCard({
   const totalVotes = poll.options.reduce((s, o) => s + o.votes.length, 0);
   const isClosed = poll.status === "closed";
   const isCreator = poll.createdBy === myUserId;
+
+  // Fetch ownership overlap for game polls (CAMP-104)
+  const gameIds = poll.type === "game"
+    ? poll.options.map((o) => o.gameId).filter((id): id is string => !!id)
+    : [];
+  const { data: ownershipMap } = api.games.ownershipOverlapBatch.useQuery(
+    { gameIds, groupId },
+    { enabled: gameIds.length > 0, staleTime: 60_000 }
+  );
 
   return (
     <div className="rounded-lg border p-4 space-y-3">
@@ -82,6 +95,16 @@ function PollCard({
         {poll.options.map((opt) => {
           const count = opt.votes.length;
           const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+          const owners = opt.gameId ? (ownershipMap?.[opt.gameId] ?? []) : [];
+          const iOwn = owners.some((o) => o.user.id === myUserId);
+          const otherOwners = owners.filter((o) => o.user.id !== myUserId);
+          const ownerLabel = iOwn
+            ? otherOwners.length > 0
+              ? `You + ${otherOwners.length} other${otherOwners.length === 1 ? "" : "s"} own this`
+              : "You own this"
+            : owners.length > 0
+            ? `${owners.length} member${owners.length === 1 ? "" : "s"} own this`
+            : null;
           return (
             <li key={opt.id}>
               <button
@@ -109,6 +132,11 @@ function PollCard({
                     style={{ width: `${pct}%` }}
                   />
                 </div>
+                {ownerLabel && (
+                  <p className={`text-xs mt-0.5 ${iOwn ? "text-primary" : "text-muted-foreground"}`}>
+                    {ownerLabel}
+                  </p>
+                )}
               </button>
             </li>
           );
@@ -814,6 +842,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
             <PollCard
               key={poll.id}
               poll={{ ...poll, createdBy: poll.createdBy }}
+              groupId={event.groupId}
               myUserId={myUserId}
               onVote={() => void utils.events.get.invalidate({ id })}
             />
