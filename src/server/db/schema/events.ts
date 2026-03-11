@@ -10,6 +10,7 @@ import {
 import { user } from "./auth";
 import { groups } from "./groups";
 import { games } from "./games";
+import { recurringTemplates } from "./recurring";
 
 export const eventStatusEnum = pgEnum("event_status", [
   "draft",
@@ -46,6 +47,11 @@ export const events = pgTable("events", {
   gameOptional: boolean("game_optional").notNull().default(false),
   confirmedStartsAt: timestamp("confirmed_starts_at"),
   confirmedEndsAt: timestamp("confirmed_ends_at"),
+  /** Set when this event was auto-generated from a recurring template */
+  recurringTemplateId: text("recurring_template_id").references(
+    () => recurringTemplates.id,
+    { onDelete: "set null" }
+  ),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

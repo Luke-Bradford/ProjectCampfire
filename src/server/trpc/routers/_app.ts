@@ -9,6 +9,7 @@ import { availabilityRouter } from "./availability";
 import { eventsRouter } from "./events";
 import { pollsRouter } from "./polls";
 import { uploadRouter } from "./upload";
+import { recurringRouter } from "./recurring";
 
 export const appRouter = createTRPCRouter({
   user: userRouter,
@@ -21,6 +22,7 @@ export const appRouter = createTRPCRouter({
   events: eventsRouter,
   polls: pollsRouter,
   upload: uploadRouter,
+  recurring: recurringRouter,
 });
 
 export type AppRouter = typeof appRouter;

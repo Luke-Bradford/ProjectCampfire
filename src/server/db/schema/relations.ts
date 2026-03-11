@@ -6,6 +6,7 @@ import { posts, comments, reactions } from "./posts";
 import { games, gameOwnerships } from "./games";
 import { availabilitySchedules, availabilityOverrides } from "./availability";
 import { events, eventRsvps, polls, pollOptions, pollVotes } from "./events";
+import { recurringTemplates } from "./recurring";
 
 export const friendshipsRelations = relations(friendships, ({ one }) => ({
   requester: one(user, {
@@ -95,6 +96,10 @@ export const eventsRelations = relations(events, ({ one, many }) => ({
   group: one(groups, { fields: [events.groupId], references: [groups.id] }),
   createdBy: one(user, { fields: [events.createdBy], references: [user.id] }),
   game: one(games, { fields: [events.gameId], references: [games.id] }),
+  recurringTemplate: one(recurringTemplates, {
+    fields: [events.recurringTemplateId],
+    references: [recurringTemplates.id],
+  }),
   rsvps: many(eventRsvps),
   polls: many(polls),
 }));
@@ -120,4 +125,12 @@ export const pollOptionsRelations = relations(pollOptions, ({ one, many }) => ({
 export const pollVotesRelations = relations(pollVotes, ({ one }) => ({
   option: one(pollOptions, { fields: [pollVotes.pollOptionId], references: [pollOptions.id] }),
   user: one(user, { fields: [pollVotes.userId], references: [user.id] }),
+}));
+
+// ── Recurring templates ────────────────────────────────────────────────────────
+
+export const recurringTemplatesRelations = relations(recurringTemplates, ({ one, many }) => ({
+  group: one(groups, { fields: [recurringTemplates.groupId], references: [groups.id] }),
+  createdBy: one(user, { fields: [recurringTemplates.createdBy], references: [user.id] }),
+  generatedEvents: many(events),
 }));
