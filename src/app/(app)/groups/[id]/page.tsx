@@ -207,10 +207,16 @@ function GroupSettings({
 export default function GroupPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const { data: me } = api.user.me.useQuery();
+  const { data: me, isLoading: meLoading } = api.user.me.useQuery();
   const { data: group, isLoading, refetch } = api.groups.get.useQuery({ id });
   const utils = api.useUtils();
-  const myUserId = me?.id ?? "";
+  const myUserId = me?.id;
+
+  const [confirmAction, setConfirmAction] = useState<{
+    type: "remove" | "transfer";
+    userId: string;
+    name: string;
+  } | null>(null);
 
   const leave = api.groups.leave.useMutation({
     onSuccess: () => router.push("/groups"),
@@ -227,7 +233,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     onError: (err) => alert(err.message),
   });
 
-  if (isLoading) return <p className="text-muted-foreground">Loading…</p>;
+  if (isLoading || meLoading) return <p className="text-muted-foreground">Loading…</p>;
   if (!group) return <p className="text-muted-foreground">Group not found.</p>;
 
   const isAdmin = group.myRole === "owner" || group.myRole === "admin";
@@ -317,8 +323,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                       {isOwner && (
                         <>
                           <DropdownMenuItem
-                            onClick={() => transferOwnership.mutate({ groupId: id, userId: m.userId })}
-                            disabled={transferOwnership.isPending}
+                            onClick={() => setConfirmAction({ type: "transfer", userId: m.userId, name: m.user.name })}
                           >
                             Transfer ownership
                           </DropdownMenuItem>
@@ -327,8 +332,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                       )}
                       <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
-                        onClick={() => removeMember.mutate({ groupId: id, userId: m.userId })}
-                        disabled={removeMember.isPending}
+                        onClick={() => setConfirmAction({ type: "remove", userId: m.userId, name: m.user.name })}
                       >
                         Remove from group
                       </DropdownMenuItem>
@@ -348,6 +352,39 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         </p>
         <GroupOverlapView groupId={id} />
       </section>
+
+      {/* Confirmation dialog for remove / transfer ownership */}
+      <AlertDialog open={!!confirmAction} onOpenChange={(open) => { if (!open) setConfirmAction(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmAction?.type === "transfer" ? "Transfer ownership?" : "Remove member?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction?.type === "transfer"
+                ? `${confirmAction.name} will become the group owner. You will be demoted to admin. This cannot be undone without their cooperation.`
+                : `${confirmAction?.name} will be removed from the group. They can rejoin via the invite link.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className={confirmAction?.type === "transfer" ? "" : "bg-destructive text-destructive-foreground hover:bg-destructive/90"}
+              onClick={() => {
+                if (!confirmAction) return;
+                if (confirmAction.type === "transfer") {
+                  transferOwnership.mutate({ groupId: id, userId: confirmAction.userId });
+                } else {
+                  removeMember.mutate({ groupId: id, userId: confirmAction.userId });
+                }
+                setConfirmAction(null);
+              }}
+            >
+              {confirmAction?.type === "transfer" ? "Transfer" : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
