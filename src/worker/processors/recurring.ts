@@ -184,6 +184,7 @@ async function maybeCreateGamePoll(
         where: (go, { inArray }) =>
           inArray(go.userId, memberIds.map((m) => m.userId)),
         with: { game: { columns: { id: true, title: true } } },
+        limit: 50, // bound memory at MVP scale; JS-side dedup picks the first 5 distinct
       });
 
       for (const o of ownerships) {
@@ -263,11 +264,16 @@ function getDateParts(date: Date, timezone: string): DateParts {
     Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
   };
 
+  const weekday = WEEKDAY_MAP[parts.weekday as string];
+  if (weekday === undefined) {
+    throw new Error(`[recurring] unexpected weekday from Intl: "${parts.weekday as string}"`);
+  }
+
   return {
     year: Number(parts.year),
     month: Number(parts.month),
     day: Number(parts.day),
-    weekday: WEEKDAY_MAP[parts.weekday as string] ?? 0,
+    weekday,
   };
 }
 
