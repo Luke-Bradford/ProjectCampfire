@@ -292,19 +292,32 @@ function ProposeDialog({
     setError("");
   }
 
+  // Capture the intended navigation suffix before the mutation fires.
+  // Using a ref avoids reading stale closure state in onSuccess (which runs
+  // after reset() has already set step back to "title").
+  const pendingSuffixRef = useRef("?created=1");
+
   const create = api.events.create.useMutation({
-    onSuccess: ({ id }, variables) => {
+    onSuccess: ({ id }) => {
+      const suffix = pendingSuffixRef.current;
       reset();
       onClose();
-      // If "Add poll" was chosen, carry nudge=poll so the event page opens the poll dialog.
-      const suffix = variables.gameId ? "" : step === "game_choice" ? "?created=1&nudge=poll" : "?created=1";
-      router.push(`/events/${id}${variables.gameId ? "?created=1" : suffix}`);
+      router.push(`/events/${id}${suffix}`);
     },
     onError: (e) => setError(e.message),
   });
 
   function createEvent(opts: { gameId?: string; addPoll?: boolean } = {}) {
     setError("");
+    // Determine the navigation suffix before the mutation fires so onSuccess
+    // reads the correct intent even after reset() has run.
+    if (opts.gameId) {
+      pendingSuffixRef.current = "?created=1";
+    } else if (opts.addPoll) {
+      pendingSuffixRef.current = "?created=1&nudge=poll";
+    } else {
+      pendingSuffixRef.current = "?created=1";
+    }
     create.mutate({
       groupId,
       title,
