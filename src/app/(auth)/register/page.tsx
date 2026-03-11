@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { SocialLoginButtons } from "@/components/auth/social-login-buttons";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -102,6 +103,7 @@ export default function RegisterPage() {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Creating account…" : "Create account"}
             </Button>
+            <SocialLoginButtons />
             <p className="text-center text-sm text-muted-foreground">
               Already have an account?{" "}
               <Link
