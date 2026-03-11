@@ -5,14 +5,17 @@ import { processAccountJob } from "./processors/account";
 import { processImageJob } from "./processors/image";
 import { processOgFetchJob } from "./processors/og-fetch";
 import { processPollJob } from "./processors/poll";
+import { processRecurringJob } from "./processors/recurring";
 import { getAccountQueue } from "@/server/jobs/account-jobs";
 import { imageQueue } from "@/server/jobs/image-jobs";
 import { getPollQueue } from "@/server/jobs/poll-jobs";
+import { getRecurringQueue } from "@/server/jobs/recurring-jobs";
 import type { EmailJobPayload } from "@/server/jobs/email-jobs";
 import type { AccountJobPayload } from "@/server/jobs/account-jobs";
 import type { ImageJobPayload } from "@/server/jobs/image-jobs";
 import type { OgFetchJobPayload } from "@/server/jobs/og-fetch-jobs";
 import type { PollJobPayload } from "@/server/jobs/poll-jobs";
+import type { RecurringJobPayload } from "@/server/jobs/recurring-jobs";
 
 // Queue definitions — imported by other modules to enqueue jobs.
 // accountQueue lives in server/jobs/account-jobs.ts (import from there directly).
@@ -98,6 +101,15 @@ new Worker<PollJobPayload>(
   { connection: bullmqConnection }
 );
 
+// Recurring event generator worker
+new Worker<RecurringJobPayload>(
+  "recurring",
+  async (job) => {
+    await processRecurringJob(job);
+  },
+  { connection: bullmqConnection }
+);
+
 console.log("Campfire workers started");
 
 // Repeatable jobs — registered with retry so a transient Redis blip at startup
@@ -131,6 +143,15 @@ console.log("Campfire workers started");
         "sweep_overdue_polls",
         { type: "sweep_overdue_polls" },
         { repeat: { every: 5 * 60 * 1000 }, jobId: "sweep_overdue_polls" },
+      )
+    ),
+    // Daily: generate events from active recurring templates whose next occurrence
+    // falls within their leadDays window. Idempotent — safe to re-run.
+    registerRepeatableJob("generate_recurring_events", () =>
+      getRecurringQueue().add(
+        "generate_recurring_events",
+        { type: "generate_recurring_events" },
+        { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: "generate_recurring_events" },
       )
     ),
   ]);

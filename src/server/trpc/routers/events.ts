@@ -107,6 +107,7 @@ export const eventsRouter = createTRPCRouter({
         with: {
           createdBy: { columns: { id: true, name: true, username: true, image: true } },
           game: { columns: { id: true, title: true, coverUrl: true } },
+          recurringTemplate: { columns: { id: true, title: true } },
           rsvps: {
             with: { user: { columns: { id: true, name: true, username: true, image: true } } },
           },

@@ -5,4 +5,5 @@ export * from "./posts";
 export * from "./games";
 export * from "./availability";
 export * from "./events";
+export * from "./recurring";
 export * from "./relations";

@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { MoreHorizontal } from "lucide-react";
 import { GroupOverlapView } from "@/components/availability/group-overlap-view";
+import { RecurringTemplatesSection } from "@/components/groups/recurring-templates-section";
 
 function initials(name: string) {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -291,6 +292,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           onSaved={() => void refetch()}
         />
       )}
+
+      <RecurringTemplatesSection groupId={id} isAdmin={isAdmin} />
 
       <section className="space-y-3">
         <h2 className="font-semibold">Members ({group.memberships.length})</h2>
