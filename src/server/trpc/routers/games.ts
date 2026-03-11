@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { games, gameOwnerships, groupMemberships } from "@/server/db/schema";
+import { games, gameOwnerships, groupMemberships, pollOptions, polls } from "@/server/db/schema";
 import { assertRateLimit } from "@/server/ratelimit";
 
 const PLATFORMS = ["pc", "playstation", "xbox", "nintendo", "other"] as const;
@@ -156,6 +156,52 @@ export const gamesRouter = createTRPCRouter({
         result[o.gameId]!.push({ user: o.user, platform: o.platform });
       }
       return result;
+    }),
+
+  // Poll history for a game within a group (CAMP-105).
+  // Returns polls (with event context) where any option references this gameId,
+  // scoped to the given group. Sorted newest first.
+  pollHistory: protectedProcedure
+    .input(z.object({ gameId: z.string(), groupId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const members = await db.query.groupMemberships.findMany({
+        where: eq(groupMemberships.groupId, input.groupId),
+      });
+      const memberIds = members.map((m) => m.userId);
+      if (!memberIds.includes(ctx.user.id)) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      // Find poll options that reference this game
+      const matchingOptions = await db.query.pollOptions.findMany({
+        where: eq(pollOptions.gameId, input.gameId),
+        columns: { pollId: true },
+      });
+      if (matchingOptions.length === 0) return [];
+
+      const pollIds = [...new Set(matchingOptions.map((o) => o.pollId))];
+
+      // Fetch those polls scoped to the group (via groupId or via their event's groupId)
+      const allPolls = await db.query.polls.findMany({
+        where: inArray(polls.id, pollIds),
+        with: {
+          event: { columns: { id: true, title: true, status: true, groupId: true } },
+          options: {
+            with: { votes: { columns: { userId: true } } },
+            orderBy: (t, { asc }) => [asc(t.sortOrder)],
+          },
+          createdBy: { columns: { id: true, name: true } },
+        },
+        orderBy: (t, { desc }) => [desc(t.createdAt)],
+      });
+
+      // Filter to only polls that belong to the requested group
+      // (a poll belongs to the group if poll.groupId matches, or if its event belongs to the group)
+      return allPolls.filter(
+        (poll) =>
+          poll.groupId === input.groupId ||
+          (poll.event && poll.event.groupId === input.groupId)
+      );
     }),
 
   // Ownership overlap for a game within a group (CAMP-104)

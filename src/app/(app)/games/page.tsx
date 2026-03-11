@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -202,7 +203,7 @@ export default function GamesPage() {
           {myGames.map((g) => (
             <li key={`${g.id}-${g.platform}`} className="flex items-center justify-between rounded-lg border p-3">
               <div className="space-y-1">
-                <p className="font-medium">{g.title}</p>
+                <Link href={`/games/${g.id}`} className="font-medium hover:underline">{g.title}</Link>
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="text-xs">
                     {PLATFORM_LABELS[g.platform as Platform]}
