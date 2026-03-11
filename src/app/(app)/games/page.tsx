@@ -26,118 +26,288 @@ const PLATFORM_LABELS: Record<Platform, string> = {
   other: "Other",
 };
 
+// ── IGDB search result type ────────────────────────────────────────────────────
+
+type IgdbResult = {
+  igdbId: number;
+  title: string;
+  coverUrl: string | null;
+  genres: string[];
+  minPlayers: number | null;
+  maxPlayers: number | null;
+};
+
 // ── Add game dialog ───────────────────────────────────────────────────────────
+
+type Step =
+  | { type: "search" }
+  | { type: "platform"; gameId: string; gameTitle: string }
+  | { type: "manual" };
 
 function AddGameDialog({ onAdded }: { onAdded: () => void }) {
   const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [minPlayers, setMinPlayers] = useState("");
-  const [maxPlayers, setMaxPlayers] = useState("");
+  const [step, setStep] = useState<Step>({ type: "search" });
+  const [query, setQuery] = useState("");
   const [platform, setPlatform] = useState<Platform>("pc");
   const [error, setError] = useState("");
 
-  const create = api.games.create.useMutation();
+  // Manual form fields
+  const [manualTitle, setManualTitle] = useState("");
+  const [manualMin, setManualMin] = useState("");
+  const [manualMax, setManualMax] = useState("");
+
+  const igdbSearch = api.games.igdbSearch.useQuery(
+    { query },
+    { enabled: query.length >= 2, staleTime: 30_000 }
+  );
+
+  const importFromIgdb = api.games.importFromIgdb.useMutation({
+    onSuccess: ({ id }) => setStep({ type: "platform", gameId: id, gameTitle: query }),
+    onError: (err) => setError(err.message),
+  });
+
+  const create = api.games.create.useMutation({
+    onError: (err) => setError(err.message),
+  });
+
   const toggleOwnership = api.games.toggleOwnership.useMutation({
     onSuccess: () => {
       setOpen(false);
-      setTitle("");
-      setMinPlayers("");
-      setMaxPlayers("");
+      reset();
       onAdded();
     },
     onError: (err) => setError(err.message),
   });
 
-  async function handleSubmit(e: React.FormEvent) {
+  function reset() {
+    setStep({ type: "search" });
+    setQuery("");
+    setPlatform("pc");
+    setError("");
+    setManualTitle("");
+    setManualMin("");
+    setManualMax("");
+  }
+
+  function handleOpenChange(o: boolean) {
+    setOpen(o);
+    if (!o) reset();
+  }
+
+  function selectIgdbResult(result: IgdbResult) {
+    setError("");
+    importFromIgdb.mutate({ igdbId: result.igdbId });
+    setQuery(result.title); // used for display in platform step
+  }
+
+  async function handleManualSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     const { id } = await create.mutateAsync({
-      title,
-      minPlayers: minPlayers ? parseInt(minPlayers) : undefined,
-      maxPlayers: maxPlayers ? parseInt(maxPlayers) : undefined,
+      title: manualTitle,
+      minPlayers: manualMin ? parseInt(manualMin) : undefined,
+      maxPlayers: manualMax ? parseInt(manualMax) : undefined,
     });
-    toggleOwnership.mutate({ gameId: id, platform });
+    setStep({ type: "platform", gameId: id, gameTitle: manualTitle });
   }
 
-  const isPending = create.isPending || toggleOwnership.isPending;
+  function handlePlatformConfirm() {
+    if (step.type !== "platform") return;
+    toggleOwnership.mutate({ gameId: step.gameId, platform });
+  }
+
+  const results: IgdbResult[] = igdbSearch.data ?? [];
+
+  // ── Search step ──────────────────────────────────────────────────────────────
+
+  if (step.type === "search") {
+    return (
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogTrigger asChild>
+          <Button>Add game</Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Search for a game</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {error && (
+              <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
+            )}
+            <Input
+              placeholder="e.g. Elden Ring"
+              value={query}
+              onChange={(e) => { setQuery(e.target.value); setError(""); }}
+              autoFocus
+            />
+            {query.length >= 2 && (
+              <div className="max-h-72 overflow-y-auto rounded-md border divide-y">
+                {igdbSearch.isLoading && (
+                  <p className="p-3 text-sm text-muted-foreground">Searching…</p>
+                )}
+                {!igdbSearch.isLoading && results.length === 0 && (
+                  <p className="p-3 text-sm text-muted-foreground">No results found.</p>
+                )}
+                {results.map((r) => (
+                  <button
+                    key={r.igdbId}
+                    className="flex w-full items-center gap-3 p-3 text-left hover:bg-muted transition-colors"
+                    onClick={() => selectIgdbResult(r)}
+                    disabled={importFromIgdb.isPending}
+                  >
+                    {r.coverUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={r.coverUrl} alt={r.title} className="h-12 w-9 rounded object-cover shrink-0" />
+                    ) : (
+                      <div className="h-12 w-9 rounded bg-muted shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{r.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {[
+                          r.genres.slice(0, 2).join(", "),
+                          r.minPlayers && r.maxPlayers ? `${r.minPlayers}–${r.maxPlayers} players` : null,
+                        ].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Can&apos;t find it?{" "}
+              <button
+                className="underline hover:text-foreground"
+                onClick={() => setStep({ type: "manual" })}
+              >
+                Add manually
+              </button>
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // ── Manual step ──────────────────────────────────────────────────────────────
+
+  if (step.type === "manual") {
+    const isPending = create.isPending;
+    return (
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogTrigger asChild>
+          <Button>Add game</Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add game manually</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleManualSubmit} className="space-y-4">
+            {error && (
+              <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="game-title">Title</Label>
+              <Input
+                id="game-title"
+                placeholder="e.g. Elden Ring"
+                required
+                value={manualTitle}
+                onChange={(e) => setManualTitle(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="min-players">Min players</Label>
+                <Input
+                  id="min-players"
+                  type="number"
+                  min={1}
+                  placeholder="1"
+                  value={manualMin}
+                  onChange={(e) => setManualMin(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="max-players">Max players</Label>
+                <Input
+                  id="max-players"
+                  type="number"
+                  min={1}
+                  placeholder="4"
+                  value={manualMax}
+                  onChange={(e) => setManualMax(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex justify-between items-center">
+              <button
+                type="button"
+                className="text-xs text-muted-foreground underline hover:text-foreground"
+                onClick={() => setStep({ type: "search" })}
+              >
+                ← Back to search
+              </button>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={!manualTitle.trim() || isPending}>
+                  {isPending ? "Adding…" : "Next"}
+                </Button>
+              </div>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // ── Platform step ─────────────────────────────────────────────────────────────
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button>Add game</Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Add a game to your library</DialogTitle>
+          <DialogTitle>Which platform do you own it on?</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">{step.gameTitle}</p>
           {error && (
-            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </p>
+            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
           )}
-          <div className="space-y-2">
-            <Label htmlFor="game-title">Title</Label>
-            <Input
-              id="game-title"
-              placeholder="e.g. Elden Ring"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="min-players">Min players</Label>
-              <Input
-                id="min-players"
-                type="number"
-                min={1}
-                placeholder="1"
-                value={minPlayers}
-                onChange={(e) => setMinPlayers(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="max-players">Max players</Label>
-              <Input
-                id="max-players"
-                type="number"
-                min={1}
-                placeholder="4"
-                value={maxPlayers}
-                onChange={(e) => setMaxPlayers(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Platform</Label>
-            <div className="flex flex-wrap gap-2">
-              {PLATFORMS.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setPlatform(p)}
-                  className={`rounded-md border px-3 py-1 text-sm transition-colors ${
-                    platform === p
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "hover:bg-muted"
-                  }`}
-                >
-                  {PLATFORM_LABELS[p]}
-                </button>
-              ))}
-            </div>
+          <div className="flex flex-wrap gap-2">
+            {PLATFORMS.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPlatform(p)}
+                className={`rounded-md border px-3 py-1 text-sm transition-colors ${
+                  platform === p
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                }`}
+              >
+                {PLATFORM_LABELS[p]}
+              </button>
+            ))}
           </div>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button variant="outline" onClick={() => handleOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!title.trim() || isPending}>
-              {isPending ? "Adding…" : "Add to library"}
+            <Button
+              onClick={handlePlatformConfirm}
+              disabled={toggleOwnership.isPending}
+            >
+              {toggleOwnership.isPending ? "Adding…" : "Add to library"}
             </Button>
           </div>
-        </form>
+        </div>
       </DialogContent>
     </Dialog>
   );

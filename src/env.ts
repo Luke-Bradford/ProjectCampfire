@@ -26,6 +26,9 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
+    // IGDB (via Twitch OAuth) — optional. When set, IGDB search/import is enabled.
+    IGDB_CLIENT_ID: z.string().optional(),
+    IGDB_CLIENT_SECRET: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url(),
@@ -48,6 +51,8 @@ export const env = createEnv({
     EMAIL_FROM: process.env.EMAIL_FROM,
     NODE_ENV: process.env.NODE_ENV,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+    IGDB_CLIENT_ID: process.env.IGDB_CLIENT_ID,
+    IGDB_CLIENT_SECRET: process.env.IGDB_CLIENT_SECRET,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,
