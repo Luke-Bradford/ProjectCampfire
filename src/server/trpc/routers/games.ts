@@ -6,10 +6,93 @@ import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
 import { games, gameOwnerships, groupMemberships, pollOptions, polls } from "@/server/db/schema";
 import { assertRateLimit } from "@/server/ratelimit";
+import {
+  igdbEnabled,
+  searchIgdbGames,
+  fetchIgdbGame,
+  normalizeCoverUrl,
+  derivePlayerCounts,
+  extractSteamAppId,
+} from "@/server/igdb";
 
 const PLATFORMS = ["pc", "playstation", "xbox", "nintendo", "other"] as const;
 
 export const gamesRouter = createTRPCRouter({
+  // Search IGDB for games by title (CAMP-107)
+  // Returns lightweight result objects suitable for the import picker.
+  // Only available when IGDB credentials are configured.
+  igdbSearch: protectedProcedure
+    .input(z.object({ query: z.string().min(1).max(100) }))
+    .query(async ({ ctx, input }) => {
+      if (!igdbEnabled()) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "IGDB is not configured." });
+      }
+      await assertRateLimit(`rl:igdb:search:${ctx.user.id}`, 20, 60);
+      const results = await searchIgdbGames(input.query);
+      return results.map((g) => ({
+        igdbId: g.id,
+        title: g.name,
+        coverUrl: normalizeCoverUrl(g.cover?.url),
+        genres: (g.genres ?? []).map((x) => x.name),
+        steamAppId: extractSteamAppId(g),
+        ...derivePlayerCounts(g),
+      }));
+    }),
+
+  // Import a game from IGDB into the local catalog (CAMP-107)
+  // Idempotent: if a game with the same externalId already exists, returns its id.
+  importFromIgdb: protectedProcedure
+    .input(z.object({ igdbId: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!igdbEnabled()) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "IGDB is not configured." });
+      }
+      await assertRateLimit(`rl:igdb:import:${ctx.user.id}`, 10, 60);
+
+      const igdbIdStr = String(input.igdbId);
+
+      // Fast-path: return existing record (avoids unnecessary IGDB fetch)
+      const existing = await db.query.games.findFirst({
+        where: and(eq(games.externalSource, "igdb"), eq(games.externalId, igdbIdStr)),
+        columns: { id: true },
+      });
+      if (existing) return { id: existing.id };
+
+      // Fetch full game data from IGDB
+      const igdbGame = await fetchIgdbGame(input.igdbId);
+      if (!igdbGame) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Game not found on IGDB." });
+      }
+
+      const { minPlayers, maxPlayers } = derivePlayerCounts(igdbGame);
+      const id = createId();
+
+      // ON CONFLICT DO NOTHING: the unique partial index on (externalSource, externalId)
+      // handles the race between two concurrent requests for the same game.
+      // After the insert, re-fetch the id in case our insert lost the race.
+      await db.insert(games).values({
+        id,
+        title: igdbGame.name,
+        description: igdbGame.summary ?? null,
+        coverUrl: normalizeCoverUrl(igdbGame.cover?.url),
+        genres: (igdbGame.genres ?? []).map((g) => g.name),
+        minPlayers,
+        maxPlayers,
+        externalSource: "igdb",
+        externalId: igdbIdStr,
+        steamAppId: extractSteamAppId(igdbGame),
+        metadataJson: igdbGame,
+      }).onConflictDoNothing();
+
+      // Re-fetch in case our row lost to a concurrent insert
+      const row = await db.query.games.findFirst({
+        where: and(eq(games.externalSource, "igdb"), eq(games.externalId, igdbIdStr)),
+        columns: { id: true },
+      });
+
+      return { id: row?.id ?? id };
+    }),
+
   // Search the game catalog by title (CAMP-062 quick-add support)
   search: protectedProcedure
     .input(z.object({ query: z.string().min(1).max(100) }))
