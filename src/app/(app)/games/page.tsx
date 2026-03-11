@@ -3,6 +3,8 @@
 import { useState, useRef } from "react";
 import Link from "next/link";
 import { api } from "@/trpc/react";
+import type { inferRouterOutputs } from "@trpc/server";
+import type { AppRouter } from "@/server/trpc/routers/_app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,14 +30,7 @@ const PLATFORM_LABELS: Record<Platform, string> = {
 
 // ── IGDB search result type ────────────────────────────────────────────────────
 
-type IgdbResult = {
-  igdbId: number;
-  title: string;
-  coverUrl: string | null;
-  genres: string[];
-  minPlayers: number | null;
-  maxPlayers: number | null;
-};
+type IgdbResult = inferRouterOutputs<AppRouter>["games"]["igdbSearch"][number];
 
 // ── Add game dialog ───────────────────────────────────────────────────────────
 
