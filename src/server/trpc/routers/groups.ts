@@ -167,6 +167,149 @@ export const groupsRouter = createTRPCRouter({
       );
     }),
 
+  // Remove a member from the group — admin/owner only (CAMP-046)
+  removeMember: protectedProcedure
+    .input(z.object({ groupId: z.string(), userId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      // Caller must be admin or owner
+      const callerMembership = await db.query.groupMemberships.findFirst({
+        where: and(
+          eq(groupMemberships.groupId, input.groupId),
+          eq(groupMemberships.userId, ctx.user.id)
+        ),
+        columns: { role: true },
+      });
+      if (!callerMembership || (callerMembership.role !== "owner" && callerMembership.role !== "admin")) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only admins can remove members." });
+      }
+      // Cannot remove yourself via this route — use leave instead
+      if (input.userId === ctx.user.id) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Use the leave action to remove yourself." });
+      }
+      // Fetch target membership
+      const targetMembership = await db.query.groupMemberships.findFirst({
+        where: and(
+          eq(groupMemberships.groupId, input.groupId),
+          eq(groupMemberships.userId, input.userId)
+        ),
+        columns: { role: true },
+      });
+      if (!targetMembership) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User is not a member of this group." });
+      }
+      // Cannot remove the owner
+      if (targetMembership.role === "owner") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Cannot remove the group owner." });
+      }
+      // Admin cannot remove another admin
+      if (callerMembership.role === "admin" && targetMembership.role === "admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admins cannot remove other admins." });
+      }
+      await db.delete(groupMemberships).where(
+        and(
+          eq(groupMemberships.groupId, input.groupId),
+          eq(groupMemberships.userId, input.userId)
+        )
+      );
+    }),
+
+  // Transfer ownership to another member — owner only (CAMP-047)
+  transferOwnership: protectedProcedure
+    .input(z.object({ groupId: z.string(), userId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.userId === ctx.user.id) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "You are already the owner." });
+      }
+      // Caller must be owner
+      const callerMembership = await db.query.groupMemberships.findFirst({
+        where: and(
+          eq(groupMemberships.groupId, input.groupId),
+          eq(groupMemberships.userId, ctx.user.id)
+        ),
+        columns: { role: true },
+      });
+      if (!callerMembership || callerMembership.role !== "owner") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only the owner can transfer ownership." });
+      }
+      // Target must be a member
+      const targetMembership = await db.query.groupMemberships.findFirst({
+        where: and(
+          eq(groupMemberships.groupId, input.groupId),
+          eq(groupMemberships.userId, input.userId)
+        ),
+        columns: { role: true },
+      });
+      if (!targetMembership) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User is not a member of this group." });
+      }
+      // Promote target to owner, demote self to admin — wrapped in a transaction
+      // to prevent a window where the group temporarily has two owners or no owner
+      // if the second update fails.
+      await db.transaction(async (tx) => {
+        await tx
+          .update(groupMemberships)
+          .set({ role: "owner" })
+          .where(
+            and(
+              eq(groupMemberships.groupId, input.groupId),
+              eq(groupMemberships.userId, input.userId)
+            )
+          );
+        await tx
+          .update(groupMemberships)
+          .set({ role: "admin" })
+          .where(
+            and(
+              eq(groupMemberships.groupId, input.groupId),
+              eq(groupMemberships.userId, ctx.user.id)
+            )
+          );
+      });
+    }),
+
+  // Archive a group — owner only (CAMP-048)
+  // Archived groups are read-only: no new posts or events can be created.
+  archive: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const membership = await db.query.groupMemberships.findFirst({
+        where: and(
+          eq(groupMemberships.groupId, input.id),
+          eq(groupMemberships.userId, ctx.user.id)
+        ),
+        columns: { role: true },
+      });
+      if (!membership || membership.role !== "owner") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only the owner can archive the group." });
+      }
+      const now = new Date();
+      await db
+        .update(groups)
+        .set({ archivedAt: now, updatedAt: now })
+        .where(eq(groups.id, input.id));
+    }),
+
+  // Unarchive a group — owner only
+  unarchive: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const membership = await db.query.groupMemberships.findFirst({
+        where: and(
+          eq(groupMemberships.groupId, input.id),
+          eq(groupMemberships.userId, ctx.user.id)
+        ),
+        columns: { role: true },
+      });
+      if (!membership || membership.role !== "owner") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only the owner can unarchive the group." });
+      }
+      const now = new Date();
+      await db
+        .update(groups)
+        .set({ archivedAt: null, updatedAt: now })
+        .where(eq(groups.id, input.id));
+    }),
+
   // Get invite token for sharing (members only)
   getInviteToken: protectedProcedure
     .input(z.object({ id: z.string() }))

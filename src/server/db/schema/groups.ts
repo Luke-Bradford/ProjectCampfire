@@ -29,6 +29,7 @@ export const groups = pgTable("groups", {
   inviteToken: varchar("invite_token", { length: 64 }).unique(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  archivedAt: timestamp("archived_at"),
 });
 
 export const groupMemberships = pgTable(
