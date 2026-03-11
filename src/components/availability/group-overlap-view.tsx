@@ -504,25 +504,45 @@ function DayColumn({
       <div className="absolute left-0 right-0 border-t border-border/40" style={{ top: 24 * HOUR_HEIGHT_PX }} />
 
       {/* Member availability bands.
-          Visible members render at opacity-60; hidden (visibility-off) members
-          render faintly at opacity-15 so the viewer can still reference their
-          schedule without them affecting the overlap threshold. */}
-      {memberData.map(({ userId, band, slots, hidden }, memberIdx) => {
-        const ranges = mergeSlots(slots[dateStr] ?? new Set());
-        const laneWidth = 100 / memberData.length;
-        return ranges.map(([start, end]) => (
-          <div
-            key={`${userId}-${start}-${end}`}
-            className={`absolute border-l-2 ${band} ${hidden ? "opacity-15" : "opacity-60"}`}
-            style={{
-              top: start * SLOT_HEIGHT_PX,
-              height: (end - start) * SLOT_HEIGHT_PX,
-              left: `${memberIdx * laneWidth}%`,
-              width: `${laneWidth}%`,
-            }}
-          />
-        ));
-      })}
+          Hidden members render full-width at opacity-15 behind the visible
+          lanes so the viewer can still reference their schedule. Visible members
+          are split into side-by-side lanes (existing behaviour). */}
+      {(() => {
+        const visibleMembers = memberData.filter((m) => !m.hidden);
+        const laneWidth = visibleMembers.length > 0 ? 100 / visibleMembers.length : 100;
+        const visibleIndexMap = new Map(visibleMembers.map((m, i) => [m.userId, i]));
+        return memberData.map(({ userId, band, slots, hidden }) => {
+          const ranges = mergeSlots(slots[dateStr] ?? new Set());
+          if (hidden) {
+            // Full-width faint band behind visible lanes
+            return ranges.map(([start, end]) => (
+              <div
+                key={`${userId}-${start}-${end}`}
+                className={`absolute border-l-2 ${band} opacity-15`}
+                style={{
+                  top: start * SLOT_HEIGHT_PX,
+                  height: (end - start) * SLOT_HEIGHT_PX,
+                  left: 0,
+                  width: "100%",
+                }}
+              />
+            ));
+          }
+          const memberIdx = visibleIndexMap.get(userId) ?? 0;
+          return ranges.map(([start, end]) => (
+            <div
+              key={`${userId}-${start}-${end}`}
+              className={`absolute border-l-2 ${band} opacity-60`}
+              style={{
+                top: start * SLOT_HEIGHT_PX,
+                height: (end - start) * SLOT_HEIGHT_PX,
+                left: `${memberIdx * laneWidth}%`,
+                width: `${laneWidth}%`,
+              }}
+            />
+          ));
+        });
+      })()}
 
       {/* Yellow: 2+ members overlap (z-10). Green renders after at z-20 so it
           paints on top explicitly rather than relying on DOM sibling order. */}
@@ -681,6 +701,7 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
                 <button
                   type="button"
                   title={isExcluded ? "Excluded from overlap — click to include" : "Included in overlap — click to exclude"}
+                  aria-label={isExcluded ? `Include ${m.user.name} in overlap` : `Exclude ${m.user.name} from overlap`}
                   onClick={() => toggleExcluded(m.user.id)}
                   className={`inline-block h-2.5 w-2.5 rounded-full shrink-0 transition-opacity ${isExcluded ? "opacity-25" : "opacity-100"} ${m.color.dot}`}
                 />
@@ -688,6 +709,7 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
                 <button
                   type="button"
                   title={isHidden ? "Band hidden — click to show" : "Click to hide band"}
+                  aria-label={isHidden ? `Show ${m.user.name}'s availability band` : `Hide ${m.user.name}'s availability band`}
                   onClick={() => toggleHidden(m.user.id)}
                   className="flex items-center gap-1 min-w-0"
                 >
