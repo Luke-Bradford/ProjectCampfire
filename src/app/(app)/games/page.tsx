@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,8 @@ function AddGameDialog({ onAdded }: { onAdded: () => void }) {
   const [query, setQuery] = useState("");
   const [platform, setPlatform] = useState<Platform>("pc");
   const [error, setError] = useState("");
+  // Captures the selected game title before the mutation fires, avoiding stale closure
+  const selectedTitleRef = useRef("");
 
   // Manual form fields
   const [manualTitle, setManualTitle] = useState("");
@@ -62,7 +64,7 @@ function AddGameDialog({ onAdded }: { onAdded: () => void }) {
   );
 
   const importFromIgdb = api.games.importFromIgdb.useMutation({
-    onSuccess: ({ id }) => setStep({ type: "platform", gameId: id, gameTitle: query }),
+    onSuccess: ({ id }) => setStep({ type: "platform", gameId: id, gameTitle: selectedTitleRef.current }),
     onError: (err) => setError(err.message),
   });
 
@@ -96,19 +98,23 @@ function AddGameDialog({ onAdded }: { onAdded: () => void }) {
 
   function selectIgdbResult(result: IgdbResult) {
     setError("");
+    selectedTitleRef.current = result.title;
     importFromIgdb.mutate({ igdbId: result.igdbId });
-    setQuery(result.title); // used for display in platform step
   }
 
   async function handleManualSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    const { id } = await create.mutateAsync({
-      title: manualTitle,
-      minPlayers: manualMin ? parseInt(manualMin) : undefined,
-      maxPlayers: manualMax ? parseInt(manualMax) : undefined,
-    });
-    setStep({ type: "platform", gameId: id, gameTitle: manualTitle });
+    try {
+      const { id } = await create.mutateAsync({
+        title: manualTitle,
+        minPlayers: manualMin ? parseInt(manualMin) : undefined,
+        maxPlayers: manualMax ? parseInt(manualMax) : undefined,
+      });
+      setStep({ type: "platform", gameId: id, gameTitle: manualTitle });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    }
   }
 
   function handlePlatformConfirm() {

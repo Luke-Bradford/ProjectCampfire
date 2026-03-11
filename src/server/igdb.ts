@@ -37,34 +37,41 @@ const STEAM_CATEGORY = 1;
 
 // ── Token management ──────────────────────────────────────────────────────────
 
-async function getAccessToken(): Promise<string> {
-  // Try cache first
-  const cached = await redis.get(TOKEN_CACHE_KEY);
-  if (cached) return cached;
-
+async function fetchNewToken(): Promise<{ token: string; ttl: number }> {
   if (!env.IGDB_CLIENT_ID || !env.IGDB_CLIENT_SECRET) {
     throw new Error("IGDB credentials not configured.");
   }
 
-  const res = await fetch(
-    `${TWITCH_TOKEN_URL}?client_id=${env.IGDB_CLIENT_ID}&client_secret=${env.IGDB_CLIENT_SECRET}&grant_type=client_credentials`,
-    { method: "POST" }
-  );
+  // Credentials sent in the POST body, not the URL, to avoid appearing in server/proxy logs.
+  const res = await fetch(TWITCH_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: env.IGDB_CLIENT_ID,
+      client_secret: env.IGDB_CLIENT_SECRET,
+      grant_type: "client_credentials",
+    }),
+  });
   if (!res.ok) {
     throw new Error(`Twitch token request failed: ${res.status}`);
   }
   const data = (await res.json()) as { access_token: string; expires_in: number };
-
-  // Cache with 60s buffer before expiry
   const ttl = Math.max(data.expires_in - 60, 60);
-  await redis.setex(TOKEN_CACHE_KEY, ttl, data.access_token);
+  return { token: data.access_token, ttl };
+}
 
-  return data.access_token;
+async function getAccessToken(): Promise<string> {
+  const cached = await redis.get(TOKEN_CACHE_KEY);
+  if (cached) return cached;
+
+  const { token, ttl } = await fetchNewToken();
+  await redis.setex(TOKEN_CACHE_KEY, ttl, token);
+  return token;
 }
 
 // ── Query helper ──────────────────────────────────────────────────────────────
 
-async function igdbQuery<T>(endpoint: string, body: string): Promise<T> {
+async function igdbQuery<T>(endpoint: string, body: string, retry = true): Promise<T> {
   const token = await getAccessToken();
 
   const res = await fetch(`${IGDB_API_URL}/${endpoint}`, {
@@ -76,6 +83,15 @@ async function igdbQuery<T>(endpoint: string, body: string): Promise<T> {
     },
     body,
   });
+
+  // On 401, the cached token may have been revoked or expired early (clock skew).
+  // Invalidate the cache, fetch a fresh token, and retry once.
+  if (res.status === 401 && retry) {
+    await redis.del(TOKEN_CACHE_KEY);
+    const { token: freshToken, ttl } = await fetchNewToken();
+    await redis.setex(TOKEN_CACHE_KEY, ttl, freshToken);
+    return igdbQuery<T>(endpoint, body, false);
+  }
 
   if (!res.ok) {
     throw new Error(`IGDB ${endpoint} request failed: ${res.status}`);
@@ -103,6 +119,9 @@ limit 10;`
  * Fetch a single IGDB game by its numeric ID.
  */
 export async function fetchIgdbGame(igdbId: number): Promise<IgdbGame | null> {
+  if (!Number.isSafeInteger(igdbId) || igdbId <= 0) {
+    throw new Error(`Invalid IGDB game ID: ${igdbId}`);
+  }
   const results = await igdbQuery<IgdbGame[]>(
     "games",
     `fields id,name,summary,cover.url,genres.name,game_modes.name,multiplayer_modes.*,external_games.category,external_games.uid;

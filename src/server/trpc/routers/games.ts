@@ -51,7 +51,7 @@ export const gamesRouter = createTRPCRouter({
 
       const igdbIdStr = String(input.igdbId);
 
-      // Idempotency: return existing record if already imported
+      // Fast-path: return existing record (avoids unnecessary IGDB fetch)
       const existing = await db.query.games.findFirst({
         where: and(eq(games.externalSource, "igdb"), eq(games.externalId, igdbIdStr)),
         columns: { id: true },
@@ -67,6 +67,9 @@ export const gamesRouter = createTRPCRouter({
       const { minPlayers, maxPlayers } = derivePlayerCounts(igdbGame);
       const id = createId();
 
+      // ON CONFLICT DO NOTHING: the unique partial index on (externalSource, externalId)
+      // handles the race between two concurrent requests for the same game.
+      // After the insert, re-fetch the id in case our insert lost the race.
       await db.insert(games).values({
         id,
         title: igdbGame.name,
@@ -79,9 +82,15 @@ export const gamesRouter = createTRPCRouter({
         externalId: igdbIdStr,
         steamAppId: extractSteamAppId(igdbGame),
         metadataJson: igdbGame,
+      }).onConflictDoNothing();
+
+      // Re-fetch in case our row lost to a concurrent insert
+      const row = await db.query.games.findFirst({
+        where: and(eq(games.externalSource, "igdb"), eq(games.externalId, igdbIdStr)),
+        columns: { id: true },
       });
 
-      return { id };
+      return { id: row?.id ?? id };
     }),
 
   // Search the game catalog by title (CAMP-062 quick-add support)

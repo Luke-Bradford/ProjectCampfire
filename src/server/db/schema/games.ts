@@ -6,7 +6,9 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { user } from "./auth";
 
 export const gameSourceEnum = pgEnum("game_source", ["manual", "igdb", "steam_app"]);
@@ -21,21 +23,31 @@ export const gamePlatformEnum = pgEnum("game_platform", [
 
 export const ownershipSourceEnum = pgEnum("ownership_source", ["manual", "steam"]);
 
-export const games = pgTable("games", {
-  id: text("id").primaryKey(),
-  title: text("title").notNull(),
-  coverUrl: text("cover_url"),
-  description: text("description"),
-  minPlayers: integer("min_players"),
-  maxPlayers: integer("max_players"),
-  genres: text("genres").array().notNull().default([]),
-  externalSource: gameSourceEnum("external_source").notNull().default("manual"),
-  externalId: text("external_id"),
-  steamAppId: text("steam_app_id"),
-  metadataJson: jsonb("metadata_json"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+export const games = pgTable(
+  "games",
+  {
+    id: text("id").primaryKey(),
+    title: text("title").notNull(),
+    coverUrl: text("cover_url"),
+    description: text("description"),
+    minPlayers: integer("min_players"),
+    maxPlayers: integer("max_players"),
+    genres: text("genres").array().notNull().default([]),
+    externalSource: gameSourceEnum("external_source").notNull().default("manual"),
+    externalId: text("external_id"),
+    steamAppId: text("steam_app_id"),
+    metadataJson: jsonb("metadata_json"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    // Partial unique index: only one row per (source, externalId) when externalId is not null.
+    // Prevents duplicate imports of the same IGDB/Steam game even under concurrent requests.
+    externalIdUniq: uniqueIndex("games_external_source_id_uniq")
+      .on(t.externalSource, t.externalId)
+      .where(sql`${t.externalId} is not null`),
+  })
+);
 
 export const gameOwnerships = pgTable(
   "game_ownerships",
