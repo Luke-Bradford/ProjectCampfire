@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, count, eq, gt, ilike, inArray, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -195,15 +195,35 @@ export const gamesRouter = createTRPCRouter({
       return { owned: true };
     }),
 
-  // My games library (CAMP-106)
+  // My games library (CAMP-106, CAMP-118 pagination, CAMP-121 hide)
+  // Cursor-based on gameId (lexicographic); showHidden shows suppressed games only.
   myGames: protectedProcedure
-    .input(z.object({ platform: z.enum(PLATFORMS).optional() }))
+    .input(
+      z.object({
+        platform: z.enum(PLATFORMS).optional(),
+        cursor: z.string().optional(), // last gameId from previous page
+        limit: z.number().int().min(1).max(100).default(50),
+        showHidden: z.boolean().default(false),
+      })
+    )
     .query(async ({ ctx, input }) => {
+      const baseWhere = and(
+        eq(gameOwnerships.userId, ctx.user.id),
+        input.platform ? eq(gameOwnerships.platform, input.platform) : undefined,
+        eq(gameOwnerships.hidden, input.showHidden)
+      );
+
+      // Total count for the header (single aggregation query).
+      const [{ value: total }] = await db
+        .select({ value: count() })
+        .from(gameOwnerships)
+        .where(baseWhere);
+
+      // Paginated rows: cursor moves the window forward via gt(gameId).
       const rows = await db.query.gameOwnerships.findMany({
-        where: and(
-          eq(gameOwnerships.userId, ctx.user.id),
-          input.platform ? eq(gameOwnerships.platform, input.platform) : undefined
-        ),
+        where: input.cursor
+          ? and(baseWhere, gt(gameOwnerships.gameId, input.cursor))
+          : baseWhere,
         with: {
           game: {
             columns: {
@@ -216,8 +236,36 @@ export const gamesRouter = createTRPCRouter({
             },
           },
         },
+        orderBy: (t, { asc }) => [asc(t.gameId)],
+        limit: input.limit + 1,
       });
-      return rows.map((r) => ({ ...r.game, platform: r.platform, source: r.source }));
+
+      const hasMore = rows.length > input.limit;
+      const items = rows.slice(0, input.limit).map((r) => ({
+        ...r.game,
+        platform: r.platform,
+        source: r.source,
+        hidden: r.hidden,
+      }));
+      const nextCursor = hasMore ? items[items.length - 1]?.id : undefined;
+
+      return { items, nextCursor, total: total ?? 0 };
+    }),
+
+  // Hide/unhide a game from the library and poll suggestions (CAMP-121).
+  // Sets hidden=true on all ownership rows for this user+game (across all platforms).
+  setGameHidden: protectedProcedure
+    .input(z.object({ gameId: z.string(), hidden: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await db
+        .update(gameOwnerships)
+        .set({ hidden: input.hidden })
+        .where(
+          and(
+            eq(gameOwnerships.userId, ctx.user.id),
+            eq(gameOwnerships.gameId, input.gameId)
+          )
+        );
     }),
 
   // Batch ownership overlap for multiple games within a group (CAMP-104).
