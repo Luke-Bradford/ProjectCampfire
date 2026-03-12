@@ -5,6 +5,7 @@ import { auth } from "@/server/auth";
 import { UserMenu } from "@/components/nav/user-menu";
 import { NotificationBell } from "@/components/nav/notification-bell";
 import { NavLinks } from "@/components/nav/nav-links";
+import { MobileNav } from "@/components/nav/mobile-nav";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   let session;
@@ -26,15 +27,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Link href="/feed" className="text-lg font-semibold tracking-tight">
               Campfire
             </Link>
-            <NavLinks />
+            {/* Desktop nav — hidden on mobile, bottom bar takes over */}
+            <div className="hidden md:flex">
+              <NavLinks />
+            </div>
           </div>
           <div className="flex items-center gap-4">
-            <NotificationBell />
+            {/* Notification bell in header only on desktop; mobile uses bottom bar */}
+            <div className="hidden md:flex">
+              <NotificationBell />
+            </div>
             <UserMenu name={session.user.name} />
           </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6">{children}</main>
+      {/* pb-16 on mobile so content clears the fixed bottom nav bar */}
+      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 pb-20 md:pb-6">{children}</main>
+      <MobileNav />
     </div>
   );
 }
