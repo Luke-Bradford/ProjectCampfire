@@ -316,11 +316,17 @@ function AddGameDialog({ onAdded }: { onAdded: () => void }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+type ViewMode = "list" | "grid";
+
 export default function GamesPage() {
   const [filterPlatform, setFilterPlatform] = useState<Platform | undefined>();
   const [showHidden, setShowHidden] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (typeof window === "undefined") return "list";
+    return (localStorage.getItem("games-view-mode") as ViewMode | null) ?? "list";
+  });
 
   // Debounce search input — update the query param 300ms after the user stops typing.
   useEffect(() => {
@@ -344,6 +350,11 @@ export default function GamesPage() {
     onSuccess: () => void utils.games.myGames.invalidate(),
   });
 
+  function setView(mode: ViewMode) {
+    setViewMode(mode);
+    localStorage.setItem("games-view-mode", mode);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -357,7 +368,34 @@ export default function GamesPage() {
               : `${total} game${total === 1 ? "" : "s"}${showHidden ? " hidden" : ""}`}
           </p>
         </div>
-        <AddGameDialog onAdded={() => void utils.games.myGames.invalidate()} />
+        <div className="flex items-center gap-2">
+          {/* View mode toggle */}
+          <div className="flex rounded-md border overflow-hidden">
+            <button
+              onClick={() => setView("list")}
+              aria-label="List view"
+              className={`px-2 py-1.5 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+            >
+              {/* List icon */}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+                <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setView("grid")}
+              aria-label="Grid view"
+              className={`px-2 py-1.5 transition-colors ${viewMode === "grid" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+            >
+              {/* Grid icon */}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+              </svg>
+            </button>
+          </div>
+          <AddGameDialog onAdded={() => void utils.games.myGames.invalidate()} />
+        </div>
       </div>
 
       {/* Search */}
@@ -429,6 +467,65 @@ export default function GamesPage() {
             )
           }
         />
+      ) : viewMode === "grid" ? (
+        <>
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+            {allItems.map((g) => (
+              <div key={g.id} className="group relative">
+                <Link href={`/games/${g.id}`} className="block">
+                  {g.coverUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={g.coverUrl}
+                      alt={g.title}
+                      className="w-full aspect-[3/4] rounded-lg object-cover"
+                    />
+                  ) : (
+                    <div className="w-full aspect-[3/4] rounded-lg bg-muted flex items-center justify-center">
+                      <span className="text-2xl font-bold text-muted-foreground">
+                        {g.title.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+                  {/* Platform badge overlay */}
+                  {g.platforms.length > 0 && (
+                    <div className="absolute top-1.5 left-1.5">
+                      <Badge variant="secondary" className="text-xs px-1.5 py-0.5 bg-background/80 backdrop-blur-sm">
+                        {PLATFORM_LABELS[g.platforms[0]!]}
+                        {g.platforms.length > 1 && ` +${g.platforms.length - 1}`}
+                      </Badge>
+                    </div>
+                  )}
+                </Link>
+                <div className="mt-1.5 flex items-start justify-between gap-1">
+                  <Link href={`/games/${g.id}`} className="text-xs font-medium leading-tight line-clamp-2 hover:underline flex-1">
+                    {g.title}
+                  </Link>
+                  <button
+                    className="text-xs text-muted-foreground hover:text-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => setGameHidden.mutate({ gameId: g.id, hidden: !g.hidden })}
+                    disabled={setGameHidden.isPending && setGameHidden.variables?.gameId === g.id}
+                    aria-label={g.hidden ? "Unhide" : "Hide"}
+                  >
+                    {g.hidden ? "↩" : "✕"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {hasNextPage && (
+            <div className="flex justify-center pt-2">
+              <button
+                className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
+                disabled={isFetchingNextPage}
+                onClick={() => void fetchNextPage()}
+              >
+                {isFetchingNextPage ? "Loading…" : "Load more"}
+              </button>
+            </div>
+          )}
+        </>
       ) : (
         <>
           <ul className="space-y-2">
