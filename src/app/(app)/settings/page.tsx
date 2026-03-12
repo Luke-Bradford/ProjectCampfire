@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import type { NotificationPrefs } from "@/server/db/schema";
+import { ThemeToggle } from "@/components/nav/theme-toggle";
 
 // ── Connected accounts section ───────────────────────────────────────────────
 
@@ -439,6 +440,18 @@ export default function SettingsPage() {
   return (
     <div className="space-y-8 max-w-xl">
       <h1 className="text-2xl font-bold">Settings</h1>
+
+      {/* ── Appearance ──────────────────────────────────────────────────────── */}
+      <section className="space-y-4">
+        <h2 className="text-base font-semibold border-b pb-2">Appearance</h2>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Theme</p>
+            <p className="text-xs text-muted-foreground mt-0.5">System follows your OS preference.</p>
+          </div>
+          <ThemeToggle />
+        </div>
+      </section>
 
       {/* ── Profile ─────────────────────────────────────────────────────────── */}
       <section className="space-y-4">

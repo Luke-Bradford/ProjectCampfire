@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/nav/theme-toggle";
 
 export function UserMenu({ name }: { name: string }) {
   const router = useRouter();
@@ -16,6 +17,7 @@ export function UserMenu({ name }: { name: string }) {
 
   return (
     <div className="flex items-center gap-3">
+      <ThemeToggle />
       <Link href="/settings" className="text-sm text-muted-foreground hover:text-foreground">
         {name}
       </Link>
