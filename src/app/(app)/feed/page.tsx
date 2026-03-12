@@ -5,6 +5,7 @@ import { api } from "@/trpc/react";
 import { PostComposer } from "@/components/feed/post-composer";
 import { PostCard } from "@/components/feed/post-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FeedSkeleton } from "@/components/ui/skeletons";
 import { Button } from "@/components/ui/button";
 
 export default function FeedPage() {
@@ -26,7 +27,7 @@ export default function FeedPage() {
     <div className="space-y-4 max-w-2xl mx-auto">
       <PostComposer onPosted={refresh} />
 
-      {isLoading && <p className="text-sm text-muted-foreground text-center py-8">Loading…</p>}
+      {isLoading && <FeedSkeleton />}
 
       {isEmpty && (
         <EmptyState

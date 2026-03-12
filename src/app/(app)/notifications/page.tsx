@@ -5,6 +5,7 @@ import { formatDistanceToNow } from "date-fns";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { NotificationsSkeleton } from "@/components/ui/skeletons";
 
 type NotifData = Record<string, string>;
 
@@ -51,7 +52,7 @@ function notifMessage(type: string, data: NotifData): string {
 }
 
 export default function NotificationsPage() {
-  const { data: notifs = [], refetch } = api.notifications.list.useQuery({ limit: 50 });
+  const { data: notifs = [], isLoading, refetch } = api.notifications.list.useQuery({ limit: 50 });
   const utils = api.useUtils();
   const markAll = api.notifications.markAllRead.useMutation({
     onSuccess: () => {
@@ -99,7 +100,9 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      {notifs.length === 0 && (
+      {isLoading && <NotificationsSkeleton />}
+
+      {!isLoading && notifs.length === 0 && (
         <EmptyState
           icon={
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { EventsListSkeleton, GroupsListSkeleton } from "@/components/ui/skeletons";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -115,7 +116,7 @@ function CreateEventDialog({
 // ── Events list for a group ───────────────────────────────────────────────────
 
 function GroupEvents({ groupId, groupName }: { groupId: string; groupName: string }) {
-  const { data: eventList = [], refetch } = api.events.list.useQuery({ groupId });
+  const { data: eventList = [], isLoading, refetch } = api.events.list.useQuery({ groupId });
 
   return (
     <div className="space-y-3">
@@ -123,7 +124,9 @@ function GroupEvents({ groupId, groupName }: { groupId: string; groupName: strin
         <h2 className="font-semibold">{groupName}</h2>
         <CreateEventDialog groupId={groupId} onCreated={() => void refetch()} />
       </div>
-      {eventList.length === 0 ? (
+      {isLoading ? (
+        <EventsListSkeleton />
+      ) : eventList.length === 0 ? (
         <EmptyState
           icon={
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -191,10 +194,19 @@ function GroupEvents({ groupId, groupName }: { groupId: string; groupName: strin
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function EventsPage() {
-  const { data: groups = [] } = api.groups.list.useQuery();
+  const { data: groups = [], isLoading: groupsLoading } = api.groups.list.useQuery();
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
   const activeGroupId = selectedGroupId ?? groups[0]?.id ?? null;
+
+  if (groupsLoading) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-bold">Events</h1>
+        <GroupsListSkeleton count={3} />
+      </div>
+    );
+  }
 
   if (groups.length === 0) {
     return (

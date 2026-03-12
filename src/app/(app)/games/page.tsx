@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { GamesListSkeleton } from "@/components/ui/skeletons";
 import {
   Dialog,
   DialogContent,
@@ -317,7 +318,7 @@ function AddGameDialog({ onAdded }: { onAdded: () => void }) {
 
 export default function GamesPage() {
   const [filterPlatform, setFilterPlatform] = useState<Platform | undefined>();
-  const { data: myGames = [], refetch } = api.games.myGames.useQuery({
+  const { data: myGames = [], isLoading, refetch } = api.games.myGames.useQuery({
     platform: filterPlatform,
   });
 
@@ -362,7 +363,9 @@ export default function GamesPage() {
         ))}
       </div>
 
-      {myGames.length === 0 ? (
+      {isLoading ? (
+        <GamesListSkeleton />
+      ) : myGames.length === 0 ? (
         <EmptyState
           icon={
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
