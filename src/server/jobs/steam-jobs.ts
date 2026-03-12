@@ -32,13 +32,16 @@ export function getSteamQueue(): Queue<SteamJobPayload> {
 // ── Enqueue helpers ───────────────────────────────────────────────────────────
 
 /**
- * Enqueue a Steam library sync for a user. Uses a stable jobId so duplicate
- * enqueues (e.g. rapid button presses) are deduplicated by BullMQ.
+ * Enqueue a Steam library sync for a user.
+ *
+ * No stable jobId — each enqueue creates a new job so that "Sync now"
+ * always runs even after a previous sync completed. BullMQ's removeOnComplete
+ * means completed jobs are evicted quickly, so a stable jobId would silently
+ * no-op for re-syncs. Rapid-fire protection is handled by the UI (isPending).
  */
 export function enqueueSteamLibrarySync(userId: string) {
   return getSteamQueue().add(
     "sync_steam_library",
     { type: "sync_steam_library", userId },
-    { jobId: `sync_steam_library:${userId}` },
   );
 }

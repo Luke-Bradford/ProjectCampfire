@@ -62,7 +62,7 @@ async function syncSteamLibrary(userId: string): Promise<void> {
   url.searchParams.set("include_appinfo", "true");
   url.searchParams.set("include_played_free_games", "true");
 
-  const res = await fetch(url.toString());
+  const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`[steam] Steam API returned ${res.status} for user ${userId}`);
   }
@@ -89,12 +89,13 @@ async function syncSteamLibrary(userId: string): Promise<void> {
   }
 
   await db.update(user).set({ steamLibrarySyncedAt: new Date() }).where(eq(user.id, userId));
-  console.log(`[steam] user ${userId}: sync complete — ${synced} game(s) upserted`);
+  console.log(`[steam] user ${userId}: sync complete — ${synced} ownership row(s) processed`);
 }
 
 /**
  * Upsert a batch of Steam games and the user's ownership records.
- * Returns the number of new ownerships inserted.
+ * Returns the number of ownership rows processed (includes existing — actual
+ * inserted count is lower when games were already in the DB).
  */
 async function upsertBatch(userId: string, steamGames: SteamOwnedGame[]): Promise<number> {
   const appIds = steamGames.map((g) => String(g.appid));
@@ -108,7 +109,9 @@ async function upsertBatch(userId: string, steamGames: SteamOwnedGame[]): Promis
     columns: { id: true, steamAppId: true },
   });
 
-  const existingByAppId = new Map(existingGames.map((g) => [g.steamAppId!, g.id]));
+  const existingByAppId = new Map(
+    existingGames.filter((g) => g.steamAppId).map((g) => [g.steamAppId!, g.id])
+  );
 
   // Insert games that don't exist yet
   const toInsert = steamGames.filter((g) => !existingByAppId.has(String(g.appid)));
@@ -136,7 +139,7 @@ async function upsertBatch(userId: string, steamGames: SteamOwnedGame[]): Promis
       columns: { id: true, steamAppId: true },
     });
     for (const g of freshGames) {
-      existingByAppId.set(g.steamAppId!, g.id);
+      if (g.steamAppId) existingByAppId.set(g.steamAppId, g.id);
     }
   }
 
