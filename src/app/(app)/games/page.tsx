@@ -323,10 +323,13 @@ export default function GamesPage() {
   const [showHidden, setShowHidden] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    if (typeof window === "undefined") return "list";
-    return (localStorage.getItem("games-view-mode") as ViewMode | null) ?? "list";
-  });
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
+
+  // Read persisted view mode after mount to avoid SSR/hydration mismatch.
+  useEffect(() => {
+    const stored = localStorage.getItem("games-view-mode");
+    if (stored === "list" || stored === "grid") setViewMode(stored);
+  }, []);
 
   // Debounce search input — update the query param 300ms after the user stops typing.
   useEffect(() => {
@@ -488,10 +491,10 @@ export default function GamesPage() {
                     </div>
                   )}
                   {/* Platform badge overlay */}
-                  {g.platforms.length > 0 && (
+                  {g.platforms[0] && (
                     <div className="absolute top-1.5 left-1.5">
                       <Badge variant="secondary" className="text-xs px-1.5 py-0.5 bg-background/80 backdrop-blur-sm">
-                        {PLATFORM_LABELS[g.platforms[0]!]}
+                        {PLATFORM_LABELS[g.platforms[0]]}
                         {g.platforms.length > 1 && ` +${g.platforms.length - 1}`}
                       </Badge>
                     </div>
