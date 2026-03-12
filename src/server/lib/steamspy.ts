@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/server/db";
 import { games } from "@/server/db/schema";
 
@@ -62,16 +62,12 @@ export async function snapshotSteamSpyData(gameId: string, steamAppId: string): 
     peakCcu: json.peak_ccu ?? 0,
   };
 
-  // Load current metadataJson to merge (preserve existing IGDB data)
-  const row = await db.query.games.findFirst({
-    where: eq(games.id, gameId),
-    columns: { metadataJson: true },
-  });
-
-  const existing = (row?.metadataJson as Record<string, unknown> | null) ?? {};
-
+  // Atomic jsonb merge — preserves existing keys (e.g. IGDB data) without a read-then-write race.
+  // COALESCE handles the case where metadataJson is currently NULL.
   await db
     .update(games)
-    .set({ metadataJson: { ...existing, steamspy: steamspyData } })
+    .set({
+      metadataJson: sql`COALESCE(${games.metadataJson}, '{}'::jsonb) || ${JSON.stringify({ steamspy: steamspyData })}::jsonb`,
+    })
     .where(eq(games.id, gameId));
 }

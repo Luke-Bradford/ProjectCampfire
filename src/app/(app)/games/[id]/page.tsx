@@ -23,6 +23,25 @@ const EVENT_STATUS_LABEL: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
+// ── SteamSpy stats ────────────────────────────────────────────────────────────
+
+function SteamSpyStats({ metadataJson }: { metadataJson: unknown }) {
+  const ss = (metadataJson as { steamspy?: SteamSpyData } | null)?.steamspy;
+  if (!ss) return null;
+  const hours = ss.averagePlaytimeForever > 0
+    ? `${Math.round(ss.averagePlaytimeForever / 60)}h avg playtime`
+    : null;
+  const ccu = ss.peakCcu > 0 ? `${ss.peakCcu.toLocaleString()} peak players` : null;
+  if (!ss.owners && !hours && !ccu) return null;
+  return (
+    <div className="flex flex-wrap gap-x-3 gap-y-1 pt-0.5 text-xs text-muted-foreground">
+      {ss.owners && <span>{ss.owners} owners</span>}
+      {hours && <span>{hours}</span>}
+      {ccu && <span>{ccu}</span>}
+    </div>
+  );
+}
+
 // ── Group ownership section ───────────────────────────────────────────────────
 
 function GroupOwnershipSection({
@@ -185,24 +204,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ id: strin
           {game.description && (
             <p className="text-sm text-muted-foreground">{game.description}</p>
           )}
-          {(() => {
-            const ss = (game.metadataJson as { steamspy?: SteamSpyData } | null)?.steamspy;
-            if (!ss) return null;
-            const hours = ss.averagePlaytimeForever > 0
-              ? `${Math.round(ss.averagePlaytimeForever / 60)}h avg`
-              : null;
-            const ccu = ss.peakCcu > 0
-              ? `${ss.peakCcu.toLocaleString()} peak players`
-              : null;
-            if (!ss.owners && !hours && !ccu) return null;
-            return (
-              <div className="flex flex-wrap gap-x-3 gap-y-1 pt-0.5 text-xs text-muted-foreground">
-                {ss.owners && <span>{ss.owners} owners</span>}
-                {hours && <span>{hours}</span>}
-                {ccu && <span>{ccu}</span>}
-              </div>
-            );
-          })()}
+          <SteamSpyStats metadataJson={game.metadataJson} />
           {game.priceDataJson && (
             <div className="flex items-center gap-2 pt-0.5">
               {game.priceDataJson.discountPercent > 0 ? (
