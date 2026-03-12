@@ -14,6 +14,7 @@ import {
   derivePlayerCounts,
   extractSteamAppId,
 } from "@/server/igdb";
+import { snapshotSteamSpyData } from "@/server/lib/steamspy";
 
 const PLATFORMS = ["pc", "playstation", "xbox", "nintendo", "other"] as const;
 
@@ -90,7 +91,17 @@ export const gamesRouter = createTRPCRouter({
         columns: { id: true },
       });
 
-      return { id: row?.id ?? id };
+      const finalId = row?.id ?? id;
+
+      // Fire-and-forget SteamSpy snapshot for games with a Steam app ID
+      const steamAppId = extractSteamAppId(igdbGame);
+      if (steamAppId) {
+        void snapshotSteamSpyData(finalId, steamAppId).catch((err: unknown) =>
+          console.error(`[games] steamspy snapshot failed for game ${finalId}:`, err),
+        );
+      }
+
+      return { id: finalId };
     }),
 
   // Search the game catalog by title (CAMP-062 quick-add support)

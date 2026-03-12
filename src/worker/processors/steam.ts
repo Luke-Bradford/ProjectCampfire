@@ -5,6 +5,7 @@ import { db } from "@/server/db";
 import { user, games, gameOwnerships } from "@/server/db/schema";
 import { env } from "@/env";
 import type { SteamJobPayload } from "@/server/jobs/steam-jobs";
+import { snapshotSteamSpyData } from "@/server/lib/steamspy";
 
 export async function processSteamJob(job: Job<SteamJobPayload>): Promise<void> {
   const { data } = job;
@@ -140,6 +141,17 @@ async function upsertBatch(userId: string, steamGames: SteamOwnedGame[]): Promis
     });
     for (const g of freshGames) {
       if (g.steamAppId) existingByAppId.set(g.steamAppId, g.id);
+    }
+
+    // SteamSpy snapshots for newly inserted games — run serially to avoid
+    // hammering the unauthenticated API, which returns silent zero-value
+    // responses when hit too fast (owners:"", averagePlaytimeForever:0).
+    for (const g of freshGames) {
+      if (g.steamAppId) {
+        await snapshotSteamSpyData(g.id, g.steamAppId).catch((err: unknown) =>
+          console.error(`[steam] steamspy snapshot failed for game ${g.id}:`, err),
+        );
+      }
     }
   }
 

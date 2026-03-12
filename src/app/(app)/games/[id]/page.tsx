@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api } from "@/trpc/react";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
+import type { SteamSpyData } from "@/server/lib/steamspy";
 
 const PLATFORM_LABELS: Record<string, string> = {
   pc: "PC",
@@ -21,6 +22,25 @@ const EVENT_STATUS_LABEL: Record<string, string> = {
   confirmed: "Confirmed",
   cancelled: "Cancelled",
 };
+
+// ── SteamSpy stats ────────────────────────────────────────────────────────────
+
+function SteamSpyStats({ metadataJson }: { metadataJson: unknown }) {
+  const ss = (metadataJson as { steamspy?: SteamSpyData } | null)?.steamspy;
+  if (!ss) return null;
+  const hours = ss.averagePlaytimeForever > 0
+    ? `${Math.round(ss.averagePlaytimeForever / 60)}h avg playtime`
+    : null;
+  const ccu = ss.peakCcu > 0 ? `${ss.peakCcu.toLocaleString()} peak players` : null;
+  if (!ss.owners && !hours && !ccu) return null;
+  return (
+    <div className="flex flex-wrap gap-x-3 gap-y-1 pt-0.5 text-xs text-muted-foreground">
+      {ss.owners && <span>{ss.owners} owners</span>}
+      {hours && <span>{hours}</span>}
+      {ccu && <span>{ccu}</span>}
+    </div>
+  );
+}
 
 // ── Group ownership section ───────────────────────────────────────────────────
 
@@ -184,6 +204,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ id: strin
           {game.description && (
             <p className="text-sm text-muted-foreground">{game.description}</p>
           )}
+          <SteamSpyStats metadataJson={game.metadataJson} />
           {game.priceDataJson && (
             <div className="flex items-center gap-2 pt-0.5">
               {game.priceDataJson.discountPercent > 0 ? (
