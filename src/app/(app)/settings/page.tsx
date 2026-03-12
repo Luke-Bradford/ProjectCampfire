@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import type { NotificationPrefs } from "@/server/db/schema";
 
 // ── Connected accounts section ───────────────────────────────────────────────
@@ -17,6 +18,12 @@ function ConnectedAccountsSection() {
   const utils = api.useUtils();
   const { data: me } = api.user.me.useQuery();
   const unlink = api.user.steamUnlink.useMutation({
+    onSuccess: () => void utils.user.me.invalidate(),
+  });
+  const syncLibrary = api.user.steamSyncLibrary.useMutation({
+    onSuccess: () => void utils.user.me.invalidate(),
+  });
+  const setLibraryPublic = api.user.steamSetLibraryPublic.useMutation({
     onSuccess: () => void utils.user.me.invalidate(),
   });
 
@@ -104,6 +111,49 @@ function ConnectedAccountsSection() {
           </Button>
         )}
       </div>
+
+      {/* Steam library sync — only shown when Steam is linked */}
+      {me?.steamId && (
+        <div className="rounded-lg border p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Steam library</p>
+              <p className="text-xs text-muted-foreground">
+                {me.steamLibrarySyncedAt
+                  ? `Last synced ${new Date(me.steamLibrarySyncedAt).toLocaleDateString()}`
+                  : "Never synced"}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={syncLibrary.isPending}
+              onClick={() => syncLibrary.mutate()}
+            >
+              {syncLibrary.isPending ? "Syncing…" : "Sync now"}
+            </Button>
+          </div>
+          {syncLibrary.isSuccess && (
+            <p className="text-xs text-green-600">Sync queued — your library will update shortly.</p>
+          )}
+          {syncLibrary.isError && (
+            <p className="text-xs text-destructive">{syncLibrary.error.message}</p>
+          )}
+          <div className="flex items-center justify-between pt-1 border-t">
+            <div>
+              <p className="text-sm">Visible to group members</p>
+              <p className="text-xs text-muted-foreground">
+                When on, group members can see which games you own for poll suggestions.
+              </p>
+            </div>
+            <Switch
+              checked={me.steamLibraryPublic}
+              disabled={setLibraryPublic.isPending}
+              onCheckedChange={(v) => setLibraryPublic.mutate({ public: v })}
+            />
+          </div>
+        </div>
+      )}
     </section>
   );
 }

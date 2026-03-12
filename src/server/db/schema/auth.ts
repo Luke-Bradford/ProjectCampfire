@@ -62,6 +62,9 @@ export const user = pgTable("user", {
   // Steam OpenID link (optional)
   steamId: varchar("steam_id", { length: 20 }).unique(),
   steamProfileUrl: text("steam_profile_url"),
+  // Steam library sync
+  steamLibrarySyncedAt: timestamp("steam_library_synced_at"),
+  steamLibraryPublic: boolean("steam_library_public").notNull().default(true),
 });
 
 // better-auth session table
