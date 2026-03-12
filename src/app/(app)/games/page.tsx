@@ -422,7 +422,7 @@ export default function GamesPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     {g.platforms.map((p) => (
                       <Badge key={p} variant="secondary" className="text-xs">
-                        {PLATFORM_LABELS[p as Platform] ?? p}
+                        {PLATFORM_LABELS[p]}
                       </Badge>
                     ))}
                     {g.minPlayers && g.maxPlayers && (
@@ -440,7 +440,7 @@ export default function GamesPage() {
                   variant="ghost"
                   className="text-muted-foreground hover:text-foreground shrink-0 ml-2"
                   onClick={() => setGameHidden.mutate({ gameId: g.id, hidden: !g.hidden })}
-                  disabled={setGameHidden.isPending}
+                  disabled={setGameHidden.isPending && setGameHidden.variables?.gameId === g.id}
                 >
                   {g.hidden ? "Unhide" : "Hide"}
                 </Button>

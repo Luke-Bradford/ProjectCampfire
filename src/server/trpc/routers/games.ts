@@ -222,8 +222,9 @@ export const gamesRouter = createTRPCRouter({
         .where(ownershipWhere);
       const total = countRow?.total ?? 0;
 
-      // Fetch all ownership rows for the user (matching filters), group by game
-      // client-side to collect platforms, then paginate the grouped list.
+      // Fetch ALL ownership rows for the user (matching filters) on every request —
+      // including "Load more" — group by game client-side to collect platforms, then
+      // slice the grouped list for the requested page.
       // TODO(tech-debt): replace with SQL GROUP BY + array_agg for large libraries.
       // Safe at MVP scale: Steam sync caps at ~2000 games per user and the full set
       // fits comfortably in a single round-trip at this size.
@@ -248,7 +249,7 @@ export const gamesRouter = createTRPCRouter({
       const gameMap = new Map<string, {
         id: string; title: string; coverUrl: string | null;
         genres: string[]; minPlayers: number | null; maxPlayers: number | null;
-        platforms: string[]; source: string; hidden: boolean;
+        platforms: (typeof PLATFORMS)[number][]; source: string; hidden: boolean;
       }>();
       for (const r of allRows) {
         const existing = gameMap.get(r.gameId);
