@@ -42,7 +42,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </header>
       {/* pb-16 on mobile so content clears the fixed bottom nav bar */}
-      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 pb-20 md:pb-6">{children}</main>
+      <main className="mx-auto w-full max-w-4xl flex-1 px-4 pt-6 pb-20 md:pb-6">{children}</main>
       <MobileNav />
     </div>
   );
