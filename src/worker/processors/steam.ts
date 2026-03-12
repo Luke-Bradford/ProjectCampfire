@@ -26,7 +26,6 @@ export async function processSteamJob(job: Job<SteamJobPayload>): Promise<void> 
 type SteamOwnedGame = {
   appid: number;
   name?: string;
-  img_icon_url?: string;
   playtime_forever?: number;
 };
 
@@ -124,9 +123,9 @@ async function upsertBatch(userId: string, steamGames: SteamOwnedGame[]): Promis
       externalSource: "steam_app" as const,
       externalId: String(g.appid),
       steamAppId: String(g.appid),
-      coverUrl: g.img_icon_url
-        ? `https://media.steampowered.com/steamcommunity/public/images/apps/${g.appid}/${g.img_icon_url}.jpg`
-        : null,
+      // header.jpg is the standard 460×215 store banner — universally available,
+      // no API key required, and far more recognisable than the 32px icon URL.
+      coverUrl: `https://cdn.akamai.steamstatic.com/steam/apps/${g.appid}/header.jpg`,
     }));
 
     await db.insert(games).values(newRows).onConflictDoNothing();

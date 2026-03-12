@@ -54,7 +54,13 @@ const nextConfig: NextConfig = {
   },
   transpilePackages: ["@fullcalendar"],
   images: {
-    remotePatterns: minioRemotePatterns(),
+    remotePatterns: [
+      ...minioRemotePatterns(),
+      // Steam CDN — game header/capsule images
+      { protocol: "https", hostname: "cdn.akamai.steamstatic.com", pathname: "/steam/apps/**" },
+      // IGDB / Twitch CDN — game cover art
+      { protocol: "https", hostname: "images.igdb.com", pathname: "/**" },
+    ],
   },
 };
 
