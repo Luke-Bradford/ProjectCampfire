@@ -47,7 +47,11 @@ export function LeftPanel({ name, image }: { name: string; image?: string | null
   const unreadCount = notifData?.count ?? 0;
 
   async function handleSignOut() {
-    await authClient.signOut();
+    try {
+      await authClient.signOut();
+    } catch {
+      // sign-out failure is non-fatal; redirect to login regardless
+    }
     router.push("/login");
     router.refresh();
   }
