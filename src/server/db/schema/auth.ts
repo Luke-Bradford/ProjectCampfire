@@ -59,6 +59,9 @@ export const user = pgTable("user", {
   // Set to true once the async PII scrub job completes. Used by the hourly
   // sweeper to detect accounts whose scrub job was lost (e.g. Redis was down).
   piiScrubbed: boolean("pii_scrubbed").notNull().default(false),
+  // Steam OpenID link (optional)
+  steamId: varchar("steam_id", { length: 20 }).unique(),
+  steamProfileUrl: text("steam_profile_url"),
 });
 
 // better-auth session table
