@@ -123,9 +123,9 @@ async function upsertBatch(userId: string, steamGames: SteamOwnedGame[]): Promis
       externalSource: "steam_app" as const,
       externalId: String(g.appid),
       steamAppId: String(g.appid),
-      // header.jpg is the standard 460×215 store banner — universally available,
-      // no API key required, and far more recognisable than the 32px icon URL.
-      coverUrl: `https://cdn.akamai.steamstatic.com/steam/apps/${g.appid}/header.jpg`,
+      // library_600x900.jpg is Steam's portrait capsule (600×900) — correct aspect
+      // ratio for the grid card view. Universally available for all Steam apps.
+      coverUrl: `https://cdn.akamai.steamstatic.com/steam/apps/${g.appid}/library_600x900.jpg`,
     }));
 
     await db.insert(games).values(newRows).onConflictDoNothing();
