@@ -335,7 +335,6 @@ export default function GamesPage() {
     onSuccess: () => void utils.games.myGames.invalidate(),
   });
 
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -441,7 +440,7 @@ export default function GamesPage() {
                   variant="ghost"
                   className="text-muted-foreground hover:text-foreground shrink-0 ml-2"
                   onClick={() => setGameHidden.mutate({ gameId: g.id, hidden: !g.hidden })}
-                  disabled={setGameHidden.isPending && setGameHidden.variables?.gameId === g.id}
+                  disabled={setGameHidden.isPending}
                 >
                   {g.hidden ? "Unhide" : "Hide"}
                 </Button>

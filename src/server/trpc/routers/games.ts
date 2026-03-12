@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, countDistinct, eq, ilike, inArray, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -215,17 +215,18 @@ export const gamesRouter = createTRPCRouter({
         eq(gameOwnerships.hidden, input.showHidden)
       );
 
-      // Count distinct games (not ownership rows) matching the filters.
-      const distinctGameIds = await db
-        .selectDistinct({ gameId: gameOwnerships.gameId })
+      // Count distinct games (not ownership rows) in SQL — avoids fetching all IDs.
+      const [countRow] = await db
+        .select({ total: countDistinct(gameOwnerships.gameId) })
         .from(gameOwnerships)
         .where(ownershipWhere);
-      const total = distinctGameIds.length;
+      const total = countRow?.total ?? 0;
 
-      // Paginated distinct games: cursor = last gameId seen.
-      // We fetch all ownership rows for the user (matching filters), group by game
+      // Fetch all ownership rows for the user (matching filters), group by game
       // client-side to collect platforms, then paginate the grouped list.
-      // This is safe at MVP scale (max ~1000 games per user).
+      // TODO(tech-debt): replace with SQL GROUP BY + array_agg for large libraries.
+      // Safe at MVP scale: Steam sync caps at ~2000 games per user and the full set
+      // fits comfortably in a single round-trip at this size.
       const allRows = await db.query.gameOwnerships.findMany({
         where: ownershipWhere,
         with: {
@@ -265,9 +266,14 @@ export const gamesRouter = createTRPCRouter({
 
       // Apply cursor and limit to the deduplicated list.
       const allGames = [...gameMap.values()];
-      const startIdx = input.cursor
-        ? allGames.findIndex((g) => g.id === input.cursor) + 1
-        : 0;
+      let startIdx = 0;
+      if (input.cursor) {
+        const cursorIdx = allGames.findIndex((g) => g.id === input.cursor);
+        // If cursor game was deleted (hidden/removed between pages), return empty
+        // to prevent re-fetching from the start and duplicating already-loaded items.
+        if (cursorIdx === -1) return { items: [], nextCursor: undefined, total };
+        startIdx = cursorIdx + 1;
+      }
       const page = allGames.slice(startIdx, startIdx + input.limit + 1);
       const hasMore = page.length > input.limit;
       const items = page.slice(0, input.limit);
