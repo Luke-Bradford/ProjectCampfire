@@ -212,14 +212,21 @@ export const gamesRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       // If a search term is provided, resolve which gameIds match before filtering ownerships.
       let searchGameIds: string[] | undefined;
-      if (input.search && input.search.trim().length > 0) {
+      const term = input.search?.trim() ?? "";
+      if (term.length > 0) {
+        // Escape LIKE metacharacters so user input is treated as a literal substring.
+        const escaped = term.replace(/[%_\\]/g, "\\$&");
         const matchingGames = await db
           .select({ id: games.id })
           .from(games)
-          .where(ilike(games.title, `%${input.search.trim()}%`));
+          .where(ilike(games.title, `%${escaped}%`));
         searchGameIds = matchingGames.map((g) => g.id);
         // If no games match the search, return early — no ownerships to fetch.
         if (searchGameIds.length === 0) return { items: [], nextCursor: undefined, total: 0 };
+        // Guard: very common search terms can match thousands of catalog entries.
+        // At MVP scale (Steam sync caps at ~2000 games/user) the IN clause is still
+        // manageable, but this cap prevents unbounded query size.
+        if (searchGameIds.length > 500) searchGameIds = searchGameIds.slice(0, 500);
       }
 
       const ownershipWhere = and(

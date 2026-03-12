@@ -323,10 +323,13 @@ export default function GamesPage() {
   const [search, setSearch] = useState("");
 
   // Debounce search input — update the query param 300ms after the user stops typing.
+  // Skip the effect when both values are already empty to avoid a no-op state update on mount.
   useEffect(() => {
-    const t = setTimeout(() => setSearch(searchInput.trim()), 300);
+    const trimmed = searchInput.trim();
+    if (trimmed === search) return;
+    const t = setTimeout(() => setSearch(trimmed), 300);
     return () => clearTimeout(t);
-  }, [searchInput]);
+  }, [searchInput, search]);
 
   const utils = api.useUtils();
 
