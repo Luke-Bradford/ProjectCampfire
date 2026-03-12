@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -123,9 +124,20 @@ function GroupEvents({ groupId, groupName }: { groupId: string; groupName: strin
         <CreateEventDialog groupId={groupId} onCreated={() => void refetch()} />
       </div>
       {eventList.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-6 text-center">
-          <p className="text-sm text-muted-foreground">No events yet. Create one to get started.</p>
-        </div>
+        <EmptyState
+          icon={
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+          }
+          heading="No events yet"
+          description="Propose a session to find a time that works for everyone."
+          action={<CreateEventDialog groupId={groupId} onCreated={() => void refetch()} />}
+          className="py-8"
+        />
       ) : (
         <ul className="space-y-2">
           {eventList.map((ev) => {
@@ -189,11 +201,23 @@ export default function EventsPage() {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">Events</h1>
-        <div className="rounded-lg border border-dashed p-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            Join or create a group to start planning events.
-          </p>
-        </div>
+        <EmptyState
+          icon={
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+          }
+          heading="No groups yet"
+          description="Join or create a group to start planning gaming sessions."
+          action={
+            <Button asChild size="sm">
+              <Link href="/groups">Go to Groups</Link>
+            </Button>
+          }
+        />
       </div>
     );
   }

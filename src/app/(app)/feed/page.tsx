@@ -1,8 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { api } from "@/trpc/react";
 import { PostComposer } from "@/components/feed/post-composer";
 import { PostCard } from "@/components/feed/post-card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Button } from "@/components/ui/button";
 
 export default function FeedPage() {
   const { data: me } = api.user.me.useQuery();
@@ -26,11 +29,25 @@ export default function FeedPage() {
       {isLoading && <p className="text-sm text-muted-foreground text-center py-8">Loading…</p>}
 
       {isEmpty && (
-        <div className="rounded-lg border border-dashed p-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            Nothing here yet. Add some friends or post something!
-          </p>
-        </div>
+        <EmptyState
+          icon={
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          }
+          heading="Your feed is empty"
+          description="Add friends or join a group to see what's happening."
+          action={
+            <Button asChild size="sm">
+              <Link href="/people">Find people</Link>
+            </Button>
+          }
+          secondaryAction={
+            <Button asChild size="sm" variant="outline">
+              <Link href="/groups">Browse groups</Link>
+            </Button>
+          }
+        />
       )}
 
       {allItems.map((post) => (
