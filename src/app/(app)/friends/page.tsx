@@ -5,6 +5,7 @@ import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FriendsListSkeleton } from "@/components/ui/skeletons";
 
 function initials(name: string) {
   return name
@@ -16,7 +17,7 @@ function initials(name: string) {
 }
 
 export default function FriendsPage() {
-  const { data, refetch } = api.friends.list.useQuery();
+  const { data, isLoading, refetch } = api.friends.list.useQuery();
 
   const remove = api.friends.remove.useMutation({
     onSuccess: () => void refetch(),
@@ -38,7 +39,9 @@ export default function FriendsPage() {
         </Button>
       </div>
 
-      {friends.length === 0 ? (
+      {isLoading ? (
+        <FriendsListSkeleton />
+      ) : friends.length === 0 ? (
         <EmptyState
           icon={
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

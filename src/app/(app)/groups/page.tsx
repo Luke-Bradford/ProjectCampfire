@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { GroupsListSkeleton } from "@/components/ui/skeletons";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -88,7 +89,7 @@ function CreateGroupDialog({ onCreated }: { onCreated: () => void }) {
 }
 
 export default function GroupsPage() {
-  const { data: myGroups = [], refetch } = api.groups.list.useQuery();
+  const { data: myGroups = [], isLoading, refetch } = api.groups.list.useQuery();
 
   return (
     <div className="space-y-6">
@@ -102,7 +103,9 @@ export default function GroupsPage() {
         <CreateGroupDialog onCreated={() => void refetch()} />
       </div>
 
-      {myGroups.length === 0 ? (
+      {isLoading ? (
+        <GroupsListSkeleton />
+      ) : myGroups.length === 0 ? (
         <EmptyState
           icon={
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

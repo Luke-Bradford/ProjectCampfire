@@ -7,6 +7,7 @@ import { api } from "@/trpc/react";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import type { SteamSpyData } from "@/server/lib/steamspy";
+import { GameDetailSkeleton } from "@/components/ui/skeletons";
 
 const PLATFORM_LABELS: Record<string, string> = {
   pc: "PC",
@@ -162,7 +163,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ id: strin
   const activeGroupId = selectedGroupId ?? groups[0]?.id ?? null;
   const myUserId = me?.id ?? "";
 
-  if (isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
+  if (isLoading) return <GameDetailSkeleton />;
   if (!game) return <p className="text-sm text-muted-foreground">Game not found.</p>;
 
   return (
