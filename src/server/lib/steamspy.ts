@@ -50,7 +50,8 @@ export async function snapshotSteamSpyData(gameId: string, steamAppId: string): 
     return;
   }
 
-  // SteamSpy returns { appid: 0 } for unknown apps
+  // SteamSpy returns { appid: 0 } for unknown apps — intentionally falsy on 0.
+  // Also catches completely malformed responses (e.g. undefined appid).
   if (!json.appid) {
     console.warn(`[steamspy] no data for appId ${steamAppId}`);
     return;

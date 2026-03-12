@@ -143,10 +143,12 @@ async function upsertBatch(userId: string, steamGames: SteamOwnedGame[]): Promis
       if (g.steamAppId) existingByAppId.set(g.steamAppId, g.id);
     }
 
-    // Fire-and-forget SteamSpy snapshots for newly inserted games
+    // SteamSpy snapshots for newly inserted games — run serially to avoid
+    // hammering the unauthenticated API, which returns silent zero-value
+    // responses when hit too fast (owners:"", averagePlaytimeForever:0).
     for (const g of freshGames) {
       if (g.steamAppId) {
-        void snapshotSteamSpyData(g.id, g.steamAppId).catch((err: unknown) =>
+        await snapshotSteamSpyData(g.id, g.steamAppId).catch((err: unknown) =>
           console.error(`[steam] steamspy snapshot failed for game ${g.id}:`, err),
         );
       }
