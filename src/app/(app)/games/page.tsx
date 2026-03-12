@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import Link from "next/link";
 import { api, type RouterOutputs } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -362,11 +363,25 @@ export default function GamesPage() {
       </div>
 
       {myGames.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            Add games you own so friends can see what you can play together.
-          </p>
-        </div>
+        <EmptyState
+          icon={
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="6" y1="12" x2="10" y2="12" />
+              <line x1="8" y1="10" x2="8" y2="14" />
+              <circle cx="15" cy="13" r="1" />
+              <circle cx="17" cy="11" r="1" />
+              <path d="M12 17c-2.8 0-5-2.2-5-5V7c0-1.1.9-2 2-2h6c1.1 0 2 .9 2 2v5c0 2.8-2.2 5-5 5z" />
+            </svg>
+          }
+          heading="No games in your library"
+          description="Add games you own so your group can see what everyone can play together."
+          action={<AddGameDialog onAdded={() => void refetch()} />}
+          secondaryAction={
+            <Button asChild size="sm" variant="outline">
+              <Link href="/settings">Connect Steam</Link>
+            </Button>
+          }
+        />
       ) : (
         <ul className="space-y-2">
           {myGames.map((g) => (

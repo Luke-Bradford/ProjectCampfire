@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 
 type NotifData = Record<string, string>;
 
@@ -99,9 +100,16 @@ export default function NotificationsPage() {
       </div>
 
       {notifs.length === 0 && (
-        <div className="rounded-lg border border-dashed p-8 text-center">
-          <p className="text-sm text-muted-foreground">No notifications yet.</p>
-        </div>
+        <EmptyState
+          icon={
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+              <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+            </svg>
+          }
+          heading="You're all caught up"
+          description="No new notifications."
+        />
       )}
 
       <ul className="space-y-1">
