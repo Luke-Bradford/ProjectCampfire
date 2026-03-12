@@ -37,6 +37,8 @@ export const userRouter = createTRPCRouter({
         notificationPrefs: true,
         inviteToken: true,
         createdAt: true,
+        steamId: true,
+        steamProfileUrl: true,
       },
     });
   }),
@@ -118,6 +120,15 @@ export const userRouter = createTRPCRouter({
         .set({ username: input.username, usernameChangedAt: new Date() })
         .where(eq(user.id, ctx.user.id));
     }),
+
+  // Remove the Steam link from the current user's account.
+  steamUnlink: protectedProcedure.mutation(async ({ ctx }) => {
+    await db
+      .update(user)
+      .set({ steamId: null, steamProfileUrl: null })
+      .where(eq(user.id, ctx.user.id));
+    return { ok: true };
+  }),
 
   // Soft-delete the current user's account.
   // Sets deletedAt, kills all sessions, and enqueues an async PII scrub job.
