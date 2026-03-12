@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -299,5 +299,40 @@ export const eventsRouter = createTRPCRouter({
 
       await db.update(events).set({ gameId: null, gameOptional: false, updatedAt: new Date() }).where(eq(events.id, input.id));
       return { id: input.id };
+    }),
+
+  // Next N upcoming events across all the user's groups (for feed sidebar panel)
+  upcoming: protectedProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(10).default(3) }))
+    .query(async ({ ctx, input }) => {
+      // Find all groups the user is a member of
+      const memberships = await db.query.groupMemberships.findMany({
+        where: eq(groupMemberships.userId, ctx.user.id),
+        columns: { groupId: true },
+      });
+      if (memberships.length === 0) return [];
+
+      const groupIds = memberships.map((m) => m.groupId);
+      const now = new Date();
+
+      // Only confirmed events with a start time are surfaced — open events without
+      // a confirmedStartsAt would be excluded by the gte check anyway (NULL fails
+      // the comparison), so we only match confirmed to keep the intent explicit.
+      return db.query.events.findMany({
+        where: and(
+          inArray(events.groupId, groupIds),
+          eq(events.status, "confirmed"),
+          gte(events.confirmedStartsAt, now)
+        ),
+        with: {
+          group: { columns: { id: true, name: true } },
+          rsvps: {
+            where: eq(eventRsvps.userId, ctx.user.id),
+            columns: { status: true },
+          },
+        },
+        orderBy: (t, { asc }) => [asc(t.confirmedStartsAt)],
+        limit: input.limit,
+      });
     }),
 });
