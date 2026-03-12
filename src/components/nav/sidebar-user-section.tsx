@@ -10,6 +10,7 @@ import { ThemeToggle } from "@/components/nav/theme-toggle";
 function initials(name: string) {
   return name
     .split(" ")
+    .filter(Boolean)
     .map((w) => w[0])
     .join("")
     .toUpperCase()
