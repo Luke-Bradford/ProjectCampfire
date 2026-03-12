@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { user, session, account, type NotificationPrefs } from "@/server/db/schema";
+import { user, session, account, friendships, groupMemberships, gameOwnerships, type NotificationPrefs } from "@/server/db/schema";
 import { enqueueScrubAccount } from "@/server/jobs/account-jobs";
 import { enqueueSteamLibrarySync } from "@/server/jobs/steam-jobs";
 import { env } from "@/env";
@@ -214,4 +214,18 @@ export const userRouter = createTRPCRouter({
 
       return { success: true };
     }),
+
+  // Lightweight counts for the feed profile sidebar
+  profileStats: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.user.id;
+    const [friendCount, groupCount, gameCount] = await Promise.all([
+      db.$count(friendships, and(
+        eq(friendships.status, "accepted"),
+        sql`(${friendships.requesterId} = ${userId} OR ${friendships.addresseeId} = ${userId})`
+      )),
+      db.$count(groupMemberships, eq(groupMemberships.userId, userId)),
+      db.$count(gameOwnerships, and(eq(gameOwnerships.userId, userId), eq(gameOwnerships.hidden, false))),
+    ]);
+    return { friendCount, groupCount, gameCount };
+  }),
 });
