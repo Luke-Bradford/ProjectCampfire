@@ -6,6 +6,7 @@ import { processImageJob } from "./processors/image";
 import { processOgFetchJob } from "./processors/og-fetch";
 import { processPollJob } from "./processors/poll";
 import { processRecurringJob } from "./processors/recurring";
+import { processSteamJob } from "./processors/steam";
 import { getAccountQueue } from "@/server/jobs/account-jobs";
 import { imageQueue } from "@/server/jobs/image-jobs";
 import { getPollQueue } from "@/server/jobs/poll-jobs";
@@ -16,6 +17,7 @@ import type { ImageJobPayload } from "@/server/jobs/image-jobs";
 import type { OgFetchJobPayload } from "@/server/jobs/og-fetch-jobs";
 import type { PollJobPayload } from "@/server/jobs/poll-jobs";
 import type { RecurringJobPayload } from "@/server/jobs/recurring-jobs";
+import type { SteamJobPayload } from "@/server/jobs/steam-jobs";
 
 // Queue definitions — imported by other modules to enqueue jobs.
 // accountQueue lives in server/jobs/account-jobs.ts (import from there directly).
@@ -106,6 +108,15 @@ new Worker<RecurringJobPayload>(
   "recurring",
   async (job) => {
     await processRecurringJob(job);
+  },
+  { connection: bullmqConnection }
+);
+
+// Steam library sync worker
+new Worker<SteamJobPayload>(
+  "steam",
+  async (job) => {
+    await processSteamJob(job);
   },
   { connection: bullmqConnection }
 );

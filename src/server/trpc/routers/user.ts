@@ -6,6 +6,8 @@ import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
 import { user, session, account, type NotificationPrefs } from "@/server/db/schema";
 import { enqueueScrubAccount } from "@/server/jobs/account-jobs";
+import { enqueueSteamLibrarySync } from "@/server/jobs/steam-jobs";
+import { env } from "@/env";
 
 const notificationPrefsSchema = z.object({
   friendRequestReceived: z.boolean().optional(),
@@ -39,6 +41,8 @@ export const userRouter = createTRPCRouter({
         createdAt: true,
         steamId: true,
         steamProfileUrl: true,
+        steamLibrarySyncedAt: true,
+        steamLibraryPublic: true,
       },
     });
   }),
@@ -128,6 +132,38 @@ export const userRouter = createTRPCRouter({
       .set({ steamId: null, steamProfileUrl: null })
       .where(eq(user.id, ctx.user.id));
   }),
+
+  // Enqueue a Steam library sync for the current user.
+  // Returns an error if STEAM_API_KEY is not configured or no Steam account is linked.
+  steamSyncLibrary: protectedProcedure.mutation(async ({ ctx }) => {
+    if (!env.STEAM_API_KEY) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "Steam sync is not configured on this server.",
+      });
+    }
+    const row = await db.query.user.findFirst({
+      where: eq(user.id, ctx.user.id),
+      columns: { steamId: true },
+    });
+    if (!row?.steamId) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "No Steam account linked.",
+      });
+    }
+    await enqueueSteamLibrarySync(ctx.user.id);
+  }),
+
+  // Toggle whether the user's Steam library is visible to group members.
+  steamSetLibraryPublic: protectedProcedure
+    .input(z.object({ public: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await db
+        .update(user)
+        .set({ steamLibraryPublic: input.public })
+        .where(eq(user.id, ctx.user.id));
+    }),
 
   // Soft-delete the current user's account.
   // Sets deletedAt, kills all sessions, and enqueues an async PII scrub job.

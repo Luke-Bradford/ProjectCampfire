@@ -19,6 +19,12 @@ function ConnectedAccountsSection() {
   const unlink = api.user.steamUnlink.useMutation({
     onSuccess: () => void utils.user.me.invalidate(),
   });
+  const syncLibrary = api.user.steamSyncLibrary.useMutation({
+    onSuccess: () => void utils.user.me.invalidate(),
+  });
+  const setLibraryPublic = api.user.steamSetLibraryPublic.useMutation({
+    onSuccess: () => void utils.user.me.invalidate(),
+  });
 
   // Surface steam_linked / steam_error query params set by the callback route
   const [flash, setFlash] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -104,6 +110,60 @@ function ConnectedAccountsSection() {
           </Button>
         )}
       </div>
+
+      {/* Steam library sync — only shown when Steam is linked */}
+      {me?.steamId && (
+        <div className="rounded-lg border p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Steam library</p>
+              <p className="text-xs text-muted-foreground">
+                {me.steamLibrarySyncedAt
+                  ? `Last synced ${new Date(me.steamLibrarySyncedAt).toLocaleDateString()}`
+                  : "Never synced"}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={syncLibrary.isPending}
+              onClick={() => syncLibrary.mutate()}
+            >
+              {syncLibrary.isPending ? "Syncing…" : "Sync now"}
+            </Button>
+          </div>
+          {syncLibrary.isSuccess && (
+            <p className="text-xs text-green-600">Sync queued — your library will update shortly.</p>
+          )}
+          {syncLibrary.isError && (
+            <p className="text-xs text-destructive">{syncLibrary.error.message}</p>
+          )}
+          <div className="flex items-center justify-between pt-1 border-t">
+            <div>
+              <p className="text-sm">Visible to group members</p>
+              <p className="text-xs text-muted-foreground">
+                When on, group members can see which games you own for poll suggestions.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={me.steamLibraryPublic}
+              disabled={setLibraryPublic.isPending}
+              onClick={() => setLibraryPublic.mutate({ public: !me.steamLibraryPublic })}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none disabled:opacity-50 ${
+                me.steamLibraryPublic ? "bg-primary" : "bg-input"
+              }`}
+            >
+              <span
+                className={`pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg transition-transform ${
+                  me.steamLibraryPublic ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
