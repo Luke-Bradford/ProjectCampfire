@@ -100,9 +100,9 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      {isLoading && <NotificationsSkeleton />}
-
-      {!isLoading && notifs.length === 0 && (
+      {isLoading ? (
+        <NotificationsSkeleton />
+      ) : notifs.length === 0 ? (
         <EmptyState
           icon={
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -113,47 +113,47 @@ export default function NotificationsPage() {
           heading="You're all caught up"
           description="No new notifications."
         />
+      ) : (
+        <ul className="space-y-1">
+          {notifs.map((n) => {
+            const data = n.data as NotifData;
+            // Show Accept/Decline only while unread — once acted on, onDone marks it read
+            const isPendingRequest = n.type === "friend_request_received" && !n.readAt;
+            return (
+              <li
+                key={n.id}
+                className={`flex items-start justify-between gap-4 rounded-lg border p-3 ${!n.readAt ? "bg-muted/40" : ""}`}
+              >
+                <div className="space-y-0.5">
+                  <p className={`text-sm ${!n.readAt ? "font-medium" : ""}`}>
+                    {notifMessage(n.type, data)}
+                  </p>
+                  <p
+                    className="text-xs text-muted-foreground"
+                    title={new Date(n.createdAt).toLocaleString()}
+                  >
+                    {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
+                  </p>
+                </div>
+                {isPendingRequest && data.requesterId ? (
+                  <FriendRequestActions
+                    requesterId={data.requesterId}
+                    notifId={n.id}
+                    onDone={() => void refetch()}
+                  />
+                ) : !n.readAt ? (
+                  <button
+                    className="shrink-0 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => markOne.mutate({ id: n.id })}
+                  >
+                    Dismiss
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
       )}
-
-      <ul className="space-y-1">
-        {notifs.map((n) => {
-          const data = n.data as NotifData;
-          // Show Accept/Decline only while unread — once acted on, onDone marks it read
-          const isPendingRequest = n.type === "friend_request_received" && !n.readAt;
-          return (
-            <li
-              key={n.id}
-              className={`flex items-start justify-between gap-4 rounded-lg border p-3 ${!n.readAt ? "bg-muted/40" : ""}`}
-            >
-              <div className="space-y-0.5">
-                <p className={`text-sm ${!n.readAt ? "font-medium" : ""}`}>
-                  {notifMessage(n.type, data)}
-                </p>
-                <p
-                  className="text-xs text-muted-foreground"
-                  title={new Date(n.createdAt).toLocaleString()}
-                >
-                  {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
-                </p>
-              </div>
-              {isPendingRequest && data.requesterId ? (
-                <FriendRequestActions
-                  requesterId={data.requesterId}
-                  notifId={n.id}
-                  onDone={() => void refetch()}
-                />
-              ) : !n.readAt ? (
-                <button
-                  className="shrink-0 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => markOne.mutate({ id: n.id })}
-                >
-                  Dismiss
-                </button>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
     </div>
   );
 }
