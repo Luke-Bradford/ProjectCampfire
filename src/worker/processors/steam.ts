@@ -124,7 +124,8 @@ async function upsertBatch(userId: string, steamGames: SteamOwnedGame[]): Promis
       externalId: String(g.appid),
       steamAppId: String(g.appid),
       // library_600x900.jpg is Steam's portrait capsule (600×900) — correct aspect
-      // ratio for the grid card view. Universally available for all Steam apps.
+      // ratio for the grid card view. Available for most Steam apps; may 404 for
+      // older or delisted titles (client falls back to a letter-initial placeholder).
       coverUrl: `https://cdn.akamai.steamstatic.com/steam/apps/${g.appid}/library_600x900.jpg`,
     }));
 

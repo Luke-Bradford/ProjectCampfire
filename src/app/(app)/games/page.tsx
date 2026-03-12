@@ -482,6 +482,7 @@ export default function GamesPage() {
                       src={g.coverUrl}
                       alt={g.title}
                       className="w-full aspect-[3/4] rounded-lg object-cover"
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
                     />
                   ) : (
                     <div className="w-full aspect-[3/4] rounded-lg bg-muted flex items-center justify-center">
@@ -538,7 +539,12 @@ export default function GamesPage() {
                 <Link href={`/games/${g.id}`} className="shrink-0">
                   {g.coverUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={g.coverUrl} alt={g.title} className="h-14 w-10 rounded object-cover" />
+                    <img
+                      src={g.coverUrl}
+                      alt={g.title}
+                      className="h-14 w-10 rounded object-cover"
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
                   ) : (
                     <div className="h-14 w-10 rounded bg-muted flex items-center justify-center">
                       <span className="text-sm font-bold text-muted-foreground">{g.title.charAt(0).toUpperCase()}</span>
