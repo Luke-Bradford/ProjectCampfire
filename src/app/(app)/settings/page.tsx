@@ -29,7 +29,18 @@ function ConnectedAccountsSection() {
       setFlash({ type: "success", message: "Steam account linked!" });
       window.history.replaceState({}, "", window.location.pathname);
     } else if (sp.get("steam_error")) {
-      setFlash({ type: "error", message: sp.get("steam_error")! });
+      // Error codes are a fixed set from the server — map to human messages
+      // rather than rendering the raw param to avoid attacker-crafted strings.
+      const STEAM_ERROR_MESSAGES: Record<string, string> = {
+        invalid_return_to: "Steam link failed: invalid return URL",
+        verification_request_failed: "Steam verification failed — please try again",
+        verification_failed: "Steam verification failed — please try again",
+        invalid_steam_id: "Could not extract Steam ID",
+        already_linked: "This Steam account is already linked to another user",
+      };
+      const code = sp.get("steam_error")!;
+      const message = STEAM_ERROR_MESSAGES[code] ?? "Steam link failed — please try again";
+      setFlash({ type: "error", message });
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);

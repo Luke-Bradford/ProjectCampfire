@@ -127,7 +127,6 @@ export const userRouter = createTRPCRouter({
       .update(user)
       .set({ steamId: null, steamProfileUrl: null })
       .where(eq(user.id, ctx.user.id));
-    return { ok: true };
   }),
 
   // Soft-delete the current user's account.
