@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, gte, inArray, or } from "drizzle-orm";
+import { and, eq, gte, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -315,10 +315,13 @@ export const eventsRouter = createTRPCRouter({
       const groupIds = memberships.map((m) => m.groupId);
       const now = new Date();
 
+      // Only confirmed events with a start time are surfaced — open events without
+      // a confirmedStartsAt would be excluded by the gte check anyway (NULL fails
+      // the comparison), so we only match confirmed to keep the intent explicit.
       return db.query.events.findMany({
         where: and(
           inArray(events.groupId, groupIds),
-          or(eq(events.status, "open"), eq(events.status, "confirmed")),
+          eq(events.status, "confirmed"),
           gte(events.confirmedStartsAt, now)
         ),
         with: {
