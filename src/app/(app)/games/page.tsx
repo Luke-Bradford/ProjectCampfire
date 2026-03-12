@@ -331,21 +331,10 @@ export default function GamesPage() {
   const allItems = data?.pages.flatMap((p) => p.items) ?? [];
   const total = data?.pages[0]?.total ?? 0;
 
-  const toggleOwnership = api.games.toggleOwnership.useMutation({
-    onSuccess: () => void utils.games.myGames.invalidate(),
-  });
-
   const setGameHidden = api.games.setGameHidden.useMutation({
     onSuccess: () => void utils.games.myGames.invalidate(),
   });
 
-  function handleFilterPlatform(p: Platform | undefined) {
-    setFilterPlatform(p);
-  }
-
-  function handleShowHidden(next: boolean) {
-    setShowHidden(next);
-  }
 
   return (
     <div className="space-y-6">
@@ -366,7 +355,7 @@ export default function GamesPage() {
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <button
-          onClick={() => handleFilterPlatform(undefined)}
+          onClick={() => setFilterPlatform(undefined)}
           className={`rounded-md border px-3 py-1 text-sm transition-colors ${
             !filterPlatform ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"
           }`}
@@ -376,7 +365,7 @@ export default function GamesPage() {
         {PLATFORMS.map((p) => (
           <button
             key={p}
-            onClick={() => handleFilterPlatform(filterPlatform === p ? undefined : p)}
+            onClick={() => setFilterPlatform(filterPlatform === p ? undefined : p)}
             className={`rounded-md border px-3 py-1 text-sm transition-colors ${
               filterPlatform === p
                 ? "border-primary bg-primary text-primary-foreground"
@@ -387,7 +376,7 @@ export default function GamesPage() {
           </button>
         ))}
         <button
-          onClick={() => handleShowHidden(!showHidden)}
+          onClick={() => setShowHidden(!showHidden)}
           className={`ml-auto rounded-md border px-3 py-1 text-sm transition-colors ${
             showHidden ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"
           }`}
@@ -428,48 +417,34 @@ export default function GamesPage() {
         <>
           <ul className="space-y-2">
             {allItems.map((g) => (
-              <li key={`${g.id}-${g.platform}`} className="flex items-center justify-between rounded-lg border p-3">
+              <li key={g.id} className="flex items-center justify-between rounded-lg border p-3">
                 <div className="space-y-1 min-w-0 flex-1">
                   <Link href={`/games/${g.id}`} className="font-medium hover:underline truncate block">{g.title}</Link>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="secondary" className="text-xs">
-                      {PLATFORM_LABELS[g.platform as Platform]}
-                    </Badge>
+                    {g.platforms.map((p) => (
+                      <Badge key={p} variant="secondary" className="text-xs">
+                        {PLATFORM_LABELS[p as Platform] ?? p}
+                      </Badge>
+                    ))}
                     {g.minPlayers && g.maxPlayers && (
                       <span className="text-xs text-muted-foreground">
                         {g.minPlayers}–{g.maxPlayers} players
                       </span>
                     )}
                     {g.genres && g.genres.length > 0 && (
-                      <span className="text-xs text-muted-foreground truncate">{g.genres.slice(0, 2).join(", ")}</span>
+                      <span className="text-xs text-muted-foreground">{g.genres.join(", ")}</span>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0 ml-2">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() => setGameHidden.mutate({ gameId: g.id, hidden: !g.hidden })}
-                    disabled={setGameHidden.isPending}
-                    title={g.hidden ? "Unhide" : "Hide"}
-                  >
-                    {g.hidden ? "Unhide" : "Hide"}
-                  </Button>
-                  {!g.hidden && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-muted-foreground hover:text-destructive"
-                      onClick={() =>
-                        toggleOwnership.mutate({ gameId: g.id, platform: g.platform as Platform })
-                      }
-                      disabled={toggleOwnership.isPending}
-                    >
-                      Remove
-                    </Button>
-                  )}
-                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-foreground shrink-0 ml-2"
+                  onClick={() => setGameHidden.mutate({ gameId: g.id, hidden: !g.hidden })}
+                  disabled={setGameHidden.isPending && setGameHidden.variables?.gameId === g.id}
+                >
+                  {g.hidden ? "Unhide" : "Hide"}
+                </Button>
               </li>
             ))}
           </ul>

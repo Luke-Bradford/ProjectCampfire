@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, count, eq, gt, ilike, inArray, or } from "drizzle-orm";
+import { and, eq, ilike, inArray, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -196,7 +196,9 @@ export const gamesRouter = createTRPCRouter({
     }),
 
   // My games library (CAMP-106, CAMP-118 pagination, CAMP-121 hide)
-  // Cursor-based on gameId (lexicographic); showHidden shows suppressed games only.
+  // Groups ownership by game so each game appears once regardless of platform count.
+  // Cursor is gameId (lexicographic on the games table, stable).
+  // showHidden=true returns only hidden games (for the "manage hidden" view).
   myGames: protectedProcedure
     .input(
       z.object({
@@ -207,23 +209,25 @@ export const gamesRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
-      const baseWhere = and(
+      const ownershipWhere = and(
         eq(gameOwnerships.userId, ctx.user.id),
         input.platform ? eq(gameOwnerships.platform, input.platform) : undefined,
         eq(gameOwnerships.hidden, input.showHidden)
       );
 
-      // Total count for the header (single aggregation query).
-      const [{ value: total }] = await db
-        .select({ value: count() })
+      // Count distinct games (not ownership rows) matching the filters.
+      const distinctGameIds = await db
+        .selectDistinct({ gameId: gameOwnerships.gameId })
         .from(gameOwnerships)
-        .where(baseWhere);
+        .where(ownershipWhere);
+      const total = distinctGameIds.length;
 
-      // Paginated rows: cursor moves the window forward via gt(gameId).
-      const rows = await db.query.gameOwnerships.findMany({
-        where: input.cursor
-          ? and(baseWhere, gt(gameOwnerships.gameId, input.cursor))
-          : baseWhere,
+      // Paginated distinct games: cursor = last gameId seen.
+      // We fetch all ownership rows for the user (matching filters), group by game
+      // client-side to collect platforms, then paginate the grouped list.
+      // This is safe at MVP scale (max ~1000 games per user).
+      const allRows = await db.query.gameOwnerships.findMany({
+        where: ownershipWhere,
         with: {
           game: {
             columns: {
@@ -237,19 +241,39 @@ export const gamesRouter = createTRPCRouter({
           },
         },
         orderBy: (t, { asc }) => [asc(t.gameId)],
-        limit: input.limit + 1,
       });
 
-      const hasMore = rows.length > input.limit;
-      const items = rows.slice(0, input.limit).map((r) => ({
-        ...r.game,
-        platform: r.platform,
-        source: r.source,
-        hidden: r.hidden,
-      }));
+      // Group by gameId — collect platforms, pick hidden/source from first row.
+      const gameMap = new Map<string, {
+        id: string; title: string; coverUrl: string | null;
+        genres: string[]; minPlayers: number | null; maxPlayers: number | null;
+        platforms: string[]; source: string; hidden: boolean;
+      }>();
+      for (const r of allRows) {
+        const existing = gameMap.get(r.gameId);
+        if (existing) {
+          existing.platforms.push(r.platform);
+        } else {
+          gameMap.set(r.gameId, {
+            ...r.game,
+            platforms: [r.platform],
+            source: r.source,
+            hidden: r.hidden,
+          });
+        }
+      }
+
+      // Apply cursor and limit to the deduplicated list.
+      const allGames = [...gameMap.values()];
+      const startIdx = input.cursor
+        ? allGames.findIndex((g) => g.id === input.cursor) + 1
+        : 0;
+      const page = allGames.slice(startIdx, startIdx + input.limit + 1);
+      const hasMore = page.length > input.limit;
+      const items = page.slice(0, input.limit);
       const nextCursor = hasMore ? items[items.length - 1]?.id : undefined;
 
-      return { items, nextCursor, total: total ?? 0 };
+      return { items, nextCursor, total };
     }),
 
   // Hide/unhide a game from the library and poll suggestions (CAMP-121).
