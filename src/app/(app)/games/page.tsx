@@ -482,6 +482,7 @@ export default function GamesPage() {
                       src={g.coverUrl}
                       alt={g.title}
                       className="w-full aspect-[3/4] rounded-lg object-cover"
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
                     />
                   ) : (
                     <div className="w-full aspect-[3/4] rounded-lg bg-muted flex items-center justify-center">
@@ -533,7 +534,23 @@ export default function GamesPage() {
         <>
           <ul className="space-y-2">
             {allItems.map((g) => (
-              <li key={g.id} className="flex items-center justify-between rounded-lg border p-3">
+              <li key={g.id} className="flex items-center gap-3 rounded-lg border p-3">
+                {/* Cover thumbnail */}
+                <Link href={`/games/${g.id}`} className="shrink-0">
+                  {g.coverUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={g.coverUrl}
+                      alt={g.title}
+                      className="h-14 w-10 rounded object-cover"
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
+                  ) : (
+                    <div className="h-14 w-10 rounded bg-muted flex items-center justify-center">
+                      <span className="text-sm font-bold text-muted-foreground">{g.title.charAt(0).toUpperCase()}</span>
+                    </div>
+                  )}
+                </Link>
                 <div className="space-y-1 min-w-0 flex-1">
                   <Link href={`/games/${g.id}`} className="font-medium hover:underline truncate block">{g.title}</Link>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -555,7 +572,7 @@ export default function GamesPage() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="text-muted-foreground hover:text-foreground shrink-0 ml-2"
+                  className="text-muted-foreground hover:text-foreground shrink-0"
                   onClick={() => setGameHidden.mutate({ gameId: g.id, hidden: !g.hidden })}
                   disabled={setGameHidden.isPending && setGameHidden.variables?.gameId === g.id}
                 >
