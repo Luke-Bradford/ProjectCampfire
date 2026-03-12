@@ -134,8 +134,7 @@ function GroupEvents({ groupId, groupName }: { groupId: string; groupName: strin
             </svg>
           }
           heading="No events yet"
-          description="Propose a session to find a time that works for everyone."
-          action={<CreateEventDialog groupId={groupId} onCreated={() => void refetch()} />}
+          description="Use the button above to propose a session and find a time that works for everyone."
           className="py-8"
         />
       ) : (
