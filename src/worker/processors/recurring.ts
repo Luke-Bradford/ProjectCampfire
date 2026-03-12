@@ -181,8 +181,11 @@ async function maybeCreateGamePoll(
 
     if (memberIds.length > 0) {
       const ownerships = await db.query.gameOwnerships.findMany({
-        where: (go, { inArray }) =>
-          inArray(go.userId, memberIds.map((m) => m.userId)),
+        where: (go, { and, inArray, eq }) =>
+          and(
+            inArray(go.userId, memberIds.map((m) => m.userId)),
+            eq(go.hidden, false)
+          ),
         with: { game: { columns: { id: true, title: true } } },
         limit: 50, // bound memory at MVP scale; JS-side dedup picks the first 5 distinct
       });

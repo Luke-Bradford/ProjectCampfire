@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, countDistinct, eq, ilike, inArray, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -195,15 +195,41 @@ export const gamesRouter = createTRPCRouter({
       return { owned: true };
     }),
 
-  // My games library (CAMP-106)
+  // My games library (CAMP-106, CAMP-118 pagination, CAMP-121 hide)
+  // Groups ownership by game so each game appears once regardless of platform count.
+  // Cursor is gameId (lexicographic on the games table, stable).
+  // showHidden=true returns only hidden games (for the "manage hidden" view).
   myGames: protectedProcedure
-    .input(z.object({ platform: z.enum(PLATFORMS).optional() }))
+    .input(
+      z.object({
+        platform: z.enum(PLATFORMS).optional(),
+        cursor: z.string().optional(), // last gameId from previous page
+        limit: z.number().int().min(1).max(100).default(50),
+        showHidden: z.boolean().default(false),
+      })
+    )
     .query(async ({ ctx, input }) => {
-      const rows = await db.query.gameOwnerships.findMany({
-        where: and(
-          eq(gameOwnerships.userId, ctx.user.id),
-          input.platform ? eq(gameOwnerships.platform, input.platform) : undefined
-        ),
+      const ownershipWhere = and(
+        eq(gameOwnerships.userId, ctx.user.id),
+        input.platform ? eq(gameOwnerships.platform, input.platform) : undefined,
+        eq(gameOwnerships.hidden, input.showHidden)
+      );
+
+      // Count distinct games (not ownership rows) in SQL — avoids fetching all IDs.
+      const [countRow] = await db
+        .select({ total: countDistinct(gameOwnerships.gameId) })
+        .from(gameOwnerships)
+        .where(ownershipWhere);
+      const total = countRow?.total ?? 0;
+
+      // Fetch ALL ownership rows for the user (matching filters) on every request —
+      // including "Load more" — group by game client-side to collect platforms, then
+      // slice the grouped list for the requested page.
+      // TODO(tech-debt): replace with SQL GROUP BY + array_agg for large libraries.
+      // Safe at MVP scale: Steam sync caps at ~2000 games per user and the full set
+      // fits comfortably in a single round-trip at this size.
+      const allRows = await db.query.gameOwnerships.findMany({
+        where: ownershipWhere,
         with: {
           game: {
             columns: {
@@ -216,8 +242,61 @@ export const gamesRouter = createTRPCRouter({
             },
           },
         },
+        orderBy: (t, { asc }) => [asc(t.gameId)],
       });
-      return rows.map((r) => ({ ...r.game, platform: r.platform, source: r.source }));
+
+      // Group by gameId — collect platforms, pick hidden/source from first row.
+      const gameMap = new Map<string, {
+        id: string; title: string; coverUrl: string | null;
+        genres: string[]; minPlayers: number | null; maxPlayers: number | null;
+        platforms: (typeof PLATFORMS)[number][]; source: string; hidden: boolean;
+      }>();
+      for (const r of allRows) {
+        const existing = gameMap.get(r.gameId);
+        if (existing) {
+          existing.platforms.push(r.platform);
+        } else {
+          gameMap.set(r.gameId, {
+            ...r.game,
+            platforms: [r.platform],
+            source: r.source,
+            hidden: r.hidden,
+          });
+        }
+      }
+
+      // Apply cursor and limit to the deduplicated list.
+      const allGames = [...gameMap.values()];
+      let startIdx = 0;
+      if (input.cursor) {
+        const cursorIdx = allGames.findIndex((g) => g.id === input.cursor);
+        // If cursor game was deleted (hidden/removed between pages), return empty
+        // to prevent re-fetching from the start and duplicating already-loaded items.
+        if (cursorIdx === -1) return { items: [], nextCursor: undefined, total };
+        startIdx = cursorIdx + 1;
+      }
+      const page = allGames.slice(startIdx, startIdx + input.limit + 1);
+      const hasMore = page.length > input.limit;
+      const items = page.slice(0, input.limit);
+      const nextCursor = hasMore ? items[items.length - 1]?.id : undefined;
+
+      return { items, nextCursor, total };
+    }),
+
+  // Hide/unhide a game from the library and poll suggestions (CAMP-121).
+  // Sets hidden=true on all ownership rows for this user+game (across all platforms).
+  setGameHidden: protectedProcedure
+    .input(z.object({ gameId: z.string(), hidden: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await db
+        .update(gameOwnerships)
+        .set({ hidden: input.hidden })
+        .where(
+          and(
+            eq(gameOwnerships.userId, ctx.user.id),
+            eq(gameOwnerships.gameId, input.gameId)
+          )
+        );
     }),
 
   // Batch ownership overlap for multiple games within a group (CAMP-104).

@@ -318,12 +318,21 @@ function AddGameDialog({ onAdded }: { onAdded: () => void }) {
 
 export default function GamesPage() {
   const [filterPlatform, setFilterPlatform] = useState<Platform | undefined>();
-  const { data: myGames = [], isLoading, refetch } = api.games.myGames.useQuery({
-    platform: filterPlatform,
-  });
+  const [showHidden, setShowHidden] = useState(false);
 
-  const toggleOwnership = api.games.toggleOwnership.useMutation({
-    onSuccess: () => void refetch(),
+  const utils = api.useUtils();
+
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    api.games.myGames.useInfiniteQuery(
+      { platform: filterPlatform, showHidden, limit: 50 },
+      { getNextPageParam: (lastPage) => lastPage.nextCursor }
+    );
+
+  const allItems = data?.pages.flatMap((p) => p.items) ?? [];
+  const total = data?.pages[0]?.total ?? 0;
+
+  const setGameHidden = api.games.setGameHidden.useMutation({
+    onSuccess: () => void utils.games.myGames.invalidate(),
   });
 
   return (
@@ -332,14 +341,18 @@ export default function GamesPage() {
         <div>
           <h1 className="text-2xl font-bold">My Games</h1>
           <p className="text-muted-foreground">
-            {myGames.length === 0 ? "No games yet." : `${myGames.length} game${myGames.length === 1 ? "" : "s"}`}
+            {isLoading
+              ? "Loading…"
+              : total === 0
+              ? showHidden ? "No hidden games." : "No games yet."
+              : `${total} game${total === 1 ? "" : "s"}${showHidden ? " hidden" : ""}`}
           </p>
         </div>
-        <AddGameDialog onAdded={() => void refetch()} />
+        <AddGameDialog onAdded={() => void utils.games.myGames.invalidate()} />
       </div>
 
-      {/* Platform filter */}
-      <div className="flex flex-wrap gap-2">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={() => setFilterPlatform(undefined)}
           className={`rounded-md border px-3 py-1 text-sm transition-colors ${
@@ -361,11 +374,19 @@ export default function GamesPage() {
             {PLATFORM_LABELS[p]}
           </button>
         ))}
+        <button
+          onClick={() => setShowHidden(!showHidden)}
+          className={`ml-auto rounded-md border px-3 py-1 text-sm transition-colors ${
+            showHidden ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"
+          }`}
+        >
+          {showHidden ? "Show library" : "Manage hidden"}
+        </button>
       </div>
 
-      {isLoading ? (
+      {isLoading && allItems.length === 0 ? (
         <GamesListSkeleton />
-      ) : myGames.length === 0 ? (
+      ) : allItems.length === 0 ? (
         <EmptyState
           icon={
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -376,49 +397,69 @@ export default function GamesPage() {
               <path d="M12 17c-2.8 0-5-2.2-5-5V7c0-1.1.9-2 2-2h6c1.1 0 2 .9 2 2v5c0 2.8-2.2 5-5 5z" />
             </svg>
           }
-          heading="No games in your library"
-          description="Add games you own so your group can see what everyone can play together."
-          action={<AddGameDialog onAdded={() => void refetch()} />}
+          heading={showHidden ? "No hidden games" : "No games in your library"}
+          description={
+            showHidden
+              ? "Games you hide will appear here."
+              : "Add games you own so your group can see what everyone can play together."
+          }
+          action={showHidden ? undefined : <AddGameDialog onAdded={() => void utils.games.myGames.invalidate()} />}
           secondaryAction={
-            <Button asChild size="sm" variant="outline">
-              <Link href="/settings">Connect Steam</Link>
-            </Button>
+            showHidden ? undefined : (
+              <Button asChild size="sm" variant="outline">
+                <Link href="/settings">Connect Steam</Link>
+              </Button>
+            )
           }
         />
       ) : (
-        <ul className="space-y-2">
-          {myGames.map((g) => (
-            <li key={`${g.id}-${g.platform}`} className="flex items-center justify-between rounded-lg border p-3">
-              <div className="space-y-1">
-                <Link href={`/games/${g.id}`} className="font-medium hover:underline">{g.title}</Link>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="text-xs">
-                    {PLATFORM_LABELS[g.platform as Platform]}
-                  </Badge>
-                  {g.minPlayers && g.maxPlayers && (
-                    <span className="text-xs text-muted-foreground">
-                      {g.minPlayers}–{g.maxPlayers} players
-                    </span>
-                  )}
-                  {g.genres && g.genres.length > 0 && (
-                    <span className="text-xs text-muted-foreground">{g.genres.join(", ")}</span>
-                  )}
+        <>
+          <ul className="space-y-2">
+            {allItems.map((g) => (
+              <li key={g.id} className="flex items-center justify-between rounded-lg border p-3">
+                <div className="space-y-1 min-w-0 flex-1">
+                  <Link href={`/games/${g.id}`} className="font-medium hover:underline truncate block">{g.title}</Link>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {g.platforms.map((p) => (
+                      <Badge key={p} variant="secondary" className="text-xs">
+                        {PLATFORM_LABELS[p]}
+                      </Badge>
+                    ))}
+                    {g.minPlayers && g.maxPlayers && (
+                      <span className="text-xs text-muted-foreground">
+                        {g.minPlayers}–{g.maxPlayers} players
+                      </span>
+                    )}
+                    {g.genres && g.genres.length > 0 && (
+                      <span className="text-xs text-muted-foreground">{g.genres.join(", ")}</span>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={() =>
-                  toggleOwnership.mutate({ gameId: g.id, platform: g.platform as Platform })
-                }
-                disabled={toggleOwnership.isPending}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-foreground shrink-0 ml-2"
+                  onClick={() => setGameHidden.mutate({ gameId: g.id, hidden: !g.hidden })}
+                  disabled={setGameHidden.isPending && setGameHidden.variables?.gameId === g.id}
+                >
+                  {g.hidden ? "Unhide" : "Hide"}
+                </Button>
+              </li>
+            ))}
+          </ul>
+
+          {hasNextPage && (
+            <div className="flex justify-center pt-2">
+              <button
+                className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
+                disabled={isFetchingNextPage}
+                onClick={() => void fetchNextPage()}
               >
-                Remove
-              </Button>
-            </li>
-          ))}
-        </ul>
+                {isFetchingNextPage ? "Loading…" : "Load more"}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

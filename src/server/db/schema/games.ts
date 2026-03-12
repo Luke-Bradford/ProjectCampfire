@@ -1,4 +1,5 @@
 import {
+  boolean,
   integer,
   jsonb,
   pgEnum,
@@ -72,6 +73,7 @@ export const gameOwnerships = pgTable(
       .references(() => games.id, { onDelete: "cascade" }),
     platform: gamePlatformEnum("platform").notNull(),
     source: ownershipSourceEnum("source").notNull().default("manual"),
+    hidden: boolean("hidden").notNull().default(false),
   },
   (t) => ({
     pk: primaryKey({ columns: [t.userId, t.gameId, t.platform] }),
