@@ -195,7 +195,7 @@ export const gamesRouter = createTRPCRouter({
       return { owned: true };
     }),
 
-  // My games library (CAMP-106, CAMP-118 pagination, CAMP-121 hide)
+  // My games library (CAMP-106, CAMP-118 pagination, CAMP-121 hide, CAMP-119 search)
   // Groups ownership by game so each game appears once regardless of platform count.
   // Cursor is gameId (lexicographic on the games table, stable).
   // showHidden=true returns only hidden games (for the "manage hidden" view).
@@ -203,16 +203,30 @@ export const gamesRouter = createTRPCRouter({
     .input(
       z.object({
         platform: z.enum(PLATFORMS).optional(),
+        search: z.string().max(100).optional(),
         cursor: z.string().optional(), // last gameId from previous page
         limit: z.number().int().min(1).max(100).default(50),
         showHidden: z.boolean().default(false),
       })
     )
     .query(async ({ ctx, input }) => {
+      // If a search term is provided, resolve which gameIds match before filtering ownerships.
+      let searchGameIds: string[] | undefined;
+      if (input.search && input.search.trim().length > 0) {
+        const matchingGames = await db
+          .select({ id: games.id })
+          .from(games)
+          .where(ilike(games.title, `%${input.search.trim()}%`));
+        searchGameIds = matchingGames.map((g) => g.id);
+        // If no games match the search, return early — no ownerships to fetch.
+        if (searchGameIds.length === 0) return { items: [], nextCursor: undefined, total: 0 };
+      }
+
       const ownershipWhere = and(
         eq(gameOwnerships.userId, ctx.user.id),
         input.platform ? eq(gameOwnerships.platform, input.platform) : undefined,
-        eq(gameOwnerships.hidden, input.showHidden)
+        eq(gameOwnerships.hidden, input.showHidden),
+        searchGameIds ? inArray(gameOwnerships.gameId, searchGameIds) : undefined
       );
 
       // Count distinct games (not ownership rows) in SQL — avoids fetching all IDs.

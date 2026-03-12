@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { api, type RouterOutputs } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
@@ -319,12 +319,20 @@ function AddGameDialog({ onAdded }: { onAdded: () => void }) {
 export default function GamesPage() {
   const [filterPlatform, setFilterPlatform] = useState<Platform | undefined>();
   const [showHidden, setShowHidden] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+
+  // Debounce search input — update the query param 300ms after the user stops typing.
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   const utils = api.useUtils();
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     api.games.myGames.useInfiniteQuery(
-      { platform: filterPlatform, showHidden, limit: 50 },
+      { platform: filterPlatform, showHidden, search: search || undefined, limit: 50 },
       { getNextPageParam: (lastPage) => lastPage.nextCursor }
     );
 
@@ -350,6 +358,14 @@ export default function GamesPage() {
         </div>
         <AddGameDialog onAdded={() => void utils.games.myGames.invalidate()} />
       </div>
+
+      {/* Search */}
+      <Input
+        placeholder="Search your library…"
+        value={searchInput}
+        onChange={(e) => setSearchInput(e.target.value)}
+        className="max-w-sm"
+      />
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
