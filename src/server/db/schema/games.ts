@@ -11,6 +11,15 @@ import {
 import { sql } from "drizzle-orm";
 import { user } from "./auth";
 
+export type SteamPriceData = {
+  currency: string;
+  initial: number;       // cents
+  final: number;         // cents (after discount)
+  discountPercent: number;
+  initialFormatted: string;
+  finalFormatted: string;
+};
+
 export const gameSourceEnum = pgEnum("game_source", ["manual", "igdb", "steam_app"]);
 
 export const gamePlatformEnum = pgEnum("game_platform", [
@@ -37,6 +46,9 @@ export const games = pgTable(
     externalId: text("external_id"),
     steamAppId: text("steam_app_id"),
     metadataJson: jsonb("metadata_json"),
+    // Steam Store price snapshot (snapshotted at poll creation time)
+    priceDataJson: jsonb("price_data_json").$type<SteamPriceData>(),
+    priceSnapshotAt: timestamp("price_snapshot_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

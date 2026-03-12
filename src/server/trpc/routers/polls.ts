@@ -7,6 +7,7 @@ import { db } from "@/server/db";
 import { polls, pollOptions, pollVotes, events, groupMemberships, groups } from "@/server/db/schema";
 import { enqueuePollOpened, enqueuePollClosed } from "@/server/jobs/email-jobs";
 import { enqueueClosePoll } from "@/server/jobs/poll-jobs";
+import { snapshotSteamPrice } from "@/server/lib/steam-price";
 import { env } from "@/env";
 
 async function assertPollMember(pollId: string, userId: string) {
@@ -96,6 +97,25 @@ export const pollsRouter = createTRPCRouter({
           endsAt: opt.endsAt ? new Date(opt.endsAt) : null,
           sortOrder: opt.sortOrder ?? i,
         });
+      }
+
+      // Fire-and-forget Steam price snapshots for game poll options.
+      // Only runs for game polls with gameId options that have a steamAppId.
+      // Failures are swallowed — price data is best-effort and must not block poll creation.
+      if (input.type === "game") {
+        const gameIds = input.options.map((o) => o.gameId).filter((id): id is string => !!id);
+        if (gameIds.length > 0) {
+          const gamesWithSteam = await db.query.games.findMany({
+            where: (g, { inArray, and: a, isNotNull }) =>
+              a(inArray(g.id, gameIds), isNotNull(g.steamAppId)),
+            columns: { id: true, steamAppId: true },
+          });
+          for (const game of gamesWithSteam) {
+            void snapshotSteamPrice(game.id, game.steamAppId!).catch((err: unknown) =>
+              console.error(`[poll] steam price snapshot failed for game ${game.id}:`, err),
+            );
+          }
+        }
       }
 
       // Schedule auto-close if closesAt is set.

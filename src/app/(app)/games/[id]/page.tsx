@@ -184,6 +184,32 @@ export default function GameDetailPage({ params }: { params: Promise<{ id: strin
           {game.description && (
             <p className="text-sm text-muted-foreground">{game.description}</p>
           )}
+          {game.priceDataJson && (
+            <div className="flex items-center gap-2 pt-0.5">
+              {game.priceDataJson.discountPercent > 0 ? (
+                <>
+                  <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
+                    -{game.priceDataJson.discountPercent}%
+                  </Badge>
+                  <span className="text-sm line-through text-muted-foreground">
+                    {game.priceDataJson.initialFormatted}
+                  </span>
+                  <span className="text-sm font-semibold text-green-700 dark:text-green-300">
+                    {game.priceDataJson.finalFormatted}
+                  </span>
+                </>
+              ) : (
+                <span className="text-sm text-muted-foreground">
+                  {game.priceDataJson.finalFormatted}
+                </span>
+              )}
+              {game.priceSnapshotAt && (
+                <span className="text-xs text-muted-foreground">
+                  · as of {format(new Date(game.priceSnapshotAt), "MMM d")}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
