@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
@@ -5,6 +6,10 @@ import { LeftPanel } from "@/components/nav/left-panel";
 import { RightPanel } from "@/components/nav/right-panel";
 import { CampfireLogo } from "@/components/nav/campfire-logo";
 import { MobileNav } from "@/components/nav/mobile-nav";
+
+export const metadata: Metadata = {
+  title: { template: "%s — Campfire", default: "Campfire" },
+};
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   let session;
