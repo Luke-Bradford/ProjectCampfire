@@ -218,7 +218,9 @@ export const gamesRouter = createTRPCRouter({
           platform: input.platform,
           source: "manual",
         })
-        .onConflictDoNothing();
+        // Specify conflict target explicitly so only the PK violation is silenced.
+        // gameOwnerships PK is (userId, gameId, platform).
+        .onConflictDoNothing({ target: [gameOwnerships.userId, gameOwnerships.gameId, gameOwnerships.platform] });
 
       return { owned: true };
     }),

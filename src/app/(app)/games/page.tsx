@@ -321,6 +321,9 @@ function AddGameDialog({ onAdded }: { onAdded: () => void }) {
 function CatalogTab() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  // Track in-flight add requests per game to avoid the shared isPending/variables
+  // race — clicking game A then game B before A resolves would re-enable A's button.
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const utils = api.useUtils();
 
   useEffect(() => {
@@ -340,11 +343,20 @@ function CatalogTab() {
 
   // Insert-only mutation — safe for double-clicks; cannot accidentally remove a game.
   const addToLibrary = api.games.addToLibrary.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      setPendingIds((prev) => { const next = new Set(prev); next.delete(variables.gameId); return next; });
       void utils.games.catalog.invalidate();
       void utils.games.myGames.invalidate();
     },
+    onError: (_err, variables) => {
+      setPendingIds((prev) => { const next = new Set(prev); next.delete(variables.gameId); return next; });
+    },
   });
+
+  function handleAdd(gameId: string) {
+    setPendingIds((prev) => new Set(prev).add(gameId));
+    addToLibrary.mutate({ gameId, platform: "pc" });
+  }
 
   return (
     <div className="space-y-4">
@@ -417,12 +429,10 @@ function CatalogTab() {
                   {!g.owned && (
                     <button
                       className="text-xs text-primary hover:underline disabled:opacity-50"
-                      onClick={() => addToLibrary.mutate({ gameId: g.id, platform: "pc" })}
-                      disabled={addToLibrary.isPending && addToLibrary.variables?.gameId === g.id}
+                      onClick={() => handleAdd(g.id)}
+                      disabled={pendingIds.has(g.id)}
                     >
-                      {addToLibrary.isPending && addToLibrary.variables?.gameId === g.id
-                        ? "Adding…"
-                        : "+ Add to library"}
+                      {pendingIds.has(g.id) ? "Adding…" : "+ Add to library"}
                     </button>
                   )}
                 </div>
@@ -553,7 +563,11 @@ export default function GamesPage() {
         </button>
       </div>
 
-      {tab === "catalog" && <CatalogTab />}
+      {/* CatalogTab stays mounted to preserve search state and avoid re-firing the
+          unfiltered query on every tab switch. Hidden via CSS when not active. */}
+      <div className={tab === "catalog" ? undefined : "hidden"}>
+        <CatalogTab />
+      </div>
 
       {tab === "library" && (
       <>
