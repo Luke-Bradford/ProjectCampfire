@@ -12,6 +12,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const GIF_MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+/** GIF URLs must be served unoptimized so Next.js doesn't strip the animation. */
+function isGifUrl(url: string): boolean {
+  try { return new URL(url).pathname.endsWith(".gif"); } catch { return false; }
+}
 
 function initials(name: string) {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -151,13 +158,14 @@ function CommentRow({
               return imgs.length > 0 ? (
                 <div className="mt-1">
                   <Image
-                    src={imgs[0]}
+                    src={imgs[0]!}
                     alt=""
                     width={0}
                     height={0}
                     sizes="50vw"
                     className="w-full max-w-xs rounded object-cover"
                     style={{ height: "auto", maxHeight: "200px" }}
+                    unoptimized={isGifUrl(imgs[0]!)}
                   />
                 </div>
               ) : null;
@@ -329,7 +337,12 @@ export function PostCard({
       file,
       preview: URL.createObjectURL(file),
       key: null,
-      error: ALLOWED_TYPES.includes(file.type) ? null : `Unsupported type "${file.type}"`,
+      error: (() => {
+        if (!ALLOWED_TYPES.includes(file.type)) return `Unsupported type "${file.type}"`;
+        const limit = file.type === "image/gif" ? GIF_MAX_IMAGE_BYTES : MAX_IMAGE_BYTES;
+        if (file.size > limit) return `File too large (max ${limit / 1024 / 1024} MB)`;
+        return null;
+      })(),
       abort: new AbortController(),
     };
     setCommentImage(img);
@@ -506,6 +519,7 @@ export function PostCard({
                 height: "auto",
                 maxHeight: imageUrls.length === 1 ? "400px" : "200px",
               }}
+              unoptimized={isGifUrl(url)}
             />
           ))}
         </div>

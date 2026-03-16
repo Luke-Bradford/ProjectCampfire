@@ -15,6 +15,12 @@ const POST_IMAGE_MAX = 1280; // px, longest edge
 const MAX_POST_IMAGES = 4; // must match Zod .max() in feed.create
 const MAX_COMMENT_IMAGES = 1; // must match Zod .max() in feed.comment
 
+/** Returns true if the buffer starts with the GIF89a or GIF87a magic bytes. */
+function isGif(buffer: Buffer): boolean {
+  // GIF magic: bytes 0-2 are "GIF", bytes 3-5 are "87a" or "89a"
+  return buffer.length >= 6 && buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46;
+}
+
 async function downloadFromMinio(key: string): Promise<Buffer> {
   const stream = await minio.getObject(env.MINIO_BUCKET, key);
   const chunks: Buffer[] = [];
@@ -30,15 +36,19 @@ async function downloadFromMinio(key: string): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-async function uploadProcessed(key: string, buffer: Buffer): Promise<void> {
+async function uploadProcessed(key: string, buffer: Buffer, contentType = "image/webp"): Promise<void> {
   await minio.putObject(env.MINIO_BUCKET, key, buffer, buffer.byteLength, {
-    "Content-Type": "image/webp",
+    "Content-Type": contentType,
   });
 }
 
-/** Derives the processed key from a raw key by stripping the "-raw" suffix and adding ".webp". */
-function processedKey(rawKey: string): string {
-  return rawKey.replace(/-raw$/, "") + ".webp";
+/**
+ * Derives the processed key from a raw key.
+ * GIFs are stored as-is (preserving animation) — suffix ".gif".
+ * All other images are converted to WebP — suffix ".webp".
+ */
+function processedKey(rawKey: string, gif = false): string {
+  return rawKey.replace(/-raw$/, "") + (gif ? ".gif" : ".webp");
 }
 
 export async function processImageJob(job: Job<ImageJobPayload>) {
@@ -66,13 +76,20 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
 
     case "process_post_image": {
       const raw = await downloadFromMinio(data.key);
-      const processed = await sharp(raw)
-        .resize(POST_IMAGE_MAX, POST_IMAGE_MAX, { fit: "inside", withoutEnlargement: true })
-        .webp({ quality: 85 })
-        .toBuffer();
+      const gif = isGif(raw);
+      let processed: Buffer;
+      if (gif) {
+        // Preserve GIF animation — no Sharp conversion.
+        processed = raw;
+      } else {
+        processed = await sharp(raw)
+          .resize(POST_IMAGE_MAX, POST_IMAGE_MAX, { fit: "inside", withoutEnlargement: true })
+          .webp({ quality: 85 })
+          .toBuffer();
+      }
 
-      const outKey = processedKey(data.key);
-      await uploadProcessed(outKey, processed);
+      const outKey = processedKey(data.key, gif);
+      await uploadProcessed(outKey, processed, gif ? "image/gif" : "image/webp");
 
       // SELECT FOR UPDATE serialises concurrent jobs for the same post at the DB level.
       // Without this lock, two concurrent UPDATEs each snapshot image_urls independently
@@ -106,13 +123,19 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
 
     case "process_comment_image": {
       const raw = await downloadFromMinio(data.key);
-      const processed = await sharp(raw)
-        .resize(POST_IMAGE_MAX, POST_IMAGE_MAX, { fit: "inside", withoutEnlargement: true })
-        .webp({ quality: 85 })
-        .toBuffer();
+      const gif = isGif(raw);
+      let processed: Buffer;
+      if (gif) {
+        processed = raw;
+      } else {
+        processed = await sharp(raw)
+          .resize(POST_IMAGE_MAX, POST_IMAGE_MAX, { fit: "inside", withoutEnlargement: true })
+          .webp({ quality: 85 })
+          .toBuffer();
+      }
 
-      const outKey = processedKey(data.key);
-      await uploadProcessed(outKey, processed);
+      const outKey = processedKey(data.key, gif);
+      await uploadProcessed(outKey, processed, gif ? "image/gif" : "image/webp");
 
       // Same SELECT FOR UPDATE + generate_series pattern as process_post_image.
       // Comments support up to 1 image (index is always 0), but the array approach

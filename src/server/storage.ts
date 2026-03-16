@@ -10,7 +10,8 @@ export const ALLOWED_IMAGE_MIME_TYPES = [
 export type AllowedImageMimeType = (typeof ALLOWED_IMAGE_MIME_TYPES)[number];
 
 const ALLOWED_SET = new Set<string>(ALLOWED_IMAGE_MIME_TYPES);
-const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_BYTES = 5 * 1024 * 1024; // 5 MB for non-GIF images
+export const GIF_MAX_BYTES = 10 * 1024 * 1024; // 10 MB for GIFs (animated)
 
 // MINIO_ENDPOINT is the hostname only (e.g. "localhost" or "minio").
 // Port is configured separately via MINIO_PORT (default 9000).
@@ -31,6 +32,7 @@ export class ImageValidationError extends Error {
 
 /**
  * Validates an image buffer before any storage operation.
+ * GIFs are allowed up to GIF_MAX_BYTES (10 MB); all other types up to MAX_BYTES (5 MB).
  * Throws ImageValidationError if the type or size is not allowed.
  */
 export function validateImage(buffer: Buffer, mimeType: string): void {
@@ -39,9 +41,11 @@ export function validateImage(buffer: Buffer, mimeType: string): void {
       `Unsupported image type "${mimeType}". Allowed: jpeg, png, gif, webp.`,
     );
   }
-  if (buffer.byteLength > MAX_BYTES) {
+  const limit = mimeType === "image/gif" ? GIF_MAX_BYTES : MAX_BYTES;
+  const limitMB = limit / 1024 / 1024;
+  if (buffer.byteLength > limit) {
     throw new ImageValidationError(
-      `Image exceeds the 5 MB size limit (got ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB).`,
+      `Image exceeds the ${limitMB} MB size limit (got ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB).`,
     );
   }
 }
