@@ -359,7 +359,7 @@ export default function GamesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">My Games</h1>
@@ -472,7 +472,7 @@ export default function GamesPage() {
         />
       ) : viewMode === "grid" ? (
         <>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
             {allItems.map((g) => (
               <div key={g.id} className="group relative">
                 <Link href={`/games/${g.id}`} className="block">
