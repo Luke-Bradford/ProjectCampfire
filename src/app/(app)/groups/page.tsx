@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { formatDistanceToNow, format, isToday, isTomorrow } from "date-fns";
+import { Calendar, Vote } from "lucide-react";
 import { api } from "@/trpc/react";
+import { rsvpStatusEnum } from "@/server/db/schema";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -17,7 +20,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { format } from "date-fns";
 
 // Deterministic colour strip per group — consistent per name, never random per render.
 const STRIP_COLORS = [
@@ -34,6 +36,47 @@ const STRIP_COLORS = [
 function groupColor(name: string): string {
   const hash = [...name].reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
   return STRIP_COLORS[hash % STRIP_COLORS.length]!;
+}
+
+// Offered Going/Skip — the subset of rsvpStatusEnum used on the groups list.
+// Derived at module level from the actual enum so a future rename is a compile error.
+const RSVP_QUICK_OPTIONS = rsvpStatusEnum.enumValues.filter(
+  (v): v is "yes" | "no" => v === "yes" || v === "no"
+);
+
+function RsvpButtons({
+  eventId,
+  myRsvp,
+}: {
+  eventId: string;
+  myRsvp: string | null;
+}) {
+  const utils = api.useUtils();
+  const upsertRsvp = api.events.upsertRsvp.useMutation({
+    onSuccess: () => void utils.groups.list.invalidate(),
+  });
+
+  return (
+    <div className="flex gap-1 shrink-0">
+      {RSVP_QUICK_OPTIONS.map((s) => (
+        <button
+          key={s}
+          type="button"
+          disabled={upsertRsvp.isPending}
+          onClick={() => upsertRsvp.mutate({ eventId, status: s })}
+          className={`rounded-md px-2 py-0.5 text-[11px] font-medium border transition-colors disabled:opacity-50 ${
+            myRsvp === s
+              ? s === "yes"
+                ? "bg-emerald-500 border-emerald-500 text-white"
+                : "bg-destructive/80 border-destructive/80 text-white"
+              : "border-border text-muted-foreground hover:bg-accent"
+          }`}
+        >
+          {s === "yes" ? "Going" : "Skip"}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function CreateGroupDialog({ onCreated }: { onCreated: () => void }) {
@@ -109,6 +152,12 @@ function CreateGroupDialog({ onCreated }: { onCreated: () => void }) {
   );
 }
 
+function formatEventDate(d: Date): string {
+  if (isToday(d)) return `Today ${format(d, "h:mm a")}`;
+  if (isTomorrow(d)) return `Tomorrow ${format(d, "h:mm a")}`;
+  return format(d, "EEE d MMM, h:mm a");
+}
+
 export default function GroupsPage() {
   const { data: myGroups = [], isLoading, refetch } = api.groups.list.useQuery();
 
@@ -145,10 +194,9 @@ export default function GroupsPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {myGroups.map((g) => (
-            <Link
+            <div
               key={g.id}
-              href={`/groups/${g.id}`}
-              className="group rounded-xl border bg-card shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+              className="rounded-xl border bg-card shadow-sm overflow-hidden"
             >
               {/* Deterministic colour strip */}
               <div className={`h-1.5 w-full ${groupColor(g.name)}`} />
@@ -156,9 +204,12 @@ export default function GroupsPage() {
               <div className="p-4 space-y-3">
                 {/* Name + role badge */}
                 <div className="flex items-start justify-between gap-2">
-                  <p className="font-semibold leading-tight group-hover:text-primary transition-colors">
+                  <Link
+                    href={`/groups/${g.id}`}
+                    className="font-semibold leading-tight hover:text-primary transition-colors"
+                  >
                     {g.name}
-                  </p>
+                  </Link>
                   <Badge variant="secondary" className="capitalize shrink-0 text-xs">
                     {g.role}
                   </Badge>
@@ -169,20 +220,49 @@ export default function GroupsPage() {
                   <p className="text-sm text-muted-foreground line-clamp-2">{g.description}</p>
                 )}
 
-                {/* Footer: member count + next event pill */}
-                <div className="flex items-center justify-between pt-1">
+                {/* Inline activity: next event → active poll → last active */}
+                <div className="space-y-2">
+                  {g.nextEvent?.confirmedStartsAt ? (
+                    <div className="flex items-center justify-between gap-2 rounded-lg bg-emerald-500/10 px-3 py-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Calendar size={13} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300 truncate">
+                            {g.nextEvent.title}
+                          </p>
+                          <p className="text-[11px] text-emerald-600/80 dark:text-emerald-400/80">
+                            {formatEventDate(new Date(g.nextEvent.confirmedStartsAt))}
+                          </p>
+                        </div>
+                      </div>
+                      <RsvpButtons eventId={g.nextEvent.id} myRsvp={g.nextEvent.myRsvp} />
+                    </div>
+                  ) : g.activePoll ? (
+                    <Link
+                      href={`/groups/${g.id}`}
+                      className="flex items-center gap-2 rounded-lg bg-primary/5 px-3 py-2 hover:bg-primary/10 transition-colors"
+                    >
+                      <Vote size={13} className="shrink-0 text-primary" />
+                      <p className="text-xs font-medium text-primary truncate flex-1">
+                        {g.activePoll.question}
+                      </p>
+                      <span className="text-[11px] text-primary/70 shrink-0">Vote →</span>
+                    </Link>
+                  ) : g.lastActivityAt ? (
+                    <p className="text-xs text-muted-foreground">
+                      Last active {formatDistanceToNow(new Date(g.lastActivityAt), { addSuffix: true })}
+                    </p>
+                  ) : null}
+                </div>
+
+                {/* Footer: member count */}
+                <div className="flex items-center pt-1 border-t border-border/50">
                   <span className="text-xs text-muted-foreground">
                     {g.memberCount} member{g.memberCount === 1 ? "" : "s"}
                   </span>
-                  {g.nextEvent?.confirmedStartsAt ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      {format(new Date(g.nextEvent.confirmedStartsAt), "d MMM")}
-                    </span>
-                  ) : null}
                 </div>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       )}
