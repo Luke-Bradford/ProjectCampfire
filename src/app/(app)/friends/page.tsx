@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,10 @@ function CopyInviteButton({
 }) {
   const [state, setState] = useState<"idle" | "loading" | "copied" | "error">("idle");
   const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Clear the pending reset timer on unmount to avoid calling setState on an
+  // unmounted component (e.g. user navigates away within 2.5s of clicking).
+  useEffect(() => () => clearTimeout(resetTimer.current), []);
 
   function scheduleReset() {
     clearTimeout(resetTimer.current);
