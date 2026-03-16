@@ -30,9 +30,20 @@ export class ImageValidationError extends Error {
   }
 }
 
+/** Returns true if the buffer starts with the GIF87a or GIF89a magic bytes. */
+function bufferIsGif(buffer: Buffer): boolean {
+  return buffer.length >= 6 && buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46;
+}
+
 /**
  * Validates an image buffer before any storage operation.
- * GIFs are allowed up to GIF_MAX_BYTES (10 MB); all other types up to MAX_BYTES (5 MB).
+ * The size limit is determined by the actual file type (magic bytes), not the
+ * declared MIME type — this prevents a client from bypassing the 5 MB non-GIF
+ * limit by declaring image/gif on a JPEG or PNG.
+ *
+ * GIFs: up to GIF_MAX_BYTES (10 MB).
+ * All other types: up to MAX_BYTES (5 MB).
+ *
  * Throws ImageValidationError if the type or size is not allowed.
  */
 export function validateImage(buffer: Buffer, mimeType: string): void {
@@ -41,7 +52,10 @@ export function validateImage(buffer: Buffer, mimeType: string): void {
       `Unsupported image type "${mimeType}". Allowed: jpeg, png, gif, webp.`,
     );
   }
-  const limit = mimeType === "image/gif" ? GIF_MAX_BYTES : MAX_BYTES;
+  // Use actual magic bytes to decide the size limit — the declared mimeType is
+  // client-controlled and cannot be trusted for limit selection.
+  const actuallyGif = bufferIsGif(buffer);
+  const limit = actuallyGif ? GIF_MAX_BYTES : MAX_BYTES;
   const limitMB = limit / 1024 / 1024;
   if (buffer.byteLength > limit) {
     throw new ImageValidationError(

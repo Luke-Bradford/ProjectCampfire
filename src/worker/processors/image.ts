@@ -51,6 +51,31 @@ function processedKey(rawKey: string, gif = false): string {
   return rawKey.replace(/-raw$/, "") + (gif ? ".gif" : ".webp");
 }
 
+/**
+ * Download raw, optionally convert via Sharp, upload processed, then delete the raw object.
+ * GIFs are passed through without conversion to preserve animation.
+ * Deleting the raw object after a confirmed upload avoids double-storage for the sweep interval.
+ * Returns the processed object key.
+ */
+async function processAndStore(rawKey: string, resizeMax: number): Promise<string> {
+  const raw = await downloadFromMinio(rawKey);
+  const gif = isGif(raw);
+  let processed: Buffer;
+  if (gif) {
+    processed = raw;
+  } else {
+    processed = await sharp(raw)
+      .resize(resizeMax, resizeMax, { fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 85 })
+      .toBuffer();
+  }
+  const outKey = processedKey(rawKey, gif);
+  await uploadProcessed(outKey, processed, gif ? "image/gif" : "image/webp");
+  // Remove the raw object now that the processed copy is confirmed stored.
+  await minio.removeObject(env.MINIO_BUCKET, rawKey);
+  return outKey;
+}
+
 export async function processImageJob(job: Job<ImageJobPayload>) {
   const data = job.data;
 
@@ -75,21 +100,7 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
     }
 
     case "process_post_image": {
-      const raw = await downloadFromMinio(data.key);
-      const gif = isGif(raw);
-      let processed: Buffer;
-      if (gif) {
-        // Preserve GIF animation — no Sharp conversion.
-        processed = raw;
-      } else {
-        processed = await sharp(raw)
-          .resize(POST_IMAGE_MAX, POST_IMAGE_MAX, { fit: "inside", withoutEnlargement: true })
-          .webp({ quality: 85 })
-          .toBuffer();
-      }
-
-      const outKey = processedKey(data.key, gif);
-      await uploadProcessed(outKey, processed, gif ? "image/gif" : "image/webp");
+      const outKey = await processAndStore(data.key, POST_IMAGE_MAX);
 
       // SELECT FOR UPDATE serialises concurrent jobs for the same post at the DB level.
       // Without this lock, two concurrent UPDATEs each snapshot image_urls independently
@@ -122,20 +133,7 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
     }
 
     case "process_comment_image": {
-      const raw = await downloadFromMinio(data.key);
-      const gif = isGif(raw);
-      let processed: Buffer;
-      if (gif) {
-        processed = raw;
-      } else {
-        processed = await sharp(raw)
-          .resize(POST_IMAGE_MAX, POST_IMAGE_MAX, { fit: "inside", withoutEnlargement: true })
-          .webp({ quality: 85 })
-          .toBuffer();
-      }
-
-      const outKey = processedKey(data.key, gif);
-      await uploadProcessed(outKey, processed, gif ? "image/gif" : "image/webp");
+      const outKey = await processAndStore(data.key, POST_IMAGE_MAX);
 
       // Same SELECT FOR UPDATE + generate_series pattern as process_post_image.
       // Comments support up to 1 image (index is always 0), but the array approach
@@ -207,8 +205,11 @@ async function sweepOrphanedUploads(): Promise<void> {
   for (const { key, lastModified } of rawCandidates) {
     const ageMs = now - lastModified.getTime();
     if (ageMs < ORPHAN_AGE_MS) continue; // too recent — may still be processing
-    const processedKey = key.replace(/-raw$/, "") + ".webp";
-    if (!allKeys.has(processedKey)) {
+    // Processed key is .gif for GIFs, .webp for everything else.
+    // Check both — the worker deletes raw files immediately on success, so
+    // surviving raw files are failures/crashes where the processed key is absent.
+    const base = key.replace(/-raw$/, "");
+    if (!allKeys.has(base + ".webp") && !allKeys.has(base + ".gif")) {
       toDelete.push(key);
     }
   }

@@ -155,20 +155,22 @@ function CommentRow({
                 if (!u) return false;
                 try { new URL(u); return true; } catch { return false; }
               });
-              return imgs.length > 0 ? (
+              if (imgs.length === 0) return null;
+              const imgUrl = imgs[0]!;
+              return (
                 <div className="mt-1">
                   <Image
-                    src={imgs[0]!}
+                    src={imgUrl}
                     alt=""
                     width={0}
                     height={0}
                     sizes="50vw"
                     className="w-full max-w-xs rounded object-cover"
                     style={{ height: "auto", maxHeight: "200px" }}
-                    unoptimized={isGifUrl(imgs[0]!)}
+                    unoptimized={isGifUrl(imgUrl)}
                   />
                 </div>
-              ) : null;
+              );
             })()}
           </>
         )}
