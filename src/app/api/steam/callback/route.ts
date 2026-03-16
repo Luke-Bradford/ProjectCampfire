@@ -29,8 +29,28 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/login", env.NEXT_PUBLIC_APP_URL));
   }
 
-  const settingsUrl = new URL("/settings", env.NEXT_PUBLIC_APP_URL);
   const { searchParams } = req.nextUrl;
+
+  // Resolve the post-link redirect destination.
+  // Parse with URL to normalise encoding, then accept only the pathname so
+  // no attacker-controlled query params or fragments flow into the success URL.
+  // Fall back to /settings if absent, malformed, or from a different origin.
+  const returnToParam = searchParams.get("return_to") ?? "";
+  let postLinkPathname = "/settings";
+  if (returnToParam) {
+    try {
+      const resolved = new URL(returnToParam, env.NEXT_PUBLIC_APP_URL);
+      if (resolved.origin === env.NEXT_PUBLIC_APP_URL) {
+        postLinkPathname = resolved.pathname;
+      }
+    } catch {
+      // Malformed — fall back to /settings.
+    }
+  }
+  const postLinkUrl = new URL(postLinkPathname, env.NEXT_PUBLIC_APP_URL);
+
+  // Default error redirect is always /settings to avoid leaking error codes to caller-controlled URLs
+  const settingsUrl = new URL("/settings", env.NEXT_PUBLIC_APP_URL);
 
   function fail(code: string) {
     settingsUrl.searchParams.set("steam_error", code);
@@ -97,6 +117,6 @@ export async function GET(req: NextRequest) {
     .set({ steamId, steamProfileUrl })
     .where(eq(user.id, session.user.id));
 
-  settingsUrl.searchParams.set("steam_linked", "1");
-  return NextResponse.redirect(settingsUrl);
+  postLinkUrl.searchParams.set("steam_linked", "1");
+  return NextResponse.redirect(postLinkUrl);
 }

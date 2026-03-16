@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useRef, useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
+import { CheckCircle2 } from "lucide-react";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -378,20 +379,76 @@ function StepInvite({ onDone }: { onDone: () => void }) {
   );
 }
 
+// ── Step 4: Connect Steam (skippable) ─────────────────────────────────────────
+
+function StepSteam({ onDone, justLinked }: { onDone: () => void; justLinked: boolean }) {
+  return (
+    <Card className="w-full max-w-sm">
+      <CardHeader>
+        <CardTitle>Connect Steam</CardTitle>
+        <CardDescription>
+          Link your Steam account so your group can see what games you own and play together.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {justLinked ? (
+          <div className="flex items-center gap-2 rounded-md bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-400">
+            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Steam account connected!
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Your library will sync automatically so friends can see who already owns a game before voting.
+          </p>
+        )}
+      </CardContent>
+      <CardFooter className="flex gap-2">
+        {justLinked ? (
+          <Button className="w-full" onClick={onDone}>
+            Continue
+          </Button>
+        ) : (
+          <>
+            <Button type="button" variant="ghost" className="flex-1" onClick={onDone}>
+              Skip
+            </Button>
+            <Button asChild className="flex-1">
+              <a href="/api/steam/connect?return_to=/onboarding">
+                Connect Steam
+              </a>
+            </Button>
+          </>
+        )}
+      </CardFooter>
+    </Card>
+  );
+}
+
 // ── Onboarding shell ──────────────────────────────────────────────────────────
 
-const STEPS = ["username", "profile", "invite"] as const;
+const STEPS = ["username", "profile", "invite", "steam"] as const;
 type Step = (typeof STEPS)[number];
 
 const STEP_LABELS: Record<Step, string> = {
   username: "Username",
   profile: "Profile",
   invite: "Invite",
+  steam: "Steam",
 };
 
-export default function OnboardingPage() {
+function OnboardingContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [step, setStep] = useState<Step>("username");
+
+  // When Steam OAuth redirects back with ?steam_linked=1, jump to the steam step.
+  // This fires once on mount (or when the param appears after a full-page redirect).
+  const steamLinked = searchParams.get("steam_linked") === "1";
+  useEffect(() => {
+    if (steamLinked) {
+      setStep("steam");
+    }
+  }, [steamLinked]);
 
   // Fetch current user to pre-fill the display name in step 2
   const { data: me } = api.user.me.useQuery();
@@ -442,6 +499,15 @@ export default function OnboardingPage() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       )}
       {step === "invite" && <StepInvite onDone={next} />}
+      {step === "steam" && <StepSteam onDone={next} justLinked={steamLinked} />}
     </div>
+  );
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={null}>
+      <OnboardingContent />
+    </Suspense>
   );
 }
