@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { and, countDistinct, eq, ilike, inArray, ne, or } from "drizzle-orm";
+import { and, countDistinct, eq, gt, ilike, inArray, isNull, ne, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
+import { randomBytes } from "crypto";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { user, friendships, notifications, groupMemberships, groups, gameOwnerships } from "@/server/db/schema";
+import { user, friendships, friendInvites, notifications, groupMemberships, groups, gameOwnerships } from "@/server/db/schema";
 import { enqueueFriendRequest, enqueueFriendRequestAccepted } from "@/server/jobs/email-jobs";
 import { assertRateLimit } from "@/server/ratelimit";
 import { env } from "@/env";
@@ -378,6 +379,124 @@ export const friendsRouter = createTRPCRouter({
       }
 
       return { items, total };
+    }),
+
+  // ── Steam friend invites (CAMP-031) ───────────────────────────────────────────
+
+  // Create a single-use, 14-day invite link optionally targeted at a Steam friend.
+  // Rate-limited to 20 per hour to prevent invite spam.
+  createSteamInvite: protectedProcedure
+    .input(
+      z.object({
+        // The Steam ID of the intended recipient (optional).
+        // If provided, the UI can show a personalised message.
+        targetSteamId: z.string().regex(/^\d{17}$/).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertRateLimit(`rl:friends:invite:${ctx.user.id}`, 20, 3600);
+
+      const token = randomBytes(32).toString("hex"); // 64 hex chars
+      const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days
+
+      await db.insert(friendInvites).values({
+        token,
+        inviterId: ctx.user.id,
+        targetSteamId: input.targetSteamId ?? null,
+        expiresAt,
+      });
+
+      return { token };
+    }),
+
+  // Resolve an invite token to the inviter's public profile — no auth required.
+  // Returns NOT_FOUND for expired or already-used tokens so the UI can show a clear message.
+  resolveInviteLink: publicProcedure
+    .input(z.object({ token: z.string().min(1).max(64) }))
+    .query(async ({ input }) => {
+      const invite = await db.query.friendInvites.findFirst({
+        where: and(
+          eq(friendInvites.token, input.token),
+          gt(friendInvites.expiresAt, new Date()),
+          isNull(friendInvites.usedAt),
+        ),
+        with: {
+          inviter: { columns: { id: true, name: true, username: true, image: true } },
+        },
+      });
+      if (!invite) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Invite link not found, expired, or already used." });
+      }
+      return {
+        inviter: invite.inviter,
+        expiresAt: invite.expiresAt,
+      };
+    }),
+
+  // Accept an invite link — sends a friend request and marks the token as used.
+  // Single-use: enforced by a WHERE usedAt IS NULL on the UPDATE. If the UPDATE
+  // affects zero rows (token was consumed by a concurrent request), bail with CONFLICT
+  // before inserting the friendship row.
+  acceptInviteLink: protectedProcedure
+    .input(z.object({ token: z.string().min(1).max(64) }))
+    .mutation(async ({ ctx, input }) => {
+      // isNull(usedAt) is included in the WHERE so used tokens return NOT_FOUND
+      // rather than requiring a JS check. The real single-use enforcement is the
+      // .returning() check on the UPDATE below; this is an early-exit optimisation.
+      const invite = await db.query.friendInvites.findFirst({
+        where: and(
+          eq(friendInvites.token, input.token),
+          gt(friendInvites.expiresAt, new Date()),
+          isNull(friendInvites.usedAt),
+        ),
+        columns: { token: true, inviterId: true },
+      });
+      if (!invite) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Invite link not found, expired, or already used." });
+      }
+      if (invite.inviterId === ctx.user.id) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot accept your own invite." });
+      }
+
+      // Check for an existing friendship row in either direction
+      const existing = await db.query.friendships.findFirst({
+        where: or(
+          and(eq(friendships.requesterId, ctx.user.id), eq(friendships.addresseeId, invite.inviterId)),
+          and(eq(friendships.requesterId, invite.inviterId), eq(friendships.addresseeId, ctx.user.id))
+        ),
+      });
+      if (existing) {
+        if (existing.status === "blocked") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Action not allowed." });
+        }
+        throw new TRPCError({ code: "CONFLICT", message: "Already friends or request pending." });
+      }
+
+      // Mark token as consumed atomically. WHERE usedAt IS NULL ensures only one concurrent
+      // caller wins. Check the returning result — if empty, another request consumed it first.
+      const now = new Date();
+      const consumed = await db
+        .update(friendInvites)
+        .set({ usedAt: now, usedBy: ctx.user.id })
+        .where(and(eq(friendInvites.token, input.token), isNull(friendInvites.usedAt)))
+        .returning({ token: friendInvites.token });
+      if (consumed.length === 0) {
+        throw new TRPCError({ code: "CONFLICT", message: "This invite link has already been used." });
+      }
+
+      await db.insert(friendships).values({
+        requesterId: ctx.user.id,
+        addresseeId: invite.inviterId,
+        status: "pending",
+      });
+      await db.insert(notifications).values({
+        id: createId(),
+        userId: invite.inviterId,
+        type: "friend_request_received",
+        data: { requesterId: ctx.user.id, requesterName: ctx.user.name },
+      });
+      void enqueueFriendRequest({ requesterName: ctx.user.name ?? "Someone", recipientUserId: invite.inviterId })
+        .catch((err: unknown) => log.error("enqueueFriendRequest failed", { err: String(err) }));
     }),
 
   // Find Campfire users who are also on the caller's Steam friends list (CAMP-030/112).

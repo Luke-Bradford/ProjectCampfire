@@ -6,23 +6,67 @@ import Link from "next/link";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 
-export default function InvitePage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = use(params);
+// A token is a single-use invite (64-char hex) if it matches that pattern;
+// otherwise it's a permanent personal invite token (CUID2, ~24 chars).
+// Caller must pass an already-lowercased token.
+//
+// Assumption: CUID2 tokens are 24 chars. A 64-char all-hex CUID2 is theoretically
+// possible but astronomically unlikely; acceptable at MVP scale.
+function isSingleUseToken(token: string): boolean {
+  return token.length === 64 && /^[0-9a-f]+$/.test(token);
+}
 
-  // Resolve the token to the inviter's public profile (no auth required)
-  const { data: inviter, isPending: resolving, error } = api.friends.resolveInviteToken.useQuery({ token });
+export default function InvitePage({ params }: { params: Promise<{ token: string }> }) {
+  const { token: rawToken } = use(params);
+  // Normalise to lowercase so copy-paste variations of hex tokens still match.
+  const token = rawToken.toLowerCase();
+  const singleUse = isSingleUseToken(token);
+
+  // ── Permanent invite token path ──────────────────────────────────────────────
+  const permanentQuery = api.friends.resolveInviteToken.useQuery(
+    { token },
+    { enabled: !singleUse }
+  );
+
+  // ── Single-use invite link path ──────────────────────────────────────────────
+  const singleUseQuery = api.friends.resolveInviteLink.useQuery(
+    { token },
+    { enabled: singleUse }
+  );
+
+  const accept = api.friends.acceptInviteLink.useMutation();
+
+  // ── Permanent token: use existing sendRequestViaToken ────────────────────────
+  const sendRequestViaToken = api.friends.sendRequestViaToken.useMutation();
 
   // Check if the current visitor is logged in
   const { data: me, isPending: loadingMe } = api.user.me.useQuery();
 
-  const sendRequest = api.friends.sendRequestViaToken.useMutation();
+  const isLoading = singleUse
+    ? singleUseQuery.isPending || loadingMe
+    : permanentQuery.isPending || loadingMe;
 
-  const isLoading = resolving || loadingMe;
-  const alreadySent = sendRequest.isSuccess;
+  const error = singleUse ? singleUseQuery.error : permanentQuery.error;
+
+  const inviter = singleUse ? singleUseQuery.data?.inviter : permanentQuery.data;
+  const expiresAt = singleUse ? singleUseQuery.data?.expiresAt : null;
+
+  const alreadySent = singleUse ? accept.isSuccess : sendRequestViaToken.isSuccess;
   const isSelf = me && inviter && me.id === inviter.id;
+  const alreadyFriends = singleUse
+    ? accept.error?.data?.code === "CONFLICT"
+    : sendRequestViaToken.error?.data?.code === "CONFLICT";
 
-  // Determine friendship state from the CONFLICT error
-  const alreadyFriends = sendRequest.error?.data?.code === "CONFLICT";
+  const mutationError = singleUse ? accept.error : sendRequestViaToken.error;
+  const mutationPending = singleUse ? accept.isPending : sendRequestViaToken.isPending;
+
+  function handleAccept() {
+    if (singleUse) {
+      accept.mutate({ token });
+    } else {
+      sendRequestViaToken.mutate({ token });
+    }
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -46,7 +90,9 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
             <div className="space-y-3">
               <p className="text-lg font-semibold">Link not found</p>
               <p className="text-sm text-muted-foreground">
-                This invite link may have been regenerated or doesn&apos;t exist.
+                {singleUse
+                  ? "This invite link may have expired, already been used, or doesn't exist."
+                  : "This invite link may have been regenerated or doesn't exist."}
               </p>
               <Button asChild variant="outline">
                 <Link href="/">Go to Campfire</Link>
@@ -83,6 +129,12 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
                 {inviter.name} invited you to connect on Campfire — a place to plan gaming sessions with friends.
               </p>
 
+              {expiresAt && (
+                <p className="text-xs text-muted-foreground">
+                  This link expires {new Date(expiresAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}.
+                </p>
+              )}
+
               {/* Action area */}
               {isSelf ? (
                 <p className="text-sm text-muted-foreground italic">This is your own invite link.</p>
@@ -96,14 +148,14 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
                   ) : (
                     <Button
                       className="w-full"
-                      onClick={() => sendRequest.mutate({ token })}
-                      disabled={sendRequest.isPending}
+                      onClick={handleAccept}
+                      disabled={mutationPending}
                     >
-                      {sendRequest.isPending ? "Sending…" : `Add ${inviter.name} as a friend`}
+                      {mutationPending ? "Sending…" : `Add ${inviter.name} as a friend`}
                     </Button>
                   )}
-                  {sendRequest.error && !alreadyFriends && (
-                    <p className="text-xs text-destructive">{sendRequest.error.message}</p>
+                  {mutationError && !alreadyFriends && (
+                    <p className="text-xs text-destructive">{mutationError.message}</p>
                   )}
                   <Button asChild variant="ghost" size="sm" className="w-full">
                     <Link href="/feed">Go to my feed</Link>

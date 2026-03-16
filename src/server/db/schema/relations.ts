@@ -1,6 +1,7 @@
 import { relations } from "drizzle-orm";
 import { user } from "./auth";
 import { friendships } from "./friendships";
+import { friendInvites } from "./friendInvites";
 import { groups, groupMemberships } from "./groups";
 import { posts, comments, reactions } from "./posts";
 import { games, gameOwnerships } from "./games";
@@ -25,6 +26,15 @@ export const userRelations = relations(user, ({ many }) => ({
   sentRequests: many(friendships, { relationName: "requester" }),
   receivedRequests: many(friendships, { relationName: "addressee" }),
   groupMemberships: many(groupMemberships),
+  sentInvites: many(friendInvites, { relationName: "inviter" }),
+}));
+
+export const friendInvitesRelations = relations(friendInvites, ({ one }) => ({
+  inviter: one(user, {
+    fields: [friendInvites.inviterId],
+    references: [user.id],
+    relationName: "inviter",
+  }),
 }));
 
 export const groupsRelations = relations(groups, ({ many }) => ({

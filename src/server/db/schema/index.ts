@@ -1,5 +1,6 @@
 export * from "./auth";
 export * from "./friendships";
+export * from "./friendInvites";
 export * from "./groups";
 export * from "./posts";
 export * from "./games";
