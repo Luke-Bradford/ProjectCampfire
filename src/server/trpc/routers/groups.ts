@@ -28,9 +28,9 @@ export const groupsRouter = createTRPCRouter({
     const groupIds = memberships.map((m) => m.group.id);
     if (groupIds.length === 0) return [];
 
-    // Batch: member counts and next upcoming event per group
+    // Batch: member counts and next upcoming confirmed event per group.
+    // Note: N queries per set via Promise.all — acceptable at MVP group counts.
     const [memberCounts, nextEvents] = await Promise.all([
-      // One query: count memberships per group
       Promise.all(
         groupIds.map((id) =>
           db.$count(groupMemberships, eq(groupMemberships.groupId, id)).then(
@@ -38,15 +38,15 @@ export const groupsRouter = createTRPCRouter({
           )
         )
       ),
-      // One query per group: first non-cancelled event with confirmedStartsAt in the future
+      // One query per group: next confirmed event with confirmedStartsAt in the future.
+      // confirmedStartsAt is stored as UTC; new Date() is also UTC — comparison is safe.
       Promise.all(
         groupIds.map((id) =>
           db.query.events.findFirst({
             where: and(
               eq(events.groupId, id),
               gt(events.confirmedStartsAt, new Date()),
-              // exclude cancelled
-              ...[eq(events.status, "confirmed")]
+              eq(events.status, "confirmed")
             ),
             orderBy: asc(events.confirmedStartsAt),
             columns: { id: true, title: true, confirmedStartsAt: true, status: true },

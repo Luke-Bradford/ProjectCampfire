@@ -131,8 +131,8 @@ function GroupEvents({ groupId, groupName }: { groupId: string; groupName: strin
                 >
                   {/* Date column */}
                   {dateInfo ? (
-                    <div className="flex flex-col items-center justify-center w-12 shrink-0 text-center">
-                      <span className="text-lg font-bold leading-none tabular-nums">
+                    <div className="flex flex-col items-center justify-center w-16 shrink-0 text-center">
+                      <span className="text-base font-bold leading-none tabular-nums">
                         {dateInfo.label}
                       </span>
                       {dateInfo.sub && (
