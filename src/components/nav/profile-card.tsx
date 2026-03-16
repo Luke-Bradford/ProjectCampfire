@@ -75,7 +75,7 @@ export function ProfileCard({
     router.refresh();
   }
 
-  const profileHref = username ? `/u/${username}` : "/settings";
+  const profileHref = username ? `/u/${username}` : "/profile";
 
   return (
     <div className="flex flex-col gap-3">
