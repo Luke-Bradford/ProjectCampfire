@@ -3,6 +3,7 @@
 import { Suspense, useRef, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
+import { CheckCircle2 } from "lucide-react";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -392,9 +393,7 @@ function StepSteam({ onDone, justLinked }: { onDone: () => void; justLinked: boo
       <CardContent className="space-y-4">
         {justLinked ? (
           <div className="flex items-center gap-2 rounded-md bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-400">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
+            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
             Steam account connected!
           </div>
         ) : (
@@ -414,7 +413,7 @@ function StepSteam({ onDone, justLinked }: { onDone: () => void; justLinked: boo
               Skip
             </Button>
             <Button asChild className="flex-1">
-              <a href="/api/steam/connect?return_to=/onboarding%3Fstep%3Dsteam">
+              <a href="/api/steam/connect?return_to=/onboarding">
                 Connect Steam
               </a>
             </Button>
@@ -442,18 +441,19 @@ function OnboardingContent() {
   const searchParams = useSearchParams();
   const [step, setStep] = useState<Step>("username");
 
-  // When Steam OAuth redirects back with ?step=steam&steam_linked=1, jump to the steam step.
+  // When Steam OAuth redirects back with ?steam_linked=1, jump to the steam step.
+  // This fires once on mount (or when the param appears after a full-page redirect).
+  const steamLinked = searchParams.get("steam_linked") === "1";
   useEffect(() => {
-    if (searchParams.get("step") === "steam") {
+    if (steamLinked) {
       setStep("steam");
     }
-  }, [searchParams]);
+  }, [steamLinked]);
 
   // Fetch current user to pre-fill the display name in step 2
   const { data: me } = api.user.me.useQuery();
 
   const stepIndex = STEPS.indexOf(step);
-  const justLinked = searchParams.get("steam_linked") === "1";
 
   function next() {
     const nextStep = STEPS[stepIndex + 1];
@@ -499,7 +499,7 @@ function OnboardingContent() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       )}
       {step === "invite" && <StepInvite onDone={next} />}
-      {step === "steam" && <StepSteam onDone={next} justLinked={justLinked} />}
+      {step === "steam" && <StepSteam onDone={next} justLinked={steamLinked} />}
     </div>
   );
 }

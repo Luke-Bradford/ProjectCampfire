@@ -23,10 +23,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/login", env.NEXT_PUBLIC_APP_URL));
   }
 
-  // Pass an optional return_to through the callback as a query param.
-  const returnTo = req.nextUrl.searchParams.get("return_to") ?? "";
+  // Pass an optional return_to through the callback.
+  // Validate here (defence-in-depth): extract only the pathname from user input,
+  // discarding any query/hash so the callback receives a clean relative path.
+  const returnToRaw = req.nextUrl.searchParams.get("return_to") ?? "";
   const callbackUrl = new URL(`${env.NEXT_PUBLIC_APP_URL}/api/steam/callback`);
-  if (returnTo) callbackUrl.searchParams.set("return_to", returnTo);
+  if (returnToRaw) {
+    try {
+      // Resolve against app origin so relative paths work; then take only pathname.
+      const resolved = new URL(returnToRaw, env.NEXT_PUBLIC_APP_URL);
+      // Only accept paths that belong to our own origin.
+      if (resolved.origin === env.NEXT_PUBLIC_APP_URL) {
+        callbackUrl.searchParams.set("return_to", resolved.pathname);
+      }
+    } catch {
+      // Malformed URL — ignore; callback will fall back to /settings.
+    }
+  }
 
   const params = new URLSearchParams({
     "openid.ns": "http://specs.openid.net/auth/2.0",

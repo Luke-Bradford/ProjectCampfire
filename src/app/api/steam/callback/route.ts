@@ -31,12 +31,23 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = req.nextUrl;
 
-  // resolve the post-link redirect destination.
-  // return_to must be a relative path to prevent open-redirect attacks.
+  // Resolve the post-link redirect destination.
+  // Parse with URL to normalise encoding, then accept only the pathname so
+  // no attacker-controlled query params or fragments flow into the success URL.
+  // Fall back to /settings if absent, malformed, or from a different origin.
   const returnToParam = searchParams.get("return_to") ?? "";
-  const isRelativePath = /^\/[^/]/.test(returnToParam) || returnToParam === "/";
-  const postLinkPath = isRelativePath ? returnToParam : "/settings";
-  const postLinkUrl = new URL(postLinkPath, env.NEXT_PUBLIC_APP_URL);
+  let postLinkPathname = "/settings";
+  if (returnToParam) {
+    try {
+      const resolved = new URL(returnToParam, env.NEXT_PUBLIC_APP_URL);
+      if (resolved.origin === env.NEXT_PUBLIC_APP_URL) {
+        postLinkPathname = resolved.pathname;
+      }
+    } catch {
+      // Malformed — fall back to /settings.
+    }
+  }
+  const postLinkUrl = new URL(postLinkPathname, env.NEXT_PUBLIC_APP_URL);
 
   // Default error redirect is always /settings to avoid leaking error codes to caller-controlled URLs
   const settingsUrl = new URL("/settings", env.NEXT_PUBLIC_APP_URL);
