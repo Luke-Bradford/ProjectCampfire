@@ -269,7 +269,7 @@ function StatRow({
           : "text-muted-foreground hover:text-foreground hover:bg-accent"
       }`}
     >
-      <span className="font-medium">{label}</span>
+      <span className={active ? "font-semibold" : "font-medium"}>{label}</span>
       <span className="flex items-center gap-1 tabular-nums">
         {count}
         <span className={`transition-opacity text-[10px] ${active ? "opacity-60" : "opacity-0 group-hover:opacity-60"}`}>→</span>
