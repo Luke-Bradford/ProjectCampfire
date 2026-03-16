@@ -63,11 +63,13 @@ function FeedTabs({ filter, onFilter }: { filter: string; onFilter: (f: string) 
         break;
       case "ArrowDown":
         e.preventDefault();
+        // When idx is -1 (focus on container), ArrowDown → first item
         focusable[(idx + 1) % focusable.length]?.focus();
         break;
       case "ArrowUp":
         e.preventDefault();
-        focusable[(idx - 1 + focusable.length) % focusable.length]?.focus();
+        // When idx is -1 (focus on container), guard to last item explicitly
+        focusable[idx === -1 ? focusable.length - 1 : (idx - 1 + focusable.length) % focusable.length]?.focus();
         break;
       case "Tab":
         // Close and let tab move naturally
@@ -101,6 +103,7 @@ function FeedTabs({ filter, onFilter }: { filter: string; onFilter: (f: string) 
       {/* Groups dropdown */}
       {myGroups.length > 0 && (
         <div className="relative" ref={dropdownRef}>
+          {/* Native <button> fires onClick on Enter/Space, so keyboard open is implicit */}
           <button
             ref={toggleBtnRef}
             type="button"
@@ -128,6 +131,7 @@ function FeedTabs({ filter, onFilter }: { filter: string; onFilter: (f: string) 
                   key={g.id}
                   type="button"
                   role="menuitem"
+                  tabIndex={-1}
                   onClick={() => { onFilter(`group:${g.id}`); closeDropdown(false); }}
                   className={`w-full text-left px-3 py-1.5 text-xs transition-colors truncate ${
                     activeGroupId === g.id
@@ -142,6 +146,7 @@ function FeedTabs({ filter, onFilter }: { filter: string; onFilter: (f: string) 
                 <Link
                   href="/groups"
                   role="menuitem"
+                  tabIndex={-1}
                   onClick={() => closeDropdown(false)}
                   className="block px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent transition-colors"
                 >
