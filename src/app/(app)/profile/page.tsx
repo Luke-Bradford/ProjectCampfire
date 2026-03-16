@@ -169,7 +169,9 @@ export default function MyProfilePage() {
             <div>
               <p className="font-semibold">Your game library</p>
               <p className="text-sm text-muted-foreground mt-0.5">
-                {stats?.gameCount
+                {statsLoading
+                  ? "Loading…"
+                  : stats?.gameCount
                   ? `${stats.gameCount} game${stats.gameCount === 1 ? "" : "s"} in your library.`
                   : "No games added yet."}
               </p>
