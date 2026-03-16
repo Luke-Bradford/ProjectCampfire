@@ -17,7 +17,8 @@ const GIF_MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 /** GIF URLs must be served unoptimized so Next.js doesn't strip the animation. */
 function isGifUrl(url: string): boolean {
-  try { return new URL(url).pathname.endsWith(".gif"); } catch { return false; }
+  // Use a placeholder base so relative and protocol-relative URLs are handled safely.
+  try { return new URL(url, "https://placeholder").pathname.endsWith(".gif"); } catch { return false; }
 }
 
 function initials(name: string) {

@@ -40,7 +40,9 @@ export async function POST(req: NextRequest) {
     totalBytes += value.byteLength;
     if (totalBytes > MAX_BYTES) {
       await reader.cancel();
-      return NextResponse.json({ error: "Image exceeds the 10 MB size limit." }, { status: 413 });
+      // Generic message — validateImage() will surface the per-type limit (5 MB / 10 MB)
+      // once the full buffer is available. This only fires for truly oversized requests.
+      return NextResponse.json({ error: "Image exceeds the maximum allowed size." }, { status: 413 });
     }
     chunks.push(value);
   }

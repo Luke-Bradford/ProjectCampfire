@@ -31,7 +31,7 @@ export class ImageValidationError extends Error {
 }
 
 /** Returns true if the buffer starts with the GIF87a or GIF89a magic bytes. */
-function bufferIsGif(buffer: Buffer): boolean {
+export function bufferIsGif(buffer: Buffer): boolean {
   return buffer.length >= 6 && buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46;
 }
 
@@ -54,6 +54,9 @@ export function validateImage(buffer: Buffer, mimeType: string): void {
   }
   // Use actual magic bytes to decide the size limit — the declared mimeType is
   // client-controlled and cannot be trusted for limit selection.
+  // Note: we still validate mimeType against the allowlist above (decorative type gate),
+  // but the size limit is always based on actual bytes. A GIF declared as image/jpeg
+  // gets 10 MB; a JPEG declared as image/gif gets 5 MB. Both are safe outcomes.
   const actuallyGif = bufferIsGif(buffer);
   const limit = actuallyGif ? GIF_MAX_BYTES : MAX_BYTES;
   const limitMB = limit / 1024 / 1024;

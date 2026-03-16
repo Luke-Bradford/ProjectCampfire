@@ -3,7 +3,7 @@ import sharp from "sharp";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/server/db";
 import { user, posts, comments } from "@/server/db/schema";
-import { minio, storageUrl } from "@/server/storage";
+import { minio, storageUrl, bufferIsGif } from "@/server/storage";
 import { env } from "@/env";
 import type { ImageJobPayload } from "@/server/jobs/image-jobs";
 import { logger } from "@/lib/logger";
@@ -15,11 +15,6 @@ const POST_IMAGE_MAX = 1280; // px, longest edge
 const MAX_POST_IMAGES = 4; // must match Zod .max() in feed.create
 const MAX_COMMENT_IMAGES = 1; // must match Zod .max() in feed.comment
 
-/** Returns true if the buffer starts with the GIF89a or GIF87a magic bytes. */
-function isGif(buffer: Buffer): boolean {
-  // GIF magic: bytes 0-2 are "GIF", bytes 3-5 are "87a" or "89a"
-  return buffer.length >= 6 && buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46;
-}
 
 async function downloadFromMinio(key: string): Promise<Buffer> {
   const stream = await minio.getObject(env.MINIO_BUCKET, key);
@@ -59,7 +54,7 @@ function processedKey(rawKey: string, gif = false): string {
  */
 async function processAndStore(rawKey: string, resizeMax: number): Promise<string> {
   const raw = await downloadFromMinio(rawKey);
-  const gif = isGif(raw);
+  const gif = bufferIsGif(raw);
   let processed: Buffer;
   if (gif) {
     processed = raw;
