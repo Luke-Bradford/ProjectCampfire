@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FriendsListSkeleton } from "@/components/ui/skeletons";
+import { env } from "@/env";
 
 function initials(name: string) {
   return name
@@ -15,6 +16,55 @@ function initials(name: string) {
     .join("")
     .toUpperCase()
     .slice(0, 2);
+}
+
+// ── Copy-invite button ─────────────────────────────────────────────────────────
+// Creates a single-use 14-day invite link and copies it to the clipboard.
+
+function CopyInviteButton({
+  steamId,
+  label = "Copy invite link",
+}: {
+  steamId?: string;
+  label?: string;
+}) {
+  const [state, setState] = useState<"idle" | "loading" | "copied" | "error">("idle");
+  const createInvite = api.friends.createSteamInvite.useMutation({
+    onSuccess: async ({ token }) => {
+      const url = `${env.NEXT_PUBLIC_APP_URL}/invite/${token}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        setState("copied");
+      } catch {
+        setState("error");
+      }
+      setTimeout(() => setState("idle"), 2500);
+    },
+    onError: () => {
+      setState("error");
+      setTimeout(() => setState("idle"), 2500);
+    },
+  });
+
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={state === "loading"}
+      onClick={() => {
+        setState("loading");
+        createInvite.mutate({ targetSteamId: steamId });
+      }}
+    >
+      {state === "copied"
+        ? "Copied!"
+        : state === "error"
+        ? "Error"
+        : state === "loading"
+        ? "Generating…"
+        : label}
+    </Button>
+  );
 }
 
 // ── Steam friend suggestions ───────────────────────────────────────────────────
@@ -112,9 +162,12 @@ export default function FriendsPage() {
             {friends.length === 0 ? "No friends yet." : `${friends.length} friend${friends.length === 1 ? "" : "s"}`}
           </p>
         </div>
-        <Button asChild variant="outline">
-          <Link href="/people">Find people</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <CopyInviteButton label="Invite a friend" />
+          <Button asChild variant="outline">
+            <Link href="/people">Find people</Link>
+          </Button>
+        </div>
       </div>
 
       <SteamSuggestions />
@@ -132,7 +185,7 @@ export default function FriendsPage() {
             </svg>
           }
           heading="No friends yet"
-          description="Search for people by username to connect."
+          description="Search for people by username or share an invite link."
           action={
             <Button asChild size="sm">
               <Link href="/people">Find people</Link>
