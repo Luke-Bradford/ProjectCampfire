@@ -44,7 +44,7 @@ export default function PeoplePage() {
   }
 
   return (
-    <div className="max-w-2xl space-y-8">
+    <div className="max-w-3xl space-y-8">
       <div>
         <h1 className="text-2xl font-bold">Find people</h1>
         <p className="text-muted-foreground">Search for friends by username or display name.</p>

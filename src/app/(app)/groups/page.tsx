@@ -162,7 +162,7 @@ export default function GroupsPage() {
   const { data: myGroups = [], isLoading, refetch } = api.groups.list.useQuery();
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Groups</h1>

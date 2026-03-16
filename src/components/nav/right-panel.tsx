@@ -13,7 +13,7 @@ export function RightPanel() {
   if (hidden) return null;
 
   return (
-    <aside className="hidden lg:block w-60 shrink-0 sticky top-0 h-screen overflow-y-auto py-6 px-4 border-l">
+    <aside className="hidden xl:block w-56 shrink-0 sticky top-0 h-screen overflow-y-auto py-6 px-4 border-l">
       <UpcomingEventsPanel />
     </aside>
   );
