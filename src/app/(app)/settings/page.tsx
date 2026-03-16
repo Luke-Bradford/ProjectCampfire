@@ -660,7 +660,7 @@ function SettingsPageInner() {
 
       <div className="flex gap-8 min-h-0">
         {/* Category nav — sticky on desktop */}
-        <nav className="hidden sm:flex flex-col gap-0.5 w-44 shrink-0 pt-1">
+        <nav className="hidden sm:flex flex-col gap-0.5 w-44 shrink-0 sticky top-6 self-start pt-1">
           {NAV_ITEMS.map(({ id, label, icon }) => (
             <button
               key={id}
