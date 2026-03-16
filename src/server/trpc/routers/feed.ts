@@ -8,6 +8,9 @@ import { posts, comments, reactions, friendships, groupMemberships, events, grou
 import { assertRateLimit } from "@/server/ratelimit";
 import { enqueueOgFetch } from "@/server/jobs/og-fetch-jobs";
 import { enqueueProcessCommentImage } from "@/server/jobs/image-jobs";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("feed");
 
 export const feedRouter = createTRPCRouter({
   // Unified feed: friends + groups, block-filtered, cursor-paginated (CAMP-096)
@@ -278,7 +281,7 @@ export const feedRouter = createTRPCRouter({
       if (urlMatch) {
         const cleanUrl = urlMatch[0].replace(/[).,;:!?\]]+$/, "");
         enqueueOgFetch(id, cleanUrl).catch((err: unknown) => {
-          console.error(`[feed] failed to enqueue OG fetch for post ${id}:`, err);
+          log.error("failed to enqueue OG fetch", { postId: id, err: String(err) });
         });
       }
       return { id };

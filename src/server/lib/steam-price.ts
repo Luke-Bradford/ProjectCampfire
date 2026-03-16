@@ -1,6 +1,9 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/server/db";
 import { games, type SteamPriceData } from "@/server/db/schema";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("steam-price");
 
 type SteamPriceOverview = {
   currency: string;
@@ -38,12 +41,12 @@ export async function snapshotSteamPrice(gameId: string, steamAppId: string): Pr
   try {
     res = await fetch(url);
   } catch (err) {
-    console.warn(`[steam-price] fetch failed for appId ${steamAppId}:`, err);
+    log.warn("fetch failed", { steamAppId, err: String(err) });
     return;
   }
 
   if (!res.ok) {
-    console.warn(`[steam-price] Steam Store API returned ${res.status} for appId ${steamAppId}`);
+    log.warn("Steam Store API error", { steamAppId, status: res.status });
     return;
   }
 
@@ -51,13 +54,13 @@ export async function snapshotSteamPrice(gameId: string, steamAppId: string): Pr
   try {
     json = (await res.json()) as SteamAppDetailsResponse;
   } catch {
-    console.warn(`[steam-price] failed to parse response for appId ${steamAppId}`);
+    log.warn("failed to parse response", { steamAppId });
     return;
   }
 
   const appData = json[steamAppId];
   if (!appData?.success) {
-    console.warn(`[steam-price] Steam returned success:false for appId ${steamAppId}`);
+    log.warn("Steam returned success:false", { steamAppId });
     return;
   }
 

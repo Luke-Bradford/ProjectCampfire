@@ -8,6 +8,9 @@ import { user, session, account, friendships, groupMemberships, gameOwnerships, 
 import { enqueueScrubAccount } from "@/server/jobs/account-jobs";
 import { enqueueSteamLibrarySync } from "@/server/jobs/steam-jobs";
 import { env } from "@/env";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("user");
 
 const notificationPrefsSchema = z.object({
   friendRequestReceived: z.boolean().optional(),
@@ -210,7 +213,7 @@ export const userRouter = createTRPCRouter({
       // PII can be scrubbed by re-enqueueing manually; don't surface a 500 to
       // the client for what is already a completed deletion.
       enqueueScrubAccount(userId).catch((err: unknown) =>
-        console.error("[deleteAccount] failed to enqueue scrub job for", userId, err),
+        log.error("failed to enqueue scrub job", { userId, err: String(err) }),
       );
 
       return { success: true };

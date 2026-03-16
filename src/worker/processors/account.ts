@@ -4,6 +4,9 @@ import { db } from "@/server/db";
 import { user, session, account } from "@/server/db/schema";
 import { getAccountQueue } from "@/server/jobs/account-jobs";
 import type { AccountJobPayload } from "@/server/jobs/account-jobs";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("account");
 
 export async function processAccountJob(job: Job<AccountJobPayload>) {
   const data = job.data;
@@ -23,12 +26,12 @@ export async function processAccountJob(job: Job<AccountJobPayload>) {
         });
 
         if (!target) {
-          console.warn(`[account] scrub skipped — user ${userId} not found or not deleted`);
+          log.warn("scrub skipped — user not found or not deleted", { userId });
           return;
         }
 
         if (target.piiScrubbed) {
-          console.warn(`[account] scrub skipped — user ${userId} already scrubbed`);
+          log.warn("scrub skipped — already scrubbed", { userId });
           return;
         }
 
@@ -57,7 +60,7 @@ export async function processAccountJob(job: Job<AccountJobPayload>) {
       });
 
       if (didScrub) {
-        console.log(`[account] scrubbed PII for user ${userId}`);
+        log.info("scrubbed PII", { userId });
       }
       break;
     }
@@ -86,13 +89,13 @@ export async function processAccountJob(job: Job<AccountJobPayload>) {
           ),
         ),
       );
-      console.log(`[account] sweep re-enqueued ${unscrubbed.length} scrub job(s)`);
+      log.info("sweep re-enqueued scrub jobs", { count: unscrubbed.length });
       break;
     }
 
     default: {
       const _exhaustive: never = data;
-      console.warn("Unknown account job type:", (_exhaustive as { type: string }).type);
+      log.warn("unknown job type", { type: (_exhaustive as { type: string }).type });
     }
   }
 }

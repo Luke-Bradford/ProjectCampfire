@@ -8,6 +8,9 @@ import { posts } from "@/server/db/schema";
 import { uploadImage, ImageValidationError, ALLOWED_IMAGE_MIME_TYPES } from "@/server/storage";
 import { enqueueProcessAvatar, enqueueProcessPostImage } from "@/server/jobs/image-jobs";
 import { assertRateLimit } from "@/server/ratelimit";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("upload");
 
 const MAX_POST_IMAGES = 4;
 // Base64 overhead is ~4/3 — 5 MB raw → ~6.67 MB base64. Allow a small margin.
@@ -49,7 +52,7 @@ export const uploadRouter = createTRPCRouter({
       }
 
       enqueueProcessAvatar(ctx.user.id, key).catch((err: unknown) =>
-        console.error("[upload] failed to enqueue avatar processing for", ctx.user.id, err),
+        log.error("failed to enqueue avatar processing", { userId: ctx.user.id, err: String(err) }),
       );
 
       return { key };
@@ -91,11 +94,7 @@ export const uploadRouter = createTRPCRouter({
       }
 
       enqueueProcessPostImage(input.postId, key, input.index).catch((err: unknown) =>
-        console.error(
-          "[upload] failed to enqueue post image processing for",
-          input.postId,
-          err,
-        ),
+        log.error("failed to enqueue post image processing", { postId: input.postId, err: String(err) }),
       );
 
       return { key };

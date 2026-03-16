@@ -7,6 +7,9 @@ import { sendEmail } from "@/server/email";
 import type { EmailJobPayload } from "@/server/jobs/email-jobs";
 import { createRsvpToken } from "@/server/rsvp-token";
 import { env } from "@/env";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("email");
 
 type Prefs = NotificationPrefs;
 
@@ -254,7 +257,7 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
 
     default: {
       const _exhaustive: never = data;
-      console.warn("Unknown email job type:", (_exhaustive as { type: string }).type);
+      log.warn("unknown job type", { type: (_exhaustive as { type: string }).type });
     }
   }
 }

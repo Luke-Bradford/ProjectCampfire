@@ -6,6 +6,9 @@ import { user, posts, comments } from "@/server/db/schema";
 import { minio, storageUrl } from "@/server/storage";
 import { env } from "@/env";
 import type { ImageJobPayload } from "@/server/jobs/image-jobs";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("image");
 
 const AVATAR_SIZE = 256; // px, square
 const POST_IMAGE_MAX = 1280; // px, longest edge
@@ -57,7 +60,7 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
         .set({ image: storageUrl(outKey) })
         .where(eq(user.id, data.userId));
 
-      console.log(`[image] avatar processed for user ${data.userId} → ${outKey}`);
+      log.info("avatar processed", { userId: data.userId, outKey });
       break;
     }
 
@@ -97,7 +100,7 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
         `);
       });
 
-      console.log(`[image] post image processed for post ${data.postId}[${data.index}] → ${outKey}`);
+      log.info("post image processed", { postId: data.postId, index: data.index, outKey });
       break;
     }
 
@@ -130,7 +133,7 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
         `);
       });
 
-      console.log(`[image] comment image processed for comment ${data.commentId}[${data.index}] → ${outKey}`);
+      log.info("comment image processed", { commentId: data.commentId, index: data.index, outKey });
       break;
     }
 
@@ -140,7 +143,7 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
     }
 
     default: {
-      console.warn("[image] unknown job type:", (data as { type: string }).type);
+      log.warn("unknown job type", { type: (data as { type: string }).type });
     }
   }
 }
@@ -188,7 +191,7 @@ async function sweepOrphanedUploads(): Promise<void> {
   }
 
   if (toDelete.length === 0) {
-    console.log("[image] sweep_orphaned_uploads: nothing to delete");
+    log.info("sweep_orphaned_uploads: nothing to delete");
     return;
   }
 
@@ -197,5 +200,5 @@ async function sweepOrphanedUploads(): Promise<void> {
   for (let i = 0; i < toDelete.length; i += BATCH_SIZE) {
     await minio.removeObjects(bucket, toDelete.slice(i, i + BATCH_SIZE));
   }
-  console.log(`[image] sweep_orphaned_uploads: deleted ${toDelete.length} orphaned raw upload(s)`);
+  log.info("sweep_orphaned_uploads: deleted orphaned uploads", { count: toDelete.length });
 }
