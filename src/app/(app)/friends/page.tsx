@@ -60,19 +60,19 @@ export default function FriendsPage() {
           }
         />
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-3">
           {friends.map((u) => (
-            <li key={u.id} className="flex items-center justify-between rounded-lg border p-3">
+            <li key={u.id} className="flex items-center justify-between rounded-xl border bg-card shadow-sm px-4 py-3">
               <Link
                 href={u.username ? `/u/${u.username}` : "#"}
-                className="flex items-center gap-3 hover:opacity-80"
+                className="flex items-center gap-3 hover:opacity-80 transition-opacity"
               >
-                <Avatar className="h-9 w-9">
+                <Avatar className="h-10 w-10 shrink-0">
                   <AvatarImage src={u.image ?? undefined} />
-                  <AvatarFallback>{initials(u.name)}</AvatarFallback>
+                  <AvatarFallback className="text-sm font-semibold">{initials(u.name)}</AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="text-sm font-medium">{u.name}</p>
+                  <p className="font-medium leading-tight">{u.name}</p>
                   {u.username && (
                     <p className="text-xs text-muted-foreground">@{u.username}</p>
                   )}
