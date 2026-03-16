@@ -46,9 +46,12 @@ function initials(name: string) {
 export function ProfileCard({
   name,
   image,
+  onNavigate,
 }: {
   name: string;
   image?: string | null;
+  /** Called when a nav link is clicked — used by the mobile drawer to close itself. */
+  onNavigate?: () => void;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -101,7 +104,7 @@ export function ProfileCard({
       <div className="rounded-xl border bg-card shadow-sm p-4 flex flex-col gap-4">
         {/* Avatar + name row */}
         <div className="flex items-center gap-3">
-          <Link href={profileHref} className="relative group shrink-0">
+          <Link href={profileHref} onClick={onNavigate} className="relative group shrink-0">
             {me ? (
               <>
                 <Avatar className="h-12 w-12">
@@ -125,6 +128,7 @@ export function ProfileCard({
               <>
                 <Link
                   href={profileHref}
+                  onClick={onNavigate}
                   className="text-sm font-semibold leading-tight truncate hover:text-primary transition-colors"
                 >
                   {displayName}
@@ -185,9 +189,9 @@ export function ProfileCard({
         <div className="flex flex-col gap-1">
           {stats ? (
             <>
-              <StatRow href="/friends" label="Friends" count={stats.friendCount} active={isActive("/friends")} />
-              <StatRow href="/groups"  label="Groups"  count={stats.groupCount}  active={isActive("/groups")} />
-              <StatRow href="/games"   label="Games"   count={stats.gameCount}   active={isActive("/games")} />
+              <StatRow href="/friends" label="Friends" count={stats.friendCount} active={isActive("/friends")} onClick={onNavigate} />
+              <StatRow href="/groups"  label="Groups"  count={stats.groupCount}  active={isActive("/groups")}  onClick={onNavigate} />
+              <StatRow href="/games"   label="Games"   count={stats.gameCount}   active={isActive("/games")}   onClick={onNavigate} />
             </>
           ) : (
             <>
@@ -201,10 +205,10 @@ export function ProfileCard({
 
       {/* Primary nav */}
       <nav className="flex flex-col gap-0.5 px-1">
-        <NavLink href="/feed"         icon={<Newspaper size={13} />}   label="Feed"         active={isActive("/feed")} />
-        <NavLink href="/events"       icon={<Calendar size={13} />}    label="Events"       active={isActive("/events")} />
-        <NavLink href="/availability" icon={<Clock size={13} />}       label="Availability" active={isActive("/availability")} />
-        <NavLink href="/people"       icon={<UserSearch size={13} />}  label="Find people"  active={isActive("/people")} />
+        <NavLink href="/feed"         icon={<Newspaper size={13} />}   label="Feed"         active={isActive("/feed")}         onClick={onNavigate} />
+        <NavLink href="/events"       icon={<Calendar size={13} />}    label="Events"       active={isActive("/events")}       onClick={onNavigate} />
+        <NavLink href="/availability" icon={<Clock size={13} />}       label="Availability" active={isActive("/availability")} onClick={onNavigate} />
+        <NavLink href="/people"       icon={<UserSearch size={13} />}  label="Find people"  active={isActive("/people")}       onClick={onNavigate} />
       </nav>
 
       {/* Divider */}
@@ -229,8 +233,9 @@ export function ProfileCard({
           label="Notifications"
           active={isActive("/notifications")}
           badge={unreadCount > 0 ? (unreadCount > 9 ? "9+" : String(unreadCount)) : undefined}
+          onClick={onNavigate}
         />
-        <NavLink href="/settings" icon={<Settings size={13} />} label="Settings" active={isActive("/settings")} />
+        <NavLink href="/settings" icon={<Settings size={13} />} label="Settings" active={isActive("/settings")} onClick={onNavigate} />
         <button
           type="button"
           onClick={handleSignOut}
@@ -254,15 +259,18 @@ function StatRow({
   label,
   count,
   active,
+  onClick,
 }: {
   href: string;
   label: string;
   count: number;
   active: boolean;
+  onClick?: () => void;
 }) {
   return (
     <Link
       href={href}
+      onClick={onClick}
       className={`flex items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors group ${
         active
           ? "bg-accent text-foreground font-semibold"
@@ -284,16 +292,19 @@ function NavLink({
   label,
   active,
   badge,
+  onClick,
 }: {
   href: string;
   icon: React.ReactNode;
   label: string;
   active: boolean;
   badge?: string;
+  onClick?: () => void;
 }) {
   return (
     <Link
       href={href}
+      onClick={onClick}
       className={`flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs transition-colors ${
         active
           ? "bg-accent text-foreground font-semibold"
