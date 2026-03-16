@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/trpc/react";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Switch } from "@/components/ui/switch";
 import type { NotificationPrefs } from "@/server/db/schema";
 import { ThemeToggle } from "@/components/nav/theme-toggle";
 import {
@@ -313,6 +314,14 @@ function mergePrefs(saved: NotificationPrefs | undefined): Required<Notification
   return { ...PREF_DEFAULTS, ...(saved ?? {}) };
 }
 
+function NotifSubHeading({ label }: { label: string }) {
+  return (
+    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-2 pb-1">
+      {label}
+    </p>
+  );
+}
+
 function NotificationsSection() {
   const { data: me } = api.user.me.useQuery();
   const [prefs, setPrefs] = useState<Required<NotificationPrefs>>(PREF_DEFAULTS);
@@ -331,14 +340,6 @@ function NotificationsSection() {
     updatePrefs.mutate({ [key]: value });
   }
 
-  function SubHeading({ label }: { label: string }) {
-    return (
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-2 pb-1">
-        {label}
-      </p>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -350,27 +351,27 @@ function NotificationsSection() {
       </div>
 
       <div className="rounded-xl border bg-card p-5 space-y-1">
-        <SubHeading label="In-app alerts" />
+        <NotifSubHeading label="In-app alerts" />
         <div className="divide-y">
           <ToggleRow label="Friend request received" checked={prefs.friendRequestReceived} onChange={(v) => setPref("friendRequestReceived", v)} disabled={updatePrefs.isPending} />
           <ToggleRow label="Friend request accepted" checked={prefs.friendRequestAccepted} onChange={(v) => setPref("friendRequestAccepted", v)} disabled={updatePrefs.isPending} />
           <ToggleRow label="Group invite received"   checked={prefs.groupInviteReceived}   onChange={(v) => setPref("groupInviteReceived", v)}   disabled={updatePrefs.isPending} />
         </div>
 
-        <SubHeading label="Email — Events" />
+        <NotifSubHeading label="Email — Events" />
         <div className="divide-y">
           <ToggleRow label="Event confirmed"  description="When an event you RSVP'd to is confirmed with a time." checked={prefs.emailEventConfirmed}     onChange={(v) => setPref("emailEventConfirmed", v)}     disabled={updatePrefs.isPending} />
           <ToggleRow label="Event cancelled"  description="When an event you RSVP'd to is cancelled."            checked={prefs.emailEventCancelled}     onChange={(v) => setPref("emailEventCancelled", v)}     disabled={updatePrefs.isPending} />
           <ToggleRow label="RSVP reminder"    description="A reminder before an event if you haven't RSVP'd yet." checked={prefs.emailEventRsvpReminder} onChange={(v) => setPref("emailEventRsvpReminder", v)} disabled={updatePrefs.isPending} />
         </div>
 
-        <SubHeading label="Email — Polls" />
+        <NotifSubHeading label="Email — Polls" />
         <div className="divide-y">
           <ToggleRow label="Poll opened" description="When a new poll is opened in a group you're in." checked={prefs.emailPollOpened} onChange={(v) => setPref("emailPollOpened", v)} disabled={updatePrefs.isPending} />
           <ToggleRow label="Poll closed" description="When a poll you voted on is closed."             checked={prefs.emailPollClosed} onChange={(v) => setPref("emailPollClosed", v)} disabled={updatePrefs.isPending} />
         </div>
 
-        <SubHeading label="Email — Social" />
+        <NotifSubHeading label="Email — Social" />
         <div className="divide-y">
           <ToggleRow label="Group invite"   description="When someone invites you to a group."           checked={prefs.emailGroupInvite}  onChange={(v) => setPref("emailGroupInvite", v)}  disabled={updatePrefs.isPending} />
           <ToggleRow label="Friend request" description="When someone sends you a friend request."       checked={prefs.emailFriendRequest} onChange={(v) => setPref("emailFriendRequest", v)} disabled={updatePrefs.isPending} />
@@ -479,10 +480,9 @@ function ConnectedSection() {
                 <p className="text-sm">Visible to group members</p>
                 <p className="text-xs text-muted-foreground">Group members can see which games you own for poll suggestions.</p>
               </div>
-              <ToggleRow
-                label=""
+              <Switch
                 checked={me.steamLibraryPublic}
-                onChange={(v) => setLibraryPublic.mutate({ public: v })}
+                onCheckedChange={(v) => setLibraryPublic.mutate({ public: v })}
                 disabled={setLibraryPublic.isPending}
               />
             </div>
@@ -621,18 +621,42 @@ const SECTION_COMPONENTS: Record<SectionId, React.ComponentType> = {
   danger:        DangerSection,
 };
 
-export default function SettingsPage() {
+function SettingsPageInner() {
   const searchParams = useSearchParams();
-  const paramSection = searchParams.get("section") as SectionId | null;
-  const [active, setActive] = useState<SectionId>(
-    paramSection && NAV_ITEMS.some((n) => n.id === paramSection) ? paramSection : "appearance"
-  );
+  const [active, setActive] = useState<SectionId>(() => {
+    const s = searchParams.get("section") as SectionId | null;
+    return s && NAV_ITEMS.some((n) => n.id === s) ? s : "appearance";
+  });
+
+  // Sync active section when ?section= param changes after mount
+  useEffect(() => {
+    const s = searchParams.get("section") as SectionId | null;
+    if (s && NAV_ITEMS.some((n) => n.id === s)) setActive(s);
+  }, [searchParams]);
 
   const ActiveSection = SECTION_COMPONENTS[active];
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Settings</h1>
+
+      {/* Mobile: horizontal tab strip (above the content) */}
+      <div className="sm:hidden flex gap-1 overflow-x-auto pb-2 -mx-4 px-4">
+        {NAV_ITEMS.map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setActive(id)}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors border ${
+              active === id
+                ? "bg-primary text-primary-foreground border-primary"
+                : "text-muted-foreground border-border hover:bg-accent"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
       <div className="flex gap-8 min-h-0">
         {/* Category nav — sticky on desktop */}
@@ -654,29 +678,19 @@ export default function SettingsPage() {
           ))}
         </nav>
 
-        {/* Mobile: horizontal tab strip */}
-        <div className="sm:hidden flex gap-1 overflow-x-auto pb-2 -mx-4 px-4">
-          {NAV_ITEMS.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setActive(id)}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors border ${
-                active === id
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "text-muted-foreground border-border hover:bg-accent"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
         {/* Section content */}
         <div className="flex-1 min-w-0">
           <ActiveSection />
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense>
+      <SettingsPageInner />
+    </Suspense>
   );
 }
