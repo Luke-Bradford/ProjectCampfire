@@ -4,6 +4,9 @@ import { db } from "@/server/db";
 import { posts } from "@/server/db/schema";
 import type { EmbedMetadata } from "@/server/db/schema/posts";
 import type { OgFetchJobPayload } from "@/server/jobs/og-fetch-jobs";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("og-fetch");
 
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_BODY_BYTES = 500_000; // 500 KB — enough for OG tags without buffering giant pages
@@ -84,7 +87,7 @@ export async function processOgFetchJob(job: Job<OgFetchJobPayload>) {
   // Defense-in-depth: the URL regex in feed.ts already anchors to https?://,
   // but validate again here since the job payload is external to the worker.
   if (!isSafeHttpUrl(url)) {
-    console.warn(`[og-fetch] unsafe URL scheme for post ${postId}: ${url} — skipping`);
+    log.warn("unsafe URL scheme — skipping", { postId, url });
     return;
   }
 
@@ -111,13 +114,13 @@ export async function processOgFetchJob(job: Job<OgFetchJobPayload>) {
       });
 
       if (!res.ok) {
-        console.warn(`[og-fetch] HTTP ${res.status} for ${url} (post ${postId})`);
+        log.warn("HTTP error", { postId, url, status: res.status });
         // Consume / discard the body to release the connection
         res.body?.cancel().catch(() => undefined);
       } else {
         const contentType = res.headers.get("content-type") ?? "";
         if (!contentType.includes("text/html") && !contentType.includes("application/xhtml")) {
-          console.warn(`[og-fetch] non-HTML content-type "${contentType}" for ${url} — skipping`);
+          log.warn("non-HTML content-type — skipping", { postId, url, contentType });
           // Discard body to release the connection
           res.body?.cancel().catch(() => undefined);
         } else {
@@ -198,7 +201,7 @@ export async function processOgFetchJob(job: Job<OgFetchJobPayload>) {
       metadata = { type: "youtube", url, videoId };
     }
   } catch (err) {
-    console.error(`[og-fetch] failed to fetch OG tags for ${url} (post ${postId}):`, err);
+    log.error("failed to fetch OG tags", { postId, url, err: String(err) });
     // For YouTube URLs, store minimal metadata even if fetch failed
     if (videoId) {
       metadata = { type: "youtube", url, videoId };
@@ -207,8 +210,8 @@ export async function processOgFetchJob(job: Job<OgFetchJobPayload>) {
 
   if (metadata) {
     await db.update(posts).set({ embedMetadata: metadata }).where(eq(posts.id, postId));
-    console.log(`[og-fetch] embed stored for post ${postId} (${metadata.type}): ${url}`);
+    log.info("embed stored", { postId, type: metadata.type, url });
   } else {
-    console.warn(`[og-fetch] no embed data extracted for post ${postId}: ${url}`);
+    log.warn("no embed data extracted", { postId, url });
   }
 }

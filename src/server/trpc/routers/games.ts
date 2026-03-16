@@ -15,6 +15,9 @@ import {
   extractSteamAppId,
 } from "@/server/igdb";
 import { snapshotSteamSpyData } from "@/server/lib/steamspy";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("games");
 
 const PLATFORMS = ["pc", "playstation", "xbox", "nintendo", "other"] as const;
 
@@ -97,7 +100,7 @@ export const gamesRouter = createTRPCRouter({
       const steamAppId = extractSteamAppId(igdbGame);
       if (steamAppId) {
         void snapshotSteamSpyData(finalId, steamAppId).catch((err: unknown) =>
-          console.error(`[games] steamspy snapshot failed for game ${finalId}:`, err),
+          log.error("steamspy snapshot failed", { gameId: finalId, err: String(err) }),
         );
       }
 

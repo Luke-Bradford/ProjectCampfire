@@ -7,6 +7,9 @@ import { db } from "@/server/db";
 import { user, friendships, notifications, groupMemberships, groups, gameOwnerships } from "@/server/db/schema";
 import { enqueueFriendRequest, enqueueFriendRequestAccepted } from "@/server/jobs/email-jobs";
 import { assertRateLimit } from "@/server/ratelimit";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("friends");
 
 export const friendsRouter = createTRPCRouter({
   // Search open-profile users by username or display name (CAMP-020)
@@ -66,7 +69,7 @@ export const friendsRouter = createTRPCRouter({
         data: { requesterId: ctx.user.id, requesterName: ctx.user.name },
       });
       void enqueueFriendRequest({ requesterName: ctx.user.name ?? "Someone", recipientUserId: input.addresseeId })
-        .catch((err) => console.error("enqueueFriendRequest failed", err));
+        .catch((err: unknown) => log.error("enqueueFriendRequest failed", { err: String(err) }));
     }),
 
   // Accept or decline a pending request (CAMP-025)
@@ -101,7 +104,7 @@ export const friendsRouter = createTRPCRouter({
           data: { acceptorId: ctx.user.id, acceptorName: ctx.user.name },
         });
         void enqueueFriendRequestAccepted({ acceptorName: ctx.user.name ?? "Someone", recipientUserId: input.requesterId })
-          .catch((err) => console.error("enqueueFriendRequestAccepted failed", err));
+          .catch((err: unknown) => log.error("enqueueFriendRequestAccepted failed", { err: String(err) }));
       } else {
         await db
           .delete(friendships)
@@ -324,7 +327,7 @@ export const friendsRouter = createTRPCRouter({
         data: { requesterId: ctx.user.id, requesterName: ctx.user.name },
       });
       void enqueueFriendRequest({ requesterName: ctx.user.name ?? "Someone", recipientUserId: found.id })
-        .catch((err) => console.error("enqueueFriendRequest failed", err));
+        .catch((err: unknown) => log.error("enqueueFriendRequest failed", { err: String(err) }));
     }),
 
   // Return a user's public game library — visible only when their profile is open (CAMP-115).

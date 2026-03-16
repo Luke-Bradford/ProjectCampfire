@@ -9,6 +9,9 @@ import { enqueuePollOpened, enqueuePollClosed } from "@/server/jobs/email-jobs";
 import { enqueueClosePoll } from "@/server/jobs/poll-jobs";
 import { snapshotSteamPrice } from "@/server/lib/steam-price";
 import { env } from "@/env";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("poll");
 
 async function assertPollMember(pollId: string, userId: string) {
   const poll = await db.query.polls.findFirst({ where: eq(polls.id, pollId) });
@@ -112,7 +115,7 @@ export const pollsRouter = createTRPCRouter({
           });
           for (const game of gamesWithSteam) {
             void snapshotSteamPrice(game.id, game.steamAppId!).catch((err: unknown) =>
-              console.error(`[poll] steam price snapshot failed for game ${game.id}:`, err),
+              log.error("steam price snapshot failed", { gameId: game.id, err: String(err) }),
             );
           }
         }
@@ -124,7 +127,7 @@ export const pollsRouter = createTRPCRouter({
         const delay = new Date(input.closesAt).getTime() - Date.now();
         if (delay > 0) {
           void enqueueClosePoll(id, delay).catch((err: unknown) =>
-            console.error(`[poll] failed to enqueue close_poll for ${id}:`, err),
+            log.error("failed to enqueue close_poll", { pollId: id, err: String(err) }),
           );
         }
       }

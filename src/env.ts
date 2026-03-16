@@ -36,6 +36,8 @@ export const env = createEnv({
     DISCORD_CLIENT_SECRET: z.string().optional(),
     // Steam Web API key — required for library sync (IPlayerService/GetOwnedGames)
     STEAM_API_KEY: z.string().optional(),
+    // Minimum log level. One of: error | warn | info | debug. Defaults to "info".
+    LOG_LEVEL: z.enum(["error", "warn", "info", "debug"]).default("info"),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url(),
@@ -71,6 +73,7 @@ export const env = createEnv({
     DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID,
     DISCORD_CLIENT_SECRET: process.env.DISCORD_CLIENT_SECRET,
     STEAM_API_KEY: process.env.STEAM_API_KEY,
+    LOG_LEVEL: process.env.LOG_LEVEL,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,

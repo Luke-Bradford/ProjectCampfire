@@ -5,6 +5,9 @@ import { polls, pollOptions, groups } from "@/server/db/schema";
 import { enqueuePollClosed } from "@/server/jobs/email-jobs";
 import type { PollJobPayload } from "@/server/jobs/poll-jobs";
 import { env } from "@/env";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("poll");
 
 export async function processPollJob(job: Job<PollJobPayload>): Promise<void> {
   const { data } = job;
@@ -27,20 +30,20 @@ export async function processPollJob(job: Job<PollJobPayload>): Promise<void> {
         columns: { id: true },
       });
       if (overdue.length === 0) {
-        console.log("[poll] sweep_overdue_polls: no overdue polls");
+        log.debug("sweep_overdue_polls: no overdue polls");
         break;
       }
-      console.log(`[poll] sweep_overdue_polls: closing ${overdue.length} overdue poll(s)`);
+      log.info("sweep_overdue_polls: closing overdue polls", { count: overdue.length });
       const results = await Promise.allSettled(overdue.map((p) => closePoll(p.id)));
       const failures = results.filter((r) => r.status === "rejected");
       if (failures.length > 0) {
-        console.error(`[poll] sweep_overdue_polls: ${failures.length} poll(s) failed to close`);
+        log.error("sweep_overdue_polls: some polls failed to close", { failures: failures.length });
       }
       break;
     }
 
     default: {
-      console.warn("[poll] unknown job type:", (data as { type: string }).type);
+      log.warn("unknown job type", { type: (data as { type: string }).type });
     }
   }
 }
@@ -60,7 +63,7 @@ async function closePoll(pollId: string): Promise<void> {
   });
 
   if (!poll) {
-    console.warn(`[poll] close_poll: poll ${pollId} not found — skipping`);
+    log.warn("close_poll: poll not found — skipping", { pollId });
     return;
   }
 
@@ -73,10 +76,10 @@ async function closePoll(pollId: string): Promise<void> {
     .returning({ id: polls.id });
 
   if (!updated) {
-    console.log(`[poll] close_poll: poll ${pollId} already closed — skipping`);
+    log.debug("close_poll: already closed — skipping", { pollId });
     return;
   }
-  console.log(`[poll] closed poll ${pollId}`);
+  log.info("poll closed", { pollId });
 
   // Resolve groupId for the email notification
   let groupId = poll.groupId;
@@ -104,7 +107,7 @@ async function closePoll(pollId: string): Promise<void> {
   ]);
 
   if (!poll.eventId && !groupId) {
-    console.warn(`[poll] poll ${pollId} has no eventId or groupId — CTA will link to app root`);
+    log.warn("poll has no eventId or groupId — CTA will link to app root", { pollId });
   }
   const ctaUrl = poll.eventId
     ? `${env.NEXT_PUBLIC_APP_URL}/events/${poll.eventId}`
@@ -121,7 +124,7 @@ async function closePoll(pollId: string): Promise<void> {
       ctaUrl,
       recipientUserIds: voterIds,
     }).catch((err: unknown) =>
-      console.error(`[poll] failed to enqueue poll_closed email for ${pollId}:`, err),
+      log.error("failed to enqueue poll_closed email", { pollId, err: String(err) }),
     );
   }
 }

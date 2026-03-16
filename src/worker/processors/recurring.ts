@@ -10,6 +10,9 @@ import {
   groupMemberships,
 } from "@/server/db/schema";
 import type { RecurringJobPayload } from "@/server/jobs/recurring-jobs";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("recurring");
 
 export async function processRecurringJob(job: Job<RecurringJobPayload>): Promise<void> {
   const { data } = job;
@@ -21,7 +24,7 @@ export async function processRecurringJob(job: Job<RecurringJobPayload>): Promis
     }
 
     default: {
-      console.warn("[recurring] unknown job type:", (data as { type: string }).type);
+      log.warn("unknown job type", { type: (data as { type: string }).type });
     }
   }
 }
@@ -32,7 +35,7 @@ async function generateRecurringEvents(): Promise<void> {
   });
 
   if (templates.length === 0) {
-    console.log("[recurring] generate_recurring_events: no active templates");
+    log.debug("generate_recurring_events: no active templates");
     return;
   }
 
@@ -49,9 +52,9 @@ async function generateRecurringEvents(): Promise<void> {
     totalFailed += results.filter((r) => r.status === "rejected").length;
   }
 
-  console.log(
-    `[recurring] generate_recurring_events: checked ${templates.length} template(s), generated ${totalGenerated}, failed ${totalFailed}`
-  );
+  log.info("generate_recurring_events complete", {
+    templates: templates.length, generated: totalGenerated, failed: totalFailed,
+  });
 }
 
 type RecurringTemplate = typeof recurringTemplates.$inferSelect;
@@ -149,9 +152,7 @@ async function maybeGenerateEvent(
     gameOptional: false,
   });
 
-  console.log(
-    `[recurring] generated event ${eventId} for template ${template.id} (${template.title}) on ${localDateStr}`
-  );
+  log.info("generated event", { eventId, templateId: template.id, title: template.title, date: localDateStr });
 
   if (template.autoPoll) {
     await maybeCreateGamePoll(eventId, template.groupId, template.createdBy);
@@ -222,15 +223,10 @@ async function maybeCreateGamePoll(
       );
     }
 
-    console.log(
-      `[recurring] created auto-poll ${pollId} for event ${eventId} with ${uniqueGames.length} option(s)`
-    );
+    log.info("created auto-poll", { pollId, eventId, options: uniqueGames.length });
   } catch (err) {
     // Auto-poll failure must not block event generation
-    console.error(
-      `[recurring] failed to create auto-poll for event ${eventId}:`,
-      err
-    );
+    log.error("failed to create auto-poll", { eventId, err: String(err) });
   }
 }
 

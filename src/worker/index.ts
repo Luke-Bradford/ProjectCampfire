@@ -18,6 +18,9 @@ import type { OgFetchJobPayload } from "@/server/jobs/og-fetch-jobs";
 import type { PollJobPayload } from "@/server/jobs/poll-jobs";
 import type { RecurringJobPayload } from "@/server/jobs/recurring-jobs";
 import type { SteamJobPayload } from "@/server/jobs/steam-jobs";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("worker");
 
 // Queue definitions — imported by other modules to enqueue jobs.
 // accountQueue lives in server/jobs/account-jobs.ts (import from there directly).
@@ -43,15 +46,14 @@ async function registerRepeatableJob(
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       await register();
-      console.log(`[worker] registered repeatable job: ${label}`);
+      log.info("registered repeatable job", { label });
       return;
     } catch (err) {
       const isLast = attempt === maxAttempts;
       const delayMs = Math.min(1000 * 2 ** (attempt - 1), 30_000); // 1s, 2s, 4s, 8s, 16s (30s cap is a safeguard for callers with higher maxAttempts)
-      console.error(
-        `[worker] failed to register ${label} (attempt ${attempt}/${maxAttempts})${isLast ? " — giving up" : `, retrying in ${delayMs}ms`}:`,
-        err,
-      );
+      log.error("failed to register repeatable job", {
+        label, attempt, maxAttempts, retryInMs: isLast ? undefined : delayMs, err: String(err),
+      });
       if (isLast) throw err;
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
@@ -121,7 +123,7 @@ new Worker<SteamJobPayload>(
   { connection: bullmqConnection }
 );
 
-console.log("Campfire workers started");
+log.info("Campfire workers started");
 
 // Repeatable jobs — registered with retry so a transient Redis blip at startup
 // doesn't silently disable cleanup jobs. If all retries fail the process throws,
@@ -166,8 +168,8 @@ console.log("Campfire workers started");
       )
     ),
   ]);
-  console.log("Campfire repeatable jobs registered");
+  log.info("Campfire repeatable jobs registered");
 })().catch((err: unknown) => {
-  console.error("[worker] fatal: could not register repeatable jobs after all retries:", err);
+  log.error("fatal: could not register repeatable jobs after all retries", { err: String(err) });
   process.exit(1);
 });

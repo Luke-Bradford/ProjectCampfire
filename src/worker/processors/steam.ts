@@ -6,6 +6,9 @@ import { user, games, gameOwnerships } from "@/server/db/schema";
 import { env } from "@/env";
 import type { SteamJobPayload } from "@/server/jobs/steam-jobs";
 import { snapshotSteamSpyData } from "@/server/lib/steamspy";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("steam");
 
 export async function processSteamJob(job: Job<SteamJobPayload>): Promise<void> {
   const { data } = job;
@@ -16,7 +19,7 @@ export async function processSteamJob(job: Job<SteamJobPayload>): Promise<void> 
       break;
     }
     default: {
-      console.warn("[steam] unknown job type:", (data as { type: string }).type);
+      log.warn("unknown job type", { type: (data as { type: string }).type });
     }
   }
 }
@@ -40,7 +43,7 @@ type SteamGetOwnedGamesResponse = {
 
 async function syncSteamLibrary(userId: string): Promise<void> {
   if (!env.STEAM_API_KEY) {
-    console.warn("[steam] STEAM_API_KEY not configured — skipping sync for user", userId);
+    log.warn("STEAM_API_KEY not configured — skipping sync", { userId });
     return;
   }
 
@@ -51,7 +54,7 @@ async function syncSteamLibrary(userId: string): Promise<void> {
   });
 
   if (!userRow?.steamId) {
-    console.warn("[steam] user", userId, "has no Steam account linked — skipping");
+    log.warn("user has no Steam account linked — skipping", { userId });
     return;
   }
 
@@ -72,12 +75,12 @@ async function syncSteamLibrary(userId: string): Promise<void> {
 
   if (steamGames.length === 0) {
     // This can mean the profile is private — still update syncedAt
-    console.log(`[steam] user ${userId}: 0 games returned (profile may be private)`);
+    log.info("0 games returned (profile may be private)", { userId });
     await db.update(user).set({ steamLibrarySyncedAt: new Date() }).where(eq(user.id, userId));
     return;
   }
 
-  console.log(`[steam] user ${userId}: syncing ${steamGames.length} Steam game(s)`);
+  log.info("syncing Steam games", { userId, count: steamGames.length });
 
   // Process in batches to avoid long transactions
   const BATCH_SIZE = 100;
@@ -89,7 +92,7 @@ async function syncSteamLibrary(userId: string): Promise<void> {
   }
 
   await db.update(user).set({ steamLibrarySyncedAt: new Date() }).where(eq(user.id, userId));
-  console.log(`[steam] user ${userId}: sync complete — ${synced} ownership row(s) processed`);
+  log.info("sync complete", { userId, ownershipRowsProcessed: synced });
 }
 
 /**
@@ -149,7 +152,7 @@ async function upsertBatch(userId: string, steamGames: SteamOwnedGame[]): Promis
     for (const g of freshGames) {
       if (g.steamAppId) {
         await snapshotSteamSpyData(g.id, g.steamAppId).catch((err: unknown) =>
-          console.error(`[steam] steamspy snapshot failed for game ${g.id}:`, err),
+          log.error("steamspy snapshot failed", { gameId: g.id, err: String(err) }),
         );
       }
     }

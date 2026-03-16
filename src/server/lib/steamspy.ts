@@ -1,6 +1,9 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/server/db";
 import { games } from "@/server/db/schema";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("steamspy");
 
 type SteamSpyAppDetails = {
   appid: number;
@@ -33,12 +36,12 @@ export async function snapshotSteamSpyData(gameId: string, steamAppId: string): 
   try {
     res = await fetch(url);
   } catch (err) {
-    console.warn(`[steamspy] fetch failed for appId ${steamAppId}:`, err);
+    log.warn("fetch failed", { steamAppId, err: String(err) });
     return;
   }
 
   if (!res.ok) {
-    console.warn(`[steamspy] API returned ${res.status} for appId ${steamAppId}`);
+    log.warn("API error", { steamAppId, status: res.status });
     return;
   }
 
@@ -46,14 +49,14 @@ export async function snapshotSteamSpyData(gameId: string, steamAppId: string): 
   try {
     json = (await res.json()) as SteamSpyAppDetails;
   } catch {
-    console.warn(`[steamspy] failed to parse response for appId ${steamAppId}`);
+    log.warn("failed to parse response", { steamAppId });
     return;
   }
 
   // SteamSpy returns { appid: 0 } for unknown apps — intentionally falsy on 0.
   // Also catches completely malformed responses (e.g. undefined appid).
   if (!json.appid) {
-    console.warn(`[steamspy] no data for appId ${steamAppId}`);
+    log.warn("no data for app", { steamAppId });
     return;
   }
 
