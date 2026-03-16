@@ -216,7 +216,7 @@ function FeedPageInner() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
+    <div className="max-w-3xl mx-auto space-y-4">
       {/* Invalidate all feed.list cache entries so the active tab refetches after a new post. */}
       <PostComposer onPosted={() => void utils.feed.list.invalidate()} />
 

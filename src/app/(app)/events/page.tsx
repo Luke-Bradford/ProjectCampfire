@@ -195,7 +195,7 @@ export default function EventsPage() {
 
   if (groupsLoading) {
     return (
-      <div className="max-w-2xl space-y-4">
+      <div className="max-w-3xl space-y-4">
         <h1 className="text-2xl font-bold">Events</h1>
         <GroupsListSkeleton count={3} />
       </div>
@@ -204,7 +204,7 @@ export default function EventsPage() {
 
   if (groups.length === 0) {
     return (
-      <div className="max-w-2xl space-y-4">
+      <div className="max-w-3xl space-y-4">
         <h1 className="text-2xl font-bold">Events</h1>
         <EmptyState
           icon={
@@ -222,7 +222,7 @@ export default function EventsPage() {
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-3xl space-y-6">
       <h1 className="text-2xl font-bold">Events</h1>
 
       {/* Group tabs */}
