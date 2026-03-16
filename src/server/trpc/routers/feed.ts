@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, asc, desc, eq, isNull, lt, or, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt, or, inArray, not } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -13,8 +13,18 @@ export const feedRouter = createTRPCRouter({
   // Unified feed: friends + groups, block-filtered, cursor-paginated (CAMP-096)
   // cursor encodes "<isoTimestamp>_<postId>" for stable tie-breaking when two posts share createdAt.
   // Condition: (createdAt < t) OR (createdAt = t AND id < id) — no posts silently skipped.
+  //
+  // filter:
+  //   "all"         — default: everything visible to the user (friends + groups)
+  //   "friends"     — posts from direct friends only (no group-scoped posts)
+  //   "group:<id>"  — posts scoped to a specific group (caller must be a member)
   list: protectedProcedure
-    .input(z.object({ cursor: z.string().optional(), limit: z.number().min(1).max(50).default(20) }))
+    .input(z.object({
+      cursor: z.string().optional(),
+      limit: z.number().min(1).max(50).default(20),
+      // "all" | "friends" | "group:<id>" — defaults to "all" when absent
+      filter: z.string().optional(),
+    }))
     .query(async ({ ctx, input }) => {
       const me = ctx.user.id;
 
@@ -67,16 +77,52 @@ export const feedRouter = createTRPCRouter({
       );
       const myGroupIds = memberRows.map((r) => r.groupId);
 
-      // Build author filter: my own posts + friends + group posts, minus blocked
+      // Parse and validate filter param
+      const filter = input.filter ?? "all";
+      if (filter !== "all" && filter !== "friends" && !filter.startsWith("group:")) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid filter value." });
+      }
+      const groupFilter = filter.startsWith("group:") ? filter.slice(6) : null;
+
+      // Authorise group filter — caller must be a member and groupId must be non-empty
+      if (groupFilter !== null) {
+        if (!groupFilter || !myGroupIds.includes(groupFilter)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Not a member of this group." });
+        }
+      }
+
+      // Build the visibility filter based on the selected tab:
+      //   all     → own posts + friends' posts + posts in my groups, minus blocked
+      //   friends → own posts + friends' posts with no groupId, minus blocked
+      //   group:x → posts in that specific group, minus blocked (membership verified above)
       const visibleAuthorIds = [me, ...friendIds].filter((id) => !blockedIds.includes(id));
+      // Defensive: if data corruption caused `me` to appear in blockedIds, visibleAuthorIds
+      // would be empty. Return early to avoid generating `IN ()` which is invalid SQL.
+      if (filter === "friends" && visibleAuthorIds.length === 0) {
+        return { items: [], nextCursor: undefined };
+      }
+      // Excluded-author clause applied to all tabs to honour block relationships
+      const blockedExclusion = blockedIds.length > 0
+        ? not(inArray(posts.authorId, blockedIds))
+        : undefined;
+
+      const visibilityFilter = groupFilter
+        ? and(eq(posts.groupId, groupFilter), blockedExclusion)
+        : filter === "friends"
+          // isNull(posts.groupId) scopes to non-group posts only (direct feed).
+          ? and(inArray(posts.authorId, visibleAuthorIds), isNull(posts.groupId))
+          : and(
+              or(
+                visibleAuthorIds.length > 0 ? inArray(posts.authorId, visibleAuthorIds) : undefined,
+                myGroupIds.length > 0 ? inArray(posts.groupId, myGroupIds) : undefined
+              ),
+              blockedExclusion
+            );
 
       const feedPosts = await db.query.posts.findMany({
         where: and(
           isNull(posts.deletedAt),
-          or(
-            visibleAuthorIds.length > 0 ? inArray(posts.authorId, visibleAuthorIds) : undefined,
-            myGroupIds.length > 0 ? inArray(posts.groupId, myGroupIds) : undefined
-          ),
+          visibilityFilter,
           // Compound cursor: (createdAt < t) OR (createdAt = t AND id < cursorId)
           cursorDate && cursorId
             ? or(
