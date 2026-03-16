@@ -440,18 +440,19 @@ export const friendsRouter = createTRPCRouter({
   acceptInviteLink: protectedProcedure
     .input(z.object({ token: z.string().min(1).max(64) }))
     .mutation(async ({ ctx, input }) => {
+      // isNull(usedAt) is included in the WHERE so used tokens return NOT_FOUND
+      // rather than requiring a JS check. The real single-use enforcement is the
+      // .returning() check on the UPDATE below; this is an early-exit optimisation.
       const invite = await db.query.friendInvites.findFirst({
         where: and(
           eq(friendInvites.token, input.token),
           gt(friendInvites.expiresAt, new Date()),
+          isNull(friendInvites.usedAt),
         ),
-        columns: { token: true, inviterId: true, usedAt: true },
+        columns: { token: true, inviterId: true },
       });
       if (!invite) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Invite link not found or expired." });
-      }
-      if (invite.usedAt) {
-        throw new TRPCError({ code: "CONFLICT", message: "This invite link has already been used." });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Invite link not found, expired, or already used." });
       }
       if (invite.inviterId === ctx.user.id) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot accept your own invite." });

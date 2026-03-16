@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button";
 // A token is a single-use invite (64-char hex) if it matches that pattern;
 // otherwise it's a permanent personal invite token (CUID2, ~24 chars).
 // Normalise to lowercase before matching — URLs may be pasted with mixed case.
+//
+// Assumption: CUID2 tokens are 24 chars. A 64-char all-hex CUID2 is theoretically
+// possible but astronomically unlikely; acceptable at MVP scale.
 function isSingleUseToken(token: string): boolean {
   return token.length === 64 && /^[0-9a-f]+$/.test(token.toLowerCase());
 }

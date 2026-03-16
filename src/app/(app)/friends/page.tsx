@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,13 @@ function CopyInviteButton({
   label?: string;
 }) {
   const [state, setState] = useState<"idle" | "loading" | "copied" | "error">("idle");
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  function scheduleReset() {
+    clearTimeout(resetTimer.current);
+    resetTimer.current = setTimeout(() => setState("idle"), 2500);
+  }
+
   const createInvite = api.friends.createSteamInvite.useMutation({
     onSuccess: async ({ token }) => {
       const url = `${env.NEXT_PUBLIC_APP_URL}/invite/${token}`;
@@ -38,11 +45,11 @@ function CopyInviteButton({
       } catch {
         setState("error");
       }
-      setTimeout(() => setState("idle"), 2500);
+      scheduleReset();
     },
     onError: () => {
       setState("error");
-      setTimeout(() => setState("idle"), 2500);
+      scheduleReset();
     },
   });
 
