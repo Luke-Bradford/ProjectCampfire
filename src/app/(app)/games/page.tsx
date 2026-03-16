@@ -17,6 +17,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+type Tab = "library" | "catalog";
+
 const PLATFORMS = ["pc", "playstation", "xbox", "nintendo", "other"] as const;
 type Platform = (typeof PLATFORMS)[number];
 
@@ -314,11 +316,141 @@ function AddGameDialog({ onAdded }: { onAdded: () => void }) {
   );
 }
 
+// ── Catalog tab ───────────────────────────────────────────────────────────────
+
+function CatalogTab() {
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const utils = api.useUtils();
+
+  useEffect(() => {
+    const trimmed = searchInput.trim();
+    const t = setTimeout(() => setSearch(trimmed), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    api.games.catalog.useInfiniteQuery(
+      { search: search || undefined, limit: 24 },
+      { getNextPageParam: (lastPage) => lastPage.nextCursor }
+    );
+
+  const allItems = data?.pages.flatMap((p) => p.items) ?? [];
+  const total = data?.pages[0]?.total ?? 0;
+
+  const addToLibrary = api.games.toggleOwnership.useMutation({
+    onSuccess: () => {
+      void utils.games.catalog.invalidate();
+      void utils.games.myGames.invalidate();
+    },
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          {isLoading
+            ? "Loading…"
+            : `${total} game${total === 1 ? "" : "s"} in catalog`}
+        </p>
+        <Input
+          placeholder="Search catalog…"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          className="max-w-xs"
+        />
+      </div>
+
+      {isLoading && allItems.length === 0 ? (
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+          {Array.from({ length: 24 }).map((_, i) => (
+            <div key={i} className="animate-pulse space-y-1.5">
+              <div className="w-full aspect-[3/4] rounded-lg bg-muted" />
+              <div className="h-3 rounded bg-muted w-3/4" />
+            </div>
+          ))}
+        </div>
+      ) : allItems.length === 0 ? (
+        <EmptyState
+          icon={
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          }
+          heading="No games found"
+          description={search ? `No games match "${search}".` : "The catalog is empty."}
+        />
+      ) : (
+        <>
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+            {allItems.map((g) => (
+              <div key={g.id} className="group relative">
+                <Link href={`/games/${g.id}`} className="block">
+                  {g.coverUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={g.coverUrl}
+                      alt={g.title}
+                      className="w-full aspect-[3/4] rounded-lg object-cover"
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
+                  ) : (
+                    <div className="w-full aspect-[3/4] rounded-lg bg-muted flex items-center justify-center">
+                      <span className="text-2xl font-bold text-muted-foreground">
+                        {g.title.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+                  {g.owned && (
+                    <div className="absolute top-1.5 left-1.5">
+                      <Badge variant="secondary" className="text-xs px-1.5 py-0.5 bg-background/80 backdrop-blur-sm">
+                        Owned
+                      </Badge>
+                    </div>
+                  )}
+                </Link>
+                <div className="mt-1.5 space-y-1">
+                  <Link href={`/games/${g.id}`} className="text-xs font-medium leading-tight line-clamp-2 hover:underline block">
+                    {g.title}
+                  </Link>
+                  {!g.owned && (
+                    <button
+                      className="text-xs text-primary hover:underline disabled:opacity-50"
+                      onClick={() => addToLibrary.mutate({ gameId: g.id, platform: "pc" })}
+                      disabled={addToLibrary.isPending && addToLibrary.variables?.gameId === g.id}
+                    >
+                      {addToLibrary.isPending && addToLibrary.variables?.gameId === g.id
+                        ? "Adding…"
+                        : "+ Add to library"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          {hasNextPage && (
+            <div className="flex justify-center pt-2">
+              <button
+                className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
+                disabled={isFetchingNextPage}
+                onClick={() => void fetchNextPage()}
+              >
+                {isFetchingNextPage ? "Loading…" : "Load more"}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type ViewMode = "list" | "grid";
 
 export default function GamesPage() {
+  const [tab, setTab] = useState<Tab>("library");
   const [filterPlatform, setFilterPlatform] = useState<Platform | undefined>();
   const [showHidden, setShowHidden] = useState(false);
   const [searchInput, setSearchInput] = useState("");
@@ -361,45 +493,69 @@ export default function GamesPage() {
   return (
     <div className="max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">My Games</h1>
-          <p className="text-muted-foreground">
-            {isLoading
-              ? "Loading…"
-              : total === 0
-              ? showHidden ? "No hidden games." : "No games yet."
-              : `${total} game${total === 1 ? "" : "s"}${showHidden ? " hidden" : ""}`}
-          </p>
-        </div>
+        <h1 className="text-2xl font-bold">Games</h1>
         <div className="flex items-center gap-2">
-          {/* View mode toggle */}
-          <div className="flex rounded-md border overflow-hidden">
-            <button
-              onClick={() => setView("list")}
-              aria-label="List view"
-              className={`px-2 py-1.5 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
-            >
-              {/* List icon */}
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
-                <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
-              </svg>
-            </button>
-            <button
-              onClick={() => setView("grid")}
-              aria-label="Grid view"
-              className={`px-2 py-1.5 transition-colors ${viewMode === "grid" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
-            >
-              {/* Grid icon */}
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
-                <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
-              </svg>
-            </button>
-          </div>
-          <AddGameDialog onAdded={() => void utils.games.myGames.invalidate()} />
+          {tab === "library" && (
+            <>
+              {/* View mode toggle */}
+              <div className="flex rounded-md border overflow-hidden">
+                <button
+                  onClick={() => setView("list")}
+                  aria-label="List view"
+                  className={`px-2 py-1.5 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                >
+                  {/* List icon */}
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+                    <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setView("grid")}
+                  aria-label="Grid view"
+                  className={`px-2 py-1.5 transition-colors ${viewMode === "grid" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                >
+                  {/* Grid icon */}
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+                    <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+                  </svg>
+                </button>
+              </div>
+              <AddGameDialog onAdded={() => void utils.games.myGames.invalidate()} />
+            </>
+          )}
         </div>
       </div>
+
+      {/* Tab switcher */}
+      <div className="flex gap-1 border-b">
+        <button
+          onClick={() => setTab("library")}
+          className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
+            tab === "library"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          My Library
+        </button>
+        <button
+          onClick={() => setTab("catalog")}
+          className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
+            tab === "catalog"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Browse Catalog
+        </button>
+      </div>
+
+      {tab === "catalog" && <CatalogTab />}
+
+      {tab === "library" && (
+      <>
 
       {/* Search */}
       <Input
@@ -441,6 +597,12 @@ export default function GamesPage() {
           {showHidden ? "Show library" : "Manage hidden"}
         </button>
       </div>
+
+      {!isLoading && total > 0 && (
+        <p className="text-sm text-muted-foreground">
+          {total} game{total === 1 ? "" : "s"}{showHidden ? " hidden" : ""}
+        </p>
+      )}
 
       {isLoading && allItems.length === 0 ? (
         <GamesListSkeleton />
@@ -594,6 +756,9 @@ export default function GamesPage() {
             </div>
           )}
         </>
+      )}
+
+      </>
       )}
     </div>
   );
