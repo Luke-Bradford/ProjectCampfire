@@ -7,9 +7,6 @@ import { processOgFetchJob } from "./processors/og-fetch";
 import { processPollJob } from "./processors/poll";
 import { processRecurringJob } from "./processors/recurring";
 import { processSteamJob } from "./processors/steam";
-import { logger } from "@/lib/logger";
-
-const log = logger.child("worker");
 import { getAccountQueue } from "@/server/jobs/account-jobs";
 import { imageQueue } from "@/server/jobs/image-jobs";
 import { getPollQueue } from "@/server/jobs/poll-jobs";
@@ -21,6 +18,9 @@ import type { OgFetchJobPayload } from "@/server/jobs/og-fetch-jobs";
 import type { PollJobPayload } from "@/server/jobs/poll-jobs";
 import type { RecurringJobPayload } from "@/server/jobs/recurring-jobs";
 import type { SteamJobPayload } from "@/server/jobs/steam-jobs";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("worker");
 
 // Queue definitions — imported by other modules to enqueue jobs.
 // accountQueue lives in server/jobs/account-jobs.ts (import from there directly).

@@ -39,9 +39,13 @@ function write(level: Level, msg: string, extra?: Record<string, unknown>): void
     process.stdout.write(JSON.stringify(entry) + "\n");
   } else {
     const tag = `[${level.toUpperCase().padEnd(5)}]`;
-    const parts = [tag, msg];
-    if (extra && Object.keys(extra).length > 0) {
-      parts.push(JSON.stringify(extra));
+    // In dev, prefix msg with [component] for visual scanning; omit from remaining fields
+    const component = extra?.component;
+    const restFields = extra ? Object.fromEntries(Object.entries(extra).filter(([k]) => k !== "component")) : undefined;
+    const displayMsg = component ? `[${String(component)}] ${msg}` : msg;
+    const parts = [tag, displayMsg];
+    if (restFields && Object.keys(restFields).length > 0) {
+      parts.push(JSON.stringify(restFields));
     }
     // Mirror browser console severity so terminal colouring works
     if (level === "error") {
@@ -69,23 +73,26 @@ export const logger = {
   },
 
   /**
-   * Create a child logger that prefixes every message with a component tag
-   * and merges in any fixed fields.
+   * Create a child logger that emits `component` as a structured field in
+   * production JSON (queryable by log aggregators) and prefixes the message
+   * in development for quick visual scanning.
    *
    *   const log = logger.child("worker:image");
    *   log.info("processed", { userId, outKey });
-   *   // → [INFO]  [worker:image] processed  {"userId":"…","outKey":"…"}
+   *   // prod → {"level":"info","ts":"…","msg":"processed","component":"worker:image","userId":"…","outKey":"…"}
+   *   // dev  → [INFO]  [worker:image] processed  {"userId":"…","outKey":"…"}
    */
   child(component: string, fixed?: Record<string, unknown>) {
+    const structuredFields = { component, ...fixed };
     return {
       error: (msg: string, extra?: Record<string, unknown>) =>
-        write("error", `[${component}] ${msg}`, { ...fixed, ...extra }),
+        write("error", msg, { ...structuredFields, ...extra }),
       warn: (msg: string, extra?: Record<string, unknown>) =>
-        write("warn", `[${component}] ${msg}`, { ...fixed, ...extra }),
+        write("warn", msg, { ...structuredFields, ...extra }),
       info: (msg: string, extra?: Record<string, unknown>) =>
-        write("info", `[${component}] ${msg}`, { ...fixed, ...extra }),
+        write("info", msg, { ...structuredFields, ...extra }),
       debug: (msg: string, extra?: Record<string, unknown>) =>
-        write("debug", `[${component}] ${msg}`, { ...fixed, ...extra }),
+        write("debug", msg, { ...structuredFields, ...extra }),
     };
   },
 };
