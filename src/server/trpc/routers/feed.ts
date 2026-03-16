@@ -96,7 +96,12 @@ export const feedRouter = createTRPCRouter({
       //   friends → own posts + friends' posts with no groupId, minus blocked
       //   group:x → posts in that specific group, minus blocked (membership verified above)
       const visibleAuthorIds = [me, ...friendIds].filter((id) => !blockedIds.includes(id));
-      // Excluded-author clause applied to group and friends tabs to honour block relationships
+      // Defensive: if data corruption caused `me` to appear in blockedIds, visibleAuthorIds
+      // would be empty. Return early to avoid generating `IN ()` which is invalid SQL.
+      if (filter === "friends" && visibleAuthorIds.length === 0) {
+        return { items: [], nextCursor: undefined };
+      }
+      // Excluded-author clause applied to all tabs to honour block relationships
       const blockedExclusion = blockedIds.length > 0
         ? not(inArray(posts.authorId, blockedIds))
         : undefined;
@@ -104,7 +109,6 @@ export const feedRouter = createTRPCRouter({
       const visibilityFilter = groupFilter
         ? and(eq(posts.groupId, groupFilter), blockedExclusion)
         : filter === "friends"
-          // visibleAuthorIds always contains at least `me`, so inArray is always safe.
           // isNull(posts.groupId) scopes to non-group posts only (direct feed).
           ? and(inArray(posts.authorId, visibleAuthorIds), isNull(posts.groupId))
           : and(

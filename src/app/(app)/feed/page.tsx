@@ -192,7 +192,7 @@ function FeedList({
 function FeedPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: me } = api.user.me.useQuery();
+  const { data: me, isError: meError } = api.user.me.useQuery();
   const utils = api.useUtils();
 
   const [filter, setFilter] = useState<string>(() => searchParams.get("tab") ?? "all");
@@ -226,7 +226,12 @@ function FeedPageInner() {
       {me && (
         <FeedList key={filter} filter={filter} currentUserId={me.id} />
       )}
-      {!me && <FeedSkeleton />}
+      {!me && !meError && <FeedSkeleton />}
+      {meError && (
+        <p className="text-sm text-muted-foreground text-center py-8">
+          Failed to load your feed. Please refresh the page.
+        </p>
+      )}
     </div>
   );
 }
