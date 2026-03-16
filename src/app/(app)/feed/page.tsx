@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
@@ -22,8 +22,15 @@ function FeedTabs({ filter, onFilter }: { filter: string; onFilter: (f: string) 
   const { data: myGroups = [] } = api.groups.list.useQuery();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const toggleBtnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on outside click
+  const closeDropdown = useCallback((returnFocus = true) => {
+    setDropdownOpen(false);
+    if (returnFocus) toggleBtnRef.current?.focus();
+  }, []);
+
+  // Close on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -33,6 +40,43 @@ function FeedTabs({ filter, onFilter }: { filter: string; onFilter: (f: string) 
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  // Move focus into menu when it opens
+  useEffect(() => {
+    if (dropdownOpen) {
+      const first = menuRef.current?.querySelector<HTMLElement>("button, a");
+      first?.focus();
+    }
+  }, [dropdownOpen]);
+
+  // Keyboard handling on the open menu
+  function handleMenuKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    const focusable = Array.from(
+      menuRef.current?.querySelectorAll<HTMLElement>("button, a") ?? []
+    );
+    const idx = focusable.indexOf(document.activeElement as HTMLElement);
+
+    switch (e.key) {
+      case "Escape":
+        e.preventDefault();
+        closeDropdown(true);
+        break;
+      case "ArrowDown":
+        e.preventDefault();
+        // When idx is -1 (focus on container), ArrowDown → first item
+        focusable[(idx + 1) % focusable.length]?.focus();
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        // When idx is -1 (focus on container), guard to last item explicitly
+        focusable[idx === -1 ? focusable.length - 1 : (idx - 1 + focusable.length) % focusable.length]?.focus();
+        break;
+      case "Tab":
+        // Close and let tab move naturally
+        closeDropdown(false);
+        break;
+    }
+  }
 
   const activeGroupId = filter.startsWith("group:") ? filter.slice(6) : null;
   const activeGroup = myGroups.find((g) => g.id === activeGroupId);
@@ -59,8 +103,12 @@ function FeedTabs({ filter, onFilter }: { filter: string; onFilter: (f: string) 
       {/* Groups dropdown */}
       {myGroups.length > 0 && (
         <div className="relative" ref={dropdownRef}>
+          {/* Native <button> fires onClick on Enter/Space, so keyboard open is implicit */}
           <button
+            ref={toggleBtnRef}
             type="button"
+            aria-haspopup="true"
+            aria-expanded={dropdownOpen}
             onClick={() => setDropdownOpen((o) => !o)}
             className={tabClass(!!activeGroupId)}
           >
@@ -71,12 +119,20 @@ function FeedTabs({ filter, onFilter }: { filter: string; onFilter: (f: string) 
           </button>
 
           {dropdownOpen && (
-            <div className="absolute left-0 top-full mt-1 z-20 min-w-[160px] rounded-lg border bg-popover shadow-md py-1">
+            <div
+              ref={menuRef}
+              role="menu"
+              aria-label="Select a group"
+              onKeyDown={handleMenuKeyDown}
+              className="absolute left-0 top-full mt-1 z-20 min-w-[160px] rounded-lg border bg-popover shadow-md py-1"
+            >
               {visibleGroups.map((g) => (
                 <button
                   key={g.id}
                   type="button"
-                  onClick={() => { onFilter(`group:${g.id}`); setDropdownOpen(false); }}
+                  role="menuitem"
+                  tabIndex={-1}
+                  onClick={() => { onFilter(`group:${g.id}`); closeDropdown(false); }}
                   className={`w-full text-left px-3 py-1.5 text-xs transition-colors truncate ${
                     activeGroupId === g.id
                       ? "bg-accent text-foreground font-medium"
@@ -89,7 +145,9 @@ function FeedTabs({ filter, onFilter }: { filter: string; onFilter: (f: string) 
               {hasMore && (
                 <Link
                   href="/groups"
-                  onClick={() => setDropdownOpen(false)}
+                  role="menuitem"
+                  tabIndex={-1}
+                  onClick={() => closeDropdown(false)}
                   className="block px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent transition-colors"
                 >
                   More groups →
