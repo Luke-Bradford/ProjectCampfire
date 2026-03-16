@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { user, session, account, friendships, groupMemberships, gameOwnerships, type NotificationPrefs } from "@/server/db/schema";
+import { user, session, account, friendships, groupMemberships, gameOwnerships, userStatusEnum, type NotificationPrefs } from "@/server/db/schema";
 import { enqueueScrubAccount } from "@/server/jobs/account-jobs";
 import { enqueueSteamLibrarySync } from "@/server/jobs/steam-jobs";
 import { env } from "@/env";
@@ -43,6 +43,7 @@ export const userRouter = createTRPCRouter({
         steamProfileUrl: true,
         steamLibrarySyncedAt: true,
         steamLibraryPublic: true,
+        status: true,
       },
     });
   }),
@@ -213,6 +214,17 @@ export const userRouter = createTRPCRouter({
       );
 
       return { success: true };
+    }),
+
+  // Set the current user's presence status (online / busy / offline).
+  setStatus: protectedProcedure
+    .input(z.object({ status: z.enum(userStatusEnum.enumValues) }))
+    .mutation(async ({ ctx, input }) => {
+      await db
+        .update(user)
+        .set({ status: input.status })
+        .where(eq(user.id, ctx.user.id));
+      return { ok: true };
     }),
 
   // Lightweight counts for the feed profile sidebar
