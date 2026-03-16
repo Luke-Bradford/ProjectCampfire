@@ -234,7 +234,7 @@ export default function EventsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-2xl space-y-6">
       <h1 className="text-2xl font-bold">Events</h1>
 
       {/* Group tabs */}
