@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, count, eq, ilike, ne, or } from "drizzle-orm";
+import { and, countDistinct, eq, ilike, ne, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "@/server/trpc/trpc";
@@ -331,7 +331,8 @@ export const friendsRouter = createTRPCRouter({
   // Returns up to `limit` games (default 12) plus the total count.
   getProfileGames: protectedProcedure
     .input(z.object({ userId: z.string(), limit: z.number().int().min(1).max(50).default(12) }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
+      await assertRateLimit(`rl:profile:games:${ctx.user.id}`, 30, 60);
       // Only show games for open profiles
       const profile = await db.query.user.findFirst({
         where: eq(user.id, input.userId),
@@ -341,9 +342,10 @@ export const friendsRouter = createTRPCRouter({
         return { items: [], total: 0 };
       }
 
-      // Count non-hidden owned games
+      // Count distinct games (not ownership rows) — a game owned on multiple platforms
+      // produces multiple rows, so countDistinct avoids inflating the total.
       const [countRow] = await db
-        .select({ total: count() })
+        .select({ total: countDistinct(gameOwnerships.gameId) })
         .from(gameOwnerships)
         .where(and(eq(gameOwnerships.userId, input.userId), eq(gameOwnerships.hidden, false)));
       const total = countRow?.total ?? 0;
