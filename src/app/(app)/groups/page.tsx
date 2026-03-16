@@ -5,6 +5,7 @@ import Link from "next/link";
 import { formatDistanceToNow, format, isToday, isTomorrow } from "date-fns";
 import { Calendar, Vote } from "lucide-react";
 import { api } from "@/trpc/react";
+import type { rsvpStatusEnum } from "@/server/db/schema";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -198,12 +199,13 @@ export default function GroupsPage() {
                           </p>
                         </div>
                       </div>
-                      {/* Inline RSVP toggle — status values match rsvpStatusEnum ("yes"|"no"|"maybe") */}
+                      {/* Inline RSVP toggle — typed via rsvpStatusEnum to catch future enum renames */}
                       {(() => {
                         const eventId = g.nextEvent.id;
+                        const rsvpOptions: (typeof rsvpStatusEnum.enumValues)[number][] = ["yes", "no"];
                         return (
                           <div className="flex gap-1 shrink-0">
-                            {(["yes", "no"] as const).map((s) => (
+                            {rsvpOptions.map((s) => (
                               <button
                                 key={s}
                                 type="button"
@@ -235,11 +237,11 @@ export default function GroupsPage() {
                       </p>
                       <span className="text-[11px] text-primary/70 shrink-0">Vote →</span>
                     </Link>
-                  ) : (
+                  ) : g.lastActivityAt ? (
                     <p className="text-xs text-muted-foreground">
                       Last active {formatDistanceToNow(new Date(g.lastActivityAt), { addSuffix: true })}
                     </p>
-                  )}
+                  ) : null}
                 </div>
 
                 {/* Footer: member count */}
