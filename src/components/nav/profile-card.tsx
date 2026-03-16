@@ -46,9 +46,12 @@ function initials(name: string) {
 export function ProfileCard({
   name,
   image,
+  onNavigate,
 }: {
   name: string;
   image?: string | null;
+  /** Called when a nav link is clicked — used by the mobile drawer to close itself. */
+  onNavigate?: () => void;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -101,7 +104,7 @@ export function ProfileCard({
       <div className="rounded-xl border bg-card shadow-sm p-4 flex flex-col gap-4">
         {/* Avatar + name row */}
         <div className="flex items-center gap-3">
-          <Link href={profileHref} className="relative group shrink-0">
+          <Link href={profileHref} onClick={onNavigate} className="relative group shrink-0">
             {me ? (
               <>
                 <Avatar className="h-12 w-12">
@@ -125,6 +128,7 @@ export function ProfileCard({
               <>
                 <Link
                   href={profileHref}
+                  onClick={onNavigate}
                   className="text-sm font-semibold leading-tight truncate hover:text-primary transition-colors"
                 >
                   {displayName}
@@ -182,7 +186,7 @@ export function ProfileCard({
         )}
 
         {/* Stat counts — navigation links */}
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1" onClick={onNavigate}>
           {stats ? (
             <>
               <StatRow href="/friends" label="Friends" count={stats.friendCount} active={isActive("/friends")} />
@@ -200,7 +204,7 @@ export function ProfileCard({
       </div>
 
       {/* Primary nav */}
-      <nav className="flex flex-col gap-0.5 px-1">
+      <nav className="flex flex-col gap-0.5 px-1" onClick={onNavigate}>
         <NavLink href="/feed"         icon={<Newspaper size={13} />}   label="Feed"         active={isActive("/feed")} />
         <NavLink href="/events"       icon={<Calendar size={13} />}    label="Events"       active={isActive("/events")} />
         <NavLink href="/availability" icon={<Clock size={13} />}       label="Availability" active={isActive("/availability")} />
@@ -213,7 +217,7 @@ export function ProfileCard({
       </div>
 
       {/* Utility links */}
-      <div className="flex flex-col gap-0.5 px-1">
+      <div className="flex flex-col gap-0.5 px-1" onClick={onNavigate}>
         <NavLink
           href="/notifications"
           icon={
