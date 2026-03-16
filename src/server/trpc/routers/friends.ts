@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, countDistinct, eq, ilike, ne, or } from "drizzle-orm";
+import { and, countDistinct, eq, ilike, inArray, ne, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "@/server/trpc/trpc";
@@ -7,6 +7,7 @@ import { db } from "@/server/db";
 import { user, friendships, notifications, groupMemberships, groups, gameOwnerships } from "@/server/db/schema";
 import { enqueueFriendRequest, enqueueFriendRequestAccepted } from "@/server/jobs/email-jobs";
 import { assertRateLimit } from "@/server/ratelimit";
+import { env } from "@/env";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("friends");
@@ -378,4 +379,81 @@ export const friendsRouter = createTRPCRouter({
 
       return { items, total };
     }),
+
+  // Find Campfire users who are also on the caller's Steam friends list (CAMP-030/112).
+  // Returns up to 50 users who have the same Steam ID as someone in the caller's
+  // Steam friends list, excluding existing friends and pending requests.
+  // Returns an empty list (not an error) if:
+  //   - the caller has no Steam account linked
+  //   - STEAM_API_KEY is not configured
+  //   - the caller's Steam profile is private (GetFriendList returns 401)
+  steamSuggestions: protectedProcedure.query(async ({ ctx }) => {
+    await assertRateLimit(`rl:friends:steam:${ctx.user.id}`, 5, 60);
+
+    if (!env.STEAM_API_KEY) return [];
+
+    // Load caller's Steam ID
+    const me = await db.query.user.findFirst({
+      where: eq(user.id, ctx.user.id),
+      columns: { steamId: true },
+    });
+    if (!me?.steamId) return [];
+
+    // Fetch Steam friends list
+    const url = new URL("https://api.steampowered.com/ISteamUser/GetFriendList/v1/");
+    url.searchParams.set("key", env.STEAM_API_KEY);
+    url.searchParams.set("steamid", me.steamId);
+    url.searchParams.set("relationship", "friend");
+
+    let steamFriendIds: string[];
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        // 401 = private profile; 500 = steam error. Both are silent no-ops.
+        log.warn("GetFriendList failed", { status: res.status, userId: ctx.user.id });
+        return [];
+      }
+      const json = (await res.json()) as {
+        friendslist?: { friends?: { steamid: string }[] };
+      };
+      steamFriendIds = json.friendslist?.friends?.map((f) => f.steamid) ?? [];
+    } catch (err) {
+      log.warn("GetFriendList fetch error", { userId: ctx.user.id, err: String(err) });
+      return [];
+    }
+
+    if (steamFriendIds.length === 0) return [];
+
+    // Find Campfire users who have any of these Steam IDs
+    const matches = await db
+      .select({ id: user.id, name: user.name, username: user.username, image: user.image })
+      .from(user)
+      .where(
+        and(
+          ne(user.id, ctx.user.id),
+          inArray(user.steamId, steamFriendIds),
+        )
+      );
+
+    if (matches.length === 0) return [];
+
+    // Exclude users with an existing friendship row in either direction
+    const matchIds = matches.map((u) => u.id);
+    const existing = await db.query.friendships.findMany({
+      where: and(
+        or(
+          and(eq(friendships.requesterId, ctx.user.id), inArray(friendships.addresseeId, matchIds)),
+          and(inArray(friendships.requesterId, matchIds), eq(friendships.addresseeId, ctx.user.id)),
+        )
+      ),
+      columns: { requesterId: true, addresseeId: true, status: true },
+    });
+    const excludeIds = new Set(
+      existing.map((f) => (f.requesterId === ctx.user.id ? f.addresseeId : f.requesterId))
+    );
+
+    return matches
+      .filter((u) => !excludeIds.has(u.id))
+      .slice(0, 50);
+  }),
 });
