@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { api } from "@/trpc/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { CampfireLogo } from "@/components/nav/campfire-logo";
 import { ProfileCard } from "@/components/nav/profile-card";
@@ -24,10 +23,6 @@ export function MobileHeader({
   image?: string | null;
 }) {
   const [open, setOpen] = useState(false);
-  const { data: me } = api.user.me.useQuery();
-
-  const displayName = me?.name ?? name;
-  const displayImage = me?.image ?? image;
 
   // Lock body scroll while drawer is open
   useEffect(() => {
@@ -51,9 +46,9 @@ export function MobileHeader({
           className="rounded-full ring-offset-background transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <Avatar className="h-8 w-8">
-            <AvatarImage src={displayImage ?? undefined} />
+            <AvatarImage src={image ?? undefined} />
             <AvatarFallback className="text-xs font-semibold">
-              {initials(displayName)}
+              {initials(name)}
             </AvatarFallback>
           </Avatar>
         </button>
@@ -68,22 +63,24 @@ export function MobileHeader({
         />
       )}
 
-      {/* Slide-up drawer */}
+      {/* Slide-up drawer — always rendered so the CSS transition plays on close.
+          aria-hidden when closed so screen readers skip it while off-screen. */}
       <div
         className={`fixed inset-x-0 bottom-0 z-50 md:hidden rounded-t-2xl border-t bg-background shadow-xl transition-transform duration-300 ease-out ${
           open ? "translate-y-0" : "translate-y-full"
         }`}
         style={{ maxHeight: "85dvh", overflowY: "auto" }}
-        aria-modal="true"
         role="dialog"
+        aria-modal="true"
         aria-label="Profile menu"
+        aria-hidden={!open}
       >
         {/* Drag handle */}
         <div className="flex justify-center pt-3 pb-1">
           <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
         </div>
 
-        <div className="px-4 pb-24">
+        <div className="px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
           <ProfileCard name={name} image={image} onNavigate={() => setOpen(false)} />
         </div>
       </div>

@@ -186,12 +186,12 @@ export function ProfileCard({
         )}
 
         {/* Stat counts — navigation links */}
-        <div className="flex flex-col gap-1" onClick={onNavigate}>
+        <div className="flex flex-col gap-1">
           {stats ? (
             <>
-              <StatRow href="/friends" label="Friends" count={stats.friendCount} active={isActive("/friends")} />
-              <StatRow href="/groups"  label="Groups"  count={stats.groupCount}  active={isActive("/groups")} />
-              <StatRow href="/games"   label="Games"   count={stats.gameCount}   active={isActive("/games")} />
+              <StatRow href="/friends" label="Friends" count={stats.friendCount} active={isActive("/friends")} onClick={onNavigate} />
+              <StatRow href="/groups"  label="Groups"  count={stats.groupCount}  active={isActive("/groups")}  onClick={onNavigate} />
+              <StatRow href="/games"   label="Games"   count={stats.gameCount}   active={isActive("/games")}   onClick={onNavigate} />
             </>
           ) : (
             <>
@@ -204,11 +204,11 @@ export function ProfileCard({
       </div>
 
       {/* Primary nav */}
-      <nav className="flex flex-col gap-0.5 px-1" onClick={onNavigate}>
-        <NavLink href="/feed"         icon={<Newspaper size={13} />}   label="Feed"         active={isActive("/feed")} />
-        <NavLink href="/events"       icon={<Calendar size={13} />}    label="Events"       active={isActive("/events")} />
-        <NavLink href="/availability" icon={<Clock size={13} />}       label="Availability" active={isActive("/availability")} />
-        <NavLink href="/people"       icon={<UserSearch size={13} />}  label="Find people"  active={isActive("/people")} />
+      <nav className="flex flex-col gap-0.5 px-1">
+        <NavLink href="/feed"         icon={<Newspaper size={13} />}   label="Feed"         active={isActive("/feed")}         onClick={onNavigate} />
+        <NavLink href="/events"       icon={<Calendar size={13} />}    label="Events"       active={isActive("/events")}       onClick={onNavigate} />
+        <NavLink href="/availability" icon={<Clock size={13} />}       label="Availability" active={isActive("/availability")} onClick={onNavigate} />
+        <NavLink href="/people"       icon={<UserSearch size={13} />}  label="Find people"  active={isActive("/people")}       onClick={onNavigate} />
       </nav>
 
       {/* Divider */}
@@ -217,7 +217,7 @@ export function ProfileCard({
       </div>
 
       {/* Utility links */}
-      <div className="flex flex-col gap-0.5 px-1" onClick={onNavigate}>
+      <div className="flex flex-col gap-0.5 px-1">
         <NavLink
           href="/notifications"
           icon={
@@ -233,8 +233,9 @@ export function ProfileCard({
           label="Notifications"
           active={isActive("/notifications")}
           badge={unreadCount > 0 ? (unreadCount > 9 ? "9+" : String(unreadCount)) : undefined}
+          onClick={onNavigate}
         />
-        <NavLink href="/settings" icon={<Settings size={13} />} label="Settings" active={isActive("/settings")} />
+        <NavLink href="/settings" icon={<Settings size={13} />} label="Settings" active={isActive("/settings")} onClick={onNavigate} />
         <button
           type="button"
           onClick={handleSignOut}
@@ -258,15 +259,18 @@ function StatRow({
   label,
   count,
   active,
+  onClick,
 }: {
   href: string;
   label: string;
   count: number;
   active: boolean;
+  onClick?: () => void;
 }) {
   return (
     <Link
       href={href}
+      onClick={onClick}
       className={`flex items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors group ${
         active
           ? "bg-accent text-foreground font-semibold"
@@ -288,16 +292,19 @@ function NavLink({
   label,
   active,
   badge,
+  onClick,
 }: {
   href: string;
   icon: React.ReactNode;
   label: string;
   active: boolean;
   badge?: string;
+  onClick?: () => void;
 }) {
   return (
     <Link
       href={href}
+      onClick={onClick}
       className={`flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs transition-colors ${
         active
           ? "bg-accent text-foreground font-semibold"
