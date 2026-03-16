@@ -8,12 +8,15 @@ import { Button } from "@/components/ui/button";
 
 // A token is a single-use invite (64-char hex) if it matches that pattern;
 // otherwise it's a permanent personal invite token (CUID2, ~24 chars).
+// Normalise to lowercase before matching — URLs may be pasted with mixed case.
 function isSingleUseToken(token: string): boolean {
-  return token.length === 64 && /^[0-9a-f]+$/.test(token);
+  return token.length === 64 && /^[0-9a-f]+$/.test(token.toLowerCase());
 }
 
 export default function InvitePage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = use(params);
+  const { token: rawToken } = use(params);
+  // Normalise to lowercase so copy-paste variations of hex tokens still match.
+  const token = rawToken.toLowerCase();
   const singleUse = isSingleUseToken(token);
 
   // ── Permanent invite token path ──────────────────────────────────────────────
