@@ -30,9 +30,19 @@ export class ImageValidationError extends Error {
   }
 }
 
-/** Returns true if the buffer starts with the GIF87a or GIF89a magic bytes. */
+/**
+ * Returns true if the buffer starts with the GIF87a or GIF89a magic bytes.
+ * Checks all 6 header bytes: "GIF" + "87a" or "89a".
+ */
 export function bufferIsGif(buffer: Buffer): boolean {
-  return buffer.length >= 6 && buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46;
+  if (buffer.length < 6) return false;
+  // "GIF"
+  if (buffer[0] !== 0x47 || buffer[1] !== 0x49 || buffer[2] !== 0x46) return false;
+  // "87a" or "89a"
+  if (buffer[3] !== 0x38) return false; // "8"
+  if (buffer[4] !== 0x37 && buffer[4] !== 0x39) return false; // "7" or "9"
+  if (buffer[5] !== 0x61) return false; // "a"
+  return true;
 }
 
 /**
