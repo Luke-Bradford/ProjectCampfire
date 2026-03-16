@@ -338,7 +338,8 @@ function CatalogTab() {
   const allItems = data?.pages.flatMap((p) => p.items) ?? [];
   const total = data?.pages[0]?.total ?? 0;
 
-  const addToLibrary = api.games.toggleOwnership.useMutation({
+  // Insert-only mutation — safe for double-clicks; cannot accidentally remove a game.
+  const addToLibrary = api.games.addToLibrary.useMutation({
     onSuccess: () => {
       void utils.games.catalog.invalidate();
       void utils.games.myGames.invalidate();
