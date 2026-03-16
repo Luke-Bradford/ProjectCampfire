@@ -104,12 +104,15 @@ export const feedRouter = createTRPCRouter({
       const visibilityFilter = groupFilter
         ? and(eq(posts.groupId, groupFilter), blockedExclusion)
         : filter === "friends"
-          ? visibleAuthorIds.length > 0
-            ? and(inArray(posts.authorId, visibleAuthorIds), isNull(posts.groupId))
-            : undefined
-          : or(
-              visibleAuthorIds.length > 0 ? inArray(posts.authorId, visibleAuthorIds) : undefined,
-              myGroupIds.length > 0 ? inArray(posts.groupId, myGroupIds) : undefined
+          // visibleAuthorIds always contains at least `me`, so inArray is always safe.
+          // isNull(posts.groupId) scopes to non-group posts only (direct feed).
+          ? and(inArray(posts.authorId, visibleAuthorIds), isNull(posts.groupId))
+          : and(
+              or(
+                visibleAuthorIds.length > 0 ? inArray(posts.authorId, visibleAuthorIds) : undefined,
+                myGroupIds.length > 0 ? inArray(posts.groupId, myGroupIds) : undefined
+              ),
+              blockedExclusion
             );
 
       const feedPosts = await db.query.posts.findMany({

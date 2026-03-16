@@ -110,23 +110,15 @@ function FeedTabs({ filter, onFilter }: { filter: string; onFilter: (f: string) 
 function FeedList({
   filter,
   currentUserId,
-  refreshKey,
 }: {
   filter: string;
   currentUserId: string;
-  refreshKey: number;
 }) {
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, refetch } =
     api.feed.list.useInfiniteQuery(
       { limit: 20, filter },
       { getNextPageParam: (lastPage) => lastPage.nextCursor }
     );
-
-  // Refetch whenever the parent signals a new post was created
-  useEffect(() => {
-    if (refreshKey > 0) void refetch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey]);
 
   const allItems = data?.pages.flatMap((p) => p.items) ?? [];
   const isEmpty = !isLoading && allItems.length === 0;
@@ -201,9 +193,9 @@ function FeedPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: me } = api.user.me.useQuery();
+  const utils = api.useUtils();
 
   const [filter, setFilter] = useState<string>(() => searchParams.get("tab") ?? "all");
-  const [refreshKey, setRefreshKey] = useState(0);
 
   // Sync filter if URL changes after mount (back/forward navigation)
   useEffect(() => {
@@ -225,14 +217,14 @@ function FeedPageInner() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
-      <PostComposer onPosted={() => setRefreshKey((k) => k + 1)} />
+      {/* Invalidate all feed.list cache entries so the active tab refetches after a new post. */}
+      <PostComposer onPosted={() => void utils.feed.list.invalidate()} />
 
       <FeedTabs filter={filter} onFilter={handleFilter} />
 
-      {/* Key by filter so each tab mounts its own infinite query.
-          refreshKey bumped on new post — FeedList useEffect triggers refetch. */}
+      {/* Key by filter so each tab mounts its own infinite query + independent cursor. */}
       {me && (
-        <FeedList key={filter} filter={filter} currentUserId={me.id} refreshKey={refreshKey} />
+        <FeedList key={filter} filter={filter} currentUserId={me.id} />
       )}
       {!me && <FeedSkeleton />}
     </div>
