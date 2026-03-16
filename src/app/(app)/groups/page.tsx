@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { GroupsListSkeleton } from "@/components/ui/skeletons";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,24 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { format } from "date-fns";
+
+// Deterministic colour strip per group — consistent per name, never random per render.
+const STRIP_COLORS = [
+  "bg-blue-500",
+  "bg-violet-500",
+  "bg-emerald-500",
+  "bg-orange-500",
+  "bg-pink-500",
+  "bg-cyan-500",
+  "bg-amber-500",
+  "bg-rose-500",
+];
+
+function groupColor(name: string): string {
+  const hash = [...name].reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  return STRIP_COLORS[hash % STRIP_COLORS.length]!;
+}
 
 function CreateGroupDialog({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
@@ -65,7 +84,9 @@ function CreateGroupDialog({ onCreated }: { onCreated: () => void }) {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="group-desc">Description <span className="text-muted-foreground">(optional)</span></Label>
+            <Label htmlFor="group-desc">
+              Description <span className="text-muted-foreground">(optional)</span>
+            </Label>
             <Textarea
               id="group-desc"
               placeholder="What's this group about?"
@@ -97,7 +118,9 @@ export default function GroupsPage() {
         <div>
           <h1 className="text-2xl font-bold">Groups</h1>
           <p className="text-muted-foreground">
-            {myGroups.length === 0 ? "You're not in any groups yet." : `${myGroups.length} group${myGroups.length === 1 ? "" : "s"}`}
+            {myGroups.length === 0
+              ? "You're not in any groups yet."
+              : `${myGroups.length} group${myGroups.length === 1 ? "" : "s"}`}
           </p>
         </div>
         <CreateGroupDialog onCreated={() => void refetch()} />
@@ -120,24 +143,48 @@ export default function GroupsPage() {
           action={<CreateGroupDialog onCreated={() => void refetch()} />}
         />
       ) : (
-        <ul className="space-y-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {myGroups.map((g) => (
-            <li key={g.id}>
-              <Link
-                href={`/groups/${g.id}`}
-                className="flex items-center justify-between rounded-lg border p-4 hover:bg-muted/50 transition-colors"
-              >
-                <div>
-                  <p className="font-medium">{g.name}</p>
-                  {g.description && (
-                    <p className="text-sm text-muted-foreground line-clamp-1">{g.description}</p>
-                  )}
+            <Link
+              key={g.id}
+              href={`/groups/${g.id}`}
+              className="group rounded-xl border bg-card shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+            >
+              {/* Deterministic colour strip */}
+              <div className={`h-1.5 w-full ${groupColor(g.name)}`} />
+
+              <div className="p-4 space-y-3">
+                {/* Name + role badge */}
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold leading-tight group-hover:text-primary transition-colors">
+                    {g.name}
+                  </p>
+                  <Badge variant="secondary" className="capitalize shrink-0 text-xs">
+                    {g.role}
+                  </Badge>
                 </div>
-                <span className="text-xs text-muted-foreground capitalize">{g.role}</span>
-              </Link>
-            </li>
+
+                {/* Description */}
+                {g.description && (
+                  <p className="text-sm text-muted-foreground line-clamp-2">{g.description}</p>
+                )}
+
+                {/* Footer: member count + next event pill */}
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-xs text-muted-foreground">
+                    {g.memberCount} member{g.memberCount === 1 ? "" : "s"}
+                  </span>
+                  {g.nextEvent?.confirmedStartsAt ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      {format(new Date(g.nextEvent.confirmedStartsAt), "d MMM")}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </Link>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );

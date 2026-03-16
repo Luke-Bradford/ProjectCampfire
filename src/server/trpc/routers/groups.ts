@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { eq, and } from "drizzle-orm";
+import { eq, and, gt, asc } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { groups, groupMemberships } from "@/server/db/schema";
+import { groups, groupMemberships, events } from "@/server/db/schema";
 
 // Discord invite URLs must be on discord.gg or discord.com/invite — no arbitrary URLs
 const discordInviteUrl = z
@@ -18,15 +18,52 @@ const discordInviteUrl = z
   .or(z.literal(""));
 
 export const groupsRouter = createTRPCRouter({
-  // List groups the current user belongs to
+  // List groups the current user belongs to, with member count and next event
   list: protectedProcedure.query(async ({ ctx }) => {
     const memberships = await db.query.groupMemberships.findMany({
       where: eq(groupMemberships.userId, ctx.user.id),
-      with: {
-        group: true,
-      },
+      with: { group: true },
     });
-    return memberships.map((m) => ({ ...m.group, role: m.role }));
+
+    const groupIds = memberships.map((m) => m.group.id);
+    if (groupIds.length === 0) return [];
+
+    // Batch: member counts and next upcoming event per group
+    const [memberCounts, nextEvents] = await Promise.all([
+      // One query: count memberships per group
+      Promise.all(
+        groupIds.map((id) =>
+          db.$count(groupMemberships, eq(groupMemberships.groupId, id)).then(
+            (count) => ({ id, count })
+          )
+        )
+      ),
+      // One query per group: first non-cancelled event with confirmedStartsAt in the future
+      Promise.all(
+        groupIds.map((id) =>
+          db.query.events.findFirst({
+            where: and(
+              eq(events.groupId, id),
+              gt(events.confirmedStartsAt, new Date()),
+              // exclude cancelled
+              ...[eq(events.status, "confirmed")]
+            ),
+            orderBy: asc(events.confirmedStartsAt),
+            columns: { id: true, title: true, confirmedStartsAt: true, status: true },
+          }).then((ev) => ({ id, event: ev ?? null }))
+        )
+      ),
+    ]);
+
+    const memberCountMap = Object.fromEntries(memberCounts.map(({ id, count }) => [id, count]));
+    const nextEventMap = Object.fromEntries(nextEvents.map(({ id, event }) => [id, event]));
+
+    return memberships.map((m) => ({
+      ...m.group,
+      role: m.role,
+      memberCount: memberCountMap[m.group.id] ?? 0,
+      nextEvent: nextEventMap[m.group.id] ?? null,
+    }));
   }),
 
   // Get a single group + its members (must be a member to view)
