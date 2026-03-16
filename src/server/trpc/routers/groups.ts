@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { eq, and, gt, asc } from "drizzle-orm";
+import { eq, and, gt, asc, desc, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { groups, groupMemberships, events } from "@/server/db/schema";
+import { groups, groupMemberships, events, polls, posts, eventRsvps } from "@/server/db/schema";
 
 // Discord invite URLs must be on discord.gg or discord.com/invite — no arbitrary URLs
 const discordInviteUrl = z
@@ -28,9 +28,10 @@ export const groupsRouter = createTRPCRouter({
     const groupIds = memberships.map((m) => m.group.id);
     if (groupIds.length === 0) return [];
 
-    // Batch: member counts and next upcoming confirmed event per group.
+    // Batch: member counts, next event, active poll, last activity, and user's RSVP.
     // Note: N queries per set via Promise.all — acceptable at MVP group counts.
-    const [memberCounts, nextEvents] = await Promise.all([
+    const now = new Date();
+    const [memberCounts, nextEvents, activePolls, lastPosts] = await Promise.all([
       Promise.all(
         groupIds.map((id) =>
           db.$count(groupMemberships, eq(groupMemberships.groupId, id)).then(
@@ -39,13 +40,13 @@ export const groupsRouter = createTRPCRouter({
         )
       ),
       // One query per group: next confirmed event with confirmedStartsAt in the future.
-      // confirmedStartsAt is stored as UTC; new Date() is also UTC — comparison is safe.
+      // confirmedStartsAt is stored as UTC; now is also UTC — comparison is safe.
       Promise.all(
         groupIds.map((id) =>
           db.query.events.findFirst({
             where: and(
               eq(events.groupId, id),
-              gt(events.confirmedStartsAt, new Date()),
+              gt(events.confirmedStartsAt, now),
               eq(events.status, "confirmed")
             ),
             orderBy: asc(events.confirmedStartsAt),
@@ -53,17 +54,62 @@ export const groupsRouter = createTRPCRouter({
           }).then((ev) => ({ id, event: ev ?? null }))
         )
       ),
+      // One query per group: first open poll attached to this group.
+      Promise.all(
+        groupIds.map((id) =>
+          db.query.polls.findFirst({
+            where: and(eq(polls.groupId, id), eq(polls.status, "open")),
+            orderBy: desc(polls.createdAt),
+            columns: { id: true, question: true, status: true },
+          }).then((p) => ({ id, poll: p ?? null }))
+        )
+      ),
+      // One query per group: most recent non-deleted post for "last active" timestamp.
+      Promise.all(
+        groupIds.map((id) =>
+          db.query.posts.findFirst({
+            where: and(eq(posts.groupId, id)),
+            orderBy: desc(posts.createdAt),
+            columns: { createdAt: true },
+          }).then((p) => ({ id, lastPostAt: p?.createdAt ?? null }))
+        )
+      ),
     ]);
 
     const memberCountMap = Object.fromEntries(memberCounts.map(({ id, count }) => [id, count]));
     const nextEventMap = Object.fromEntries(nextEvents.map(({ id, event }) => [id, event]));
+    const activePollMap = Object.fromEntries(activePolls.map(({ id, poll }) => [id, poll]));
+    const lastPostMap = Object.fromEntries(lastPosts.map(({ id, lastPostAt }) => [id, lastPostAt]));
 
-    return memberships.map((m) => ({
-      ...m.group,
-      role: m.role,
-      memberCount: memberCountMap[m.group.id] ?? 0,
-      nextEvent: nextEventMap[m.group.id] ?? null,
-    }));
+    // Fetch the current user's RSVP for each group's next event (if any).
+    const nextEventIds = nextEvents
+      .map(({ event }) => event?.id)
+      .filter((id): id is string => !!id);
+
+    const myRsvps = nextEventIds.length > 0
+      ? await db.query.eventRsvps.findMany({
+          where: and(
+            eq(eventRsvps.userId, ctx.user.id),
+            inArray(eventRsvps.eventId, nextEventIds)
+          ),
+          columns: { eventId: true, status: true },
+        })
+      : [];
+    const myRsvpMap = Object.fromEntries(myRsvps.map((r) => [r.eventId, r.status]));
+
+    return memberships.map((m) => {
+      const nextEvent = nextEventMap[m.group.id] ?? null;
+      return {
+        ...m.group,
+        role: m.role,
+        memberCount: memberCountMap[m.group.id] ?? 0,
+        nextEvent: nextEvent
+          ? { ...nextEvent, myRsvp: myRsvpMap[nextEvent.id] ?? null }
+          : null,
+        activePoll: activePollMap[m.group.id] ?? null,
+        lastActivityAt: lastPostMap[m.group.id] ?? m.group.updatedAt,
+      };
+    });
   }),
 
   // Get a single group + its members (must be a member to view)
