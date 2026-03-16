@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, asc, desc, eq, isNull, lt, or, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt, or, inArray, not } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -77,23 +77,32 @@ export const feedRouter = createTRPCRouter({
       );
       const myGroupIds = memberRows.map((r) => r.groupId);
 
-      // Parse filter param
+      // Parse and validate filter param
       const filter = input.filter ?? "all";
+      if (filter !== "all" && filter !== "friends" && !filter.startsWith("group:")) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid filter value." });
+      }
       const groupFilter = filter.startsWith("group:") ? filter.slice(6) : null;
 
-      // Authorise group filter — caller must be a member
-      if (groupFilter && !myGroupIds.includes(groupFilter)) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Not a member of this group." });
+      // Authorise group filter — caller must be a member and groupId must be non-empty
+      if (groupFilter !== null) {
+        if (!groupFilter || !myGroupIds.includes(groupFilter)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Not a member of this group." });
+        }
       }
 
       // Build the visibility filter based on the selected tab:
       //   all     → own posts + friends' posts + posts in my groups, minus blocked
-      //   friends → own posts + friends' posts only, minus blocked
-      //   group:x → posts in that specific group only (membership already verified above)
+      //   friends → own posts + friends' posts with no groupId, minus blocked
+      //   group:x → posts in that specific group, minus blocked (membership verified above)
       const visibleAuthorIds = [me, ...friendIds].filter((id) => !blockedIds.includes(id));
+      // Excluded-author clause applied to group and friends tabs to honour block relationships
+      const blockedExclusion = blockedIds.length > 0
+        ? not(inArray(posts.authorId, blockedIds))
+        : undefined;
 
       const visibilityFilter = groupFilter
-        ? eq(posts.groupId, groupFilter)
+        ? and(eq(posts.groupId, groupFilter), blockedExclusion)
         : filter === "friends"
           ? visibleAuthorIds.length > 0
             ? and(inArray(posts.authorId, visibleAuthorIds), isNull(posts.groupId))
