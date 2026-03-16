@@ -1,215 +1,52 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/trpc/react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import type { NotificationPrefs } from "@/server/db/schema";
 import { ThemeToggle } from "@/components/nav/theme-toggle";
+import {
+  Bell,
+  Link2,
+  Palette,
+  Shield,
+  Gamepad2,
+  User,
+  Trash2,
+} from "lucide-react";
 
-// ── Connected accounts section ───────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
 
-function ConnectedAccountsSection() {
-  const utils = api.useUtils();
-  const { data: me } = api.user.me.useQuery();
-  const unlink = api.user.steamUnlink.useMutation({
-    onSuccess: () => void utils.user.me.invalidate(),
-  });
-  const syncLibrary = api.user.steamSyncLibrary.useMutation({
-    onSuccess: () => void utils.user.me.invalidate(),
-  });
-  const setLibraryPublic = api.user.steamSetLibraryPublic.useMutation({
-    onSuccess: () => void utils.user.me.invalidate(),
-  });
+type SectionId =
+  | "appearance"
+  | "profile"
+  | "invite"
+  | "notifications"
+  | "connected"
+  | "privacy"
+  | "danger";
 
-  // Surface steam_linked / steam_error query params set by the callback route
-  const [flash, setFlash] = useState<{ type: "success" | "error"; message: string } | null>(null);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const sp = new URLSearchParams(window.location.search);
-    if (sp.get("steam_linked") === "1") {
-      setFlash({ type: "success", message: "Steam account linked!" });
-      window.history.replaceState({}, "", window.location.pathname);
-    } else if (sp.get("steam_error")) {
-      // Error codes are a fixed set from the server — map to human messages
-      // rather than rendering the raw param to avoid attacker-crafted strings.
-      const STEAM_ERROR_MESSAGES: Record<string, string> = {
-        invalid_return_to: "Steam link failed: invalid return URL",
-        verification_request_failed: "Steam verification failed — please try again",
-        verification_failed: "Steam verification failed — please try again",
-        invalid_steam_id: "Could not extract Steam ID",
-        already_linked: "This Steam account is already linked to another user",
-      };
-      const code = sp.get("steam_error")!;
-      const message = STEAM_ERROR_MESSAGES[code] ?? "Steam link failed — please try again";
-      setFlash({ type: "error", message });
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-  }, []);
+const NAV_ITEMS: { id: SectionId; label: string; icon: React.ReactNode }[] = [
+  { id: "appearance",    label: "Appearance",         icon: <Palette size={14} /> },
+  { id: "profile",       label: "Profile",             icon: <User size={14} /> },
+  { id: "invite",        label: "Invite a friend",     icon: <Link2 size={14} /> },
+  { id: "notifications", label: "Notifications",       icon: <Bell size={14} /> },
+  { id: "connected",     label: "Connected accounts",  icon: <Gamepad2 size={14} /> },
+  { id: "privacy",       label: "Privacy & Safety",    icon: <Shield size={14} /> },
+  { id: "danger",        label: "Danger zone",         icon: <Trash2 size={14} /> },
+];
 
-  return (
-    <section className="space-y-4">
-      <h2 className="text-base font-semibold border-b pb-2">Connected accounts</h2>
-
-      {flash && (
-        <p className={`text-sm ${flash.type === "success" ? "text-green-600" : "text-destructive"}`}>
-          {flash.message}
-        </p>
-      )}
-
-      <div className="flex items-center justify-between rounded-lg border p-4">
-        <div className="flex items-center gap-3">
-          <svg viewBox="0 0 24 24" className="h-6 w-6 fill-current shrink-0" aria-hidden="true">
-            <path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.718L.22 15.996C1.555 20.781 6.318 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.606 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.497 1.009 2.455-.397.957-1.497 1.41-2.455 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.662 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.252 0-2.265-1.014-2.265-2.265z" />
-          </svg>
-          <div>
-            <p className="text-sm font-medium">Steam</p>
-            {me?.steamId ? (
-              <p className="text-xs text-muted-foreground">
-                ID: {me.steamId}
-                {me.steamProfileUrl && (
-                  <>
-                    {" · "}
-                    <a
-                      href={me.steamProfileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline"
-                    >
-                      View profile
-                    </a>
-                  </>
-                )}
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">Not connected</p>
-            )}
-          </div>
-        </div>
-
-        {me?.steamId ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={unlink.isPending}
-            onClick={() => {
-              if (window.confirm("Disconnect your Steam account?")) {
-                unlink.mutate();
-              }
-            }}
-          >
-            {unlink.isPending ? "Disconnecting…" : "Disconnect"}
-          </Button>
-        ) : (
-          <Button variant="outline" size="sm" asChild>
-            <a href="/api/steam/connect">Connect Steam</a>
-          </Button>
-        )}
-      </div>
-
-      {/* Steam library sync — only shown when Steam is linked */}
-      {me?.steamId && (
-        <div className="rounded-lg border p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Steam library</p>
-              <p className="text-xs text-muted-foreground">
-                {me.steamLibrarySyncedAt
-                  ? `Last synced ${new Date(me.steamLibrarySyncedAt).toLocaleDateString()}`
-                  : "Never synced"}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={syncLibrary.isPending}
-              onClick={() => syncLibrary.mutate()}
-            >
-              {syncLibrary.isPending ? "Syncing…" : "Sync now"}
-            </Button>
-          </div>
-          {syncLibrary.isSuccess && (
-            <p className="text-xs text-green-600">Sync queued — your library will update shortly.</p>
-          )}
-          {syncLibrary.isError && (
-            <p className="text-xs text-destructive">{syncLibrary.error.message}</p>
-          )}
-          <div className="flex items-center justify-between pt-1 border-t">
-            <div>
-              <p className="text-sm">Visible to group members</p>
-              <p className="text-xs text-muted-foreground">
-                When on, group members can see which games you own for poll suggestions.
-              </p>
-            </div>
-            <Switch
-              checked={me.steamLibraryPublic}
-              disabled={setLibraryPublic.isPending}
-              onCheckedChange={(v) => setLibraryPublic.mutate({ public: v })}
-            />
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
-// ── Blocked users section ─────────────────────────────────────────────────────
-
-function BlockedUsersSection() {
-  const { data: blocked, refetch } = api.friends.listBlocked.useQuery();
-  const unblock = api.friends.unblock.useMutation({ onSuccess: () => void refetch() });
-
-  if (!blocked?.length) {
-    return (
-      <section className="space-y-4">
-        <h2 className="text-base font-semibold border-b pb-2">Blocked users</h2>
-        <p className="text-sm text-muted-foreground">You haven&apos;t blocked anyone.</p>
-      </section>
-    );
-  }
-
-  return (
-    <section className="space-y-4">
-      <h2 className="text-base font-semibold border-b pb-2">Blocked users</h2>
-      <ul className="space-y-2">
-        {blocked.map((u) => (
-          <li key={u.id} className="flex items-center justify-between rounded-lg border p-3">
-            <div className="flex items-center gap-3">
-              <Avatar className="h-9 w-9">
-                <AvatarImage src={u.image ?? undefined} />
-                <AvatarFallback>{initials(u.name)}</AvatarFallback>
-              </Avatar>
-              <div>
-                <p className="text-sm font-medium">{u.name}</p>
-                {u.username && <p className="text-xs text-muted-foreground">@{u.username}</p>}
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={unblock.isPending}
-              onClick={() => unblock.mutate({ targetId: u.id })}
-            >
-              Unblock
-            </Button>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function initials(name: string) {
-  return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
-}
-
-// ── Toggle row ────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Toggle row
+// ─────────────────────────────────────────────────────────────────────────────
 
 function ToggleRow({
   label,
@@ -250,151 +87,34 @@ function ToggleRow({
   );
 }
 
-// ── Defaults ──────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Section: Appearance
+// ─────────────────────────────────────────────────────────────────────────────
 
-const PREF_DEFAULTS: Required<NotificationPrefs> = {
-  friendRequestReceived: true,
-  friendRequestAccepted: true,
-  groupInviteReceived: true,
-  emailFriendRequest: false,
-  emailEventConfirmed: true,
-  emailEventCancelled: true,
-  emailEventRsvpReminder: true,
-  emailPollOpened: true,
-  emailPollClosed: false,
-  emailGroupInvite: true,
-};
-
-function mergePrefs(saved: NotificationPrefs | undefined): Required<NotificationPrefs> {
-  return { ...PREF_DEFAULTS, ...(saved ?? {}) };
-}
-
-// ── Invite section ────────────────────────────────────────────────────────────
-
-function InviteSection() {
-  const { data, refetch } = api.user.getInviteToken.useQuery();
-  const regenerate = api.user.regenerateInviteToken.useMutation({
-    onSuccess: () => void refetch(),
-  });
-  const [copied, setCopied] = useState(false);
-
-  const inviteUrl = typeof window !== "undefined" && data?.token
-    ? `${window.location.origin}/invite/${data.token}`
-    : "";
-
-  function handleCopy() {
-    if (!inviteUrl) return;
-    void navigator.clipboard.writeText(inviteUrl).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
-
+function AppearanceSection() {
   return (
-    <section className="space-y-4">
-      <h2 className="text-base font-semibold border-b pb-2">Invite a friend</h2>
-      <p className="text-sm text-muted-foreground">
-        Share your personal invite link. Anyone who visits it can send you a friend request.
-        Regenerating the link invalidates the old one.
-      </p>
-      {data?.token ? (
-        <div className="space-y-2">
-          <div className="flex gap-2">
-            <Input readOnly value={inviteUrl} className="font-mono text-xs" />
-            <Button variant="outline" onClick={handleCopy} className="shrink-0">
-              {copied ? "Copied!" : "Copy"}
-            </Button>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs text-muted-foreground"
-            disabled={regenerate.isPending}
-            onClick={() => {
-              if (window.confirm("Regenerate your invite link? The old link will stop working.")) {
-                regenerate.mutate();
-              }
-            }}
-          >
-            {regenerate.isPending ? "Regenerating…" : "Regenerate link"}
-          </Button>
-        </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">Generating link…</p>
-      )}
-    </section>
-  );
-}
-
-// ── Danger zone ───────────────────────────────────────────────────────────────
-
-function DangerZoneSection() {
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const [confirmation, setConfirmation] = useState("");
-  const [error, setError] = useState("");
-
-  const deleteAccount = api.user.deleteAccount.useMutation({
-    onSuccess: () => {
-      // Wipe the React Query cache synchronously before redirecting.
-      // Using clear() (not invalidate()) avoids firing refetches against
-      // the now-revoked session which would produce 401 errors.
-      queryClient.clear();
-      router.replace("/login");
-    },
-    onError: (e) => setError(e.message),
-  });
-
-  function handleDelete() {
-    // Runtime guard: reject if confirmation isn't exactly "DELETE".
-    // The button is already disabled client-side, but this defends against
-    // programmatic calls and removes the need for an unsafe type cast.
-    if (confirmation !== "DELETE") return;
-    setError("");
-    deleteAccount.mutate({ confirmation });
-  }
-
-  return (
-    <section className="space-y-4">
-      <h2 className="text-base font-semibold border-b border-destructive/40 pb-2 text-destructive">
-        Danger zone
-      </h2>
-      <p className="text-sm text-muted-foreground">
-        Deleting your account is permanent. Your profile, posts, and group memberships will be
-        removed. This cannot be undone.
-      </p>
-      <div className="space-y-2">
-        <Label htmlFor="delete-confirm">
-          Type <span className="font-mono font-bold">DELETE</span> to confirm
-        </Label>
-        <div className="flex gap-2">
-          <Input
-            id="delete-confirm"
-            value={confirmation}
-            onChange={(e) => { setConfirmation(e.target.value); setError(""); }}
-            placeholder="DELETE"
-            className="max-w-48"
-          />
-          <Button
-            variant="destructive"
-            disabled={confirmation !== "DELETE" || deleteAccount.isPending}
-            onClick={handleDelete}
-          >
-            {deleteAccount.isPending ? "Deleting…" : "Delete account"}
-          </Button>
-        </div>
-        {error && <p className="text-xs text-destructive">{error}</p>}
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Appearance</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">Choose how Campfire looks for you.</p>
       </div>
-    </section>
+      <div className="rounded-xl border bg-card p-4 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium">Theme</p>
+          <p className="text-xs text-muted-foreground mt-0.5">System follows your OS preference.</p>
+        </div>
+        <ThemeToggle />
+      </div>
+    </div>
   );
 }
 
-// ── Settings page ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Section: Profile
+// ─────────────────────────────────────────────────────────────────────────────
 
-export default function SettingsPage() {
+function ProfileSection() {
   const { data: me } = api.user.me.useQuery();
-
-  // ── Profile ──────────────────────────────────────────────────────────────────
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
   const [username, setUsername] = useState("");
@@ -405,7 +125,6 @@ export default function SettingsPage() {
   const updateProfile = api.user.updateProfile.useMutation({
     onSuccess: () => { setProfileSaved(true); setTimeout(() => setProfileSaved(false), 2500); },
   });
-
   const setUsernameMutation = api.user.setUsername.useMutation({
     onSuccess: () => { setUsernameSaved(true); setTimeout(() => setUsernameSaved(false), 2500); },
     onError: (e) => setUsernameError(e.message),
@@ -419,45 +138,27 @@ export default function SettingsPage() {
     }
   }, [me]);
 
-  // ── Notification prefs ────────────────────────────────────────────────────
-  const [prefs, setPrefs] = useState<Required<NotificationPrefs>>(PREF_DEFAULTS);
-  const [prefsSaved, setPrefsSaved] = useState(false);
-
-  useEffect(() => {
-    if (me) setPrefs(mergePrefs(me.notificationPrefs as NotificationPrefs | undefined));
-  }, [me]);
-
-  const updatePrefs = api.user.updateNotificationPrefs.useMutation({
-    onSuccess: () => { setPrefsSaved(true); setTimeout(() => setPrefsSaved(false), 2500); },
-  });
-
-  function setPref(key: keyof NotificationPrefs, value: boolean) {
-    const next = { ...prefs, [key]: value };
-    setPrefs(next);
-    updatePrefs.mutate({ [key]: value });
-  }
+  const isDirty = me ? (displayName !== (me.name ?? "") || bio !== (me.bio ?? "")) : false;
 
   return (
-    <div className="space-y-8 max-w-xl">
-      <h1 className="text-2xl font-bold">Settings</h1>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Profile</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">Your public identity on Campfire.</p>
+      </div>
 
-      {/* ── Appearance ──────────────────────────────────────────────────────── */}
-      <section className="space-y-4">
-        <h2 className="text-base font-semibold border-b pb-2">Appearance</h2>
-        <div className="flex items-center justify-between">
+      <div className="rounded-xl border bg-card p-5 space-y-5">
+        {/* Avatar preview */}
+        <div className="flex items-center gap-4">
+          <Avatar className="h-16 w-16 shrink-0">
+            <AvatarFallback className="text-lg font-semibold">
+              {displayName.split(" ").filter(Boolean).map((w) => w[0]).join("").toUpperCase().slice(0, 2) || "?"}
+            </AvatarFallback>
+          </Avatar>
           <div>
-            <p className="text-sm font-medium">Theme</p>
-            <p className="text-xs text-muted-foreground mt-0.5">System follows your OS preference.</p>
+            <p className="text-sm font-medium">{displayName || <span className="text-muted-foreground italic">No name set</span>}</p>
+            {me?.username && <p className="text-xs text-muted-foreground">@{me.username}</p>}
           </div>
-          <ThemeToggle />
-        </div>
-      </section>
-
-      {/* ── Profile ─────────────────────────────────────────────────────────── */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between border-b pb-2">
-          <h2 className="text-base font-semibold">Profile</h2>
-          {profileSaved && <span className="text-xs text-green-600">Saved</span>}
         </div>
 
         <div className="space-y-2">
@@ -484,152 +185,498 @@ export default function SettingsPage() {
           <p className="text-xs text-muted-foreground text-right">{bio.length}/300</p>
         </div>
 
-        <Button
-          onClick={() => updateProfile.mutate({ name: displayName.trim(), bio: bio.trim() || undefined })}
-          disabled={!displayName.trim() || updateProfile.isPending}
-        >
-          {updateProfile.isPending ? "Saving…" : "Save profile"}
-        </Button>
+        <div className="flex items-center gap-3 pt-1">
+          <Button
+            onClick={() => updateProfile.mutate({ name: displayName.trim(), bio: bio.trim() || undefined })}
+            disabled={!displayName.trim() || !isDirty || updateProfile.isPending}
+          >
+            {updateProfile.isPending ? "Saving…" : "Save changes"}
+          </Button>
+          {profileSaved && <span className="text-xs text-green-600">Saved</span>}
+        </div>
+      </div>
 
-        <div className="space-y-2 pt-2 border-t">
-          <Label htmlFor="username">Username</Label>
+      <div className="rounded-xl border bg-card p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold">Username</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">3–20 chars, lowercase letters, numbers and underscores only.</p>
+        </div>
+        <div className="flex gap-2">
+          <Input
+            value={username}
+            onChange={(e) => { setUsername(e.target.value); setUsernameError(""); setUsernameSaved(false); }}
+            placeholder="your_handle"
+          />
+          <Button
+            onClick={() => { setUsernameError(""); setUsernameMutation.mutate({ username }); }}
+            disabled={!username.trim() || setUsernameMutation.isPending}
+          >
+            {setUsernameMutation.isPending ? "Saving…" : "Save"}
+          </Button>
+        </div>
+        {usernameError && <p className="text-xs text-destructive">{usernameError}</p>}
+        {usernameSaved && <p className="text-xs text-green-600">Username saved!</p>}
+      </div>
+
+      <div className="rounded-xl border bg-card p-5 space-y-1">
+        <h3 className="text-sm font-semibold">Email</h3>
+        <p className="text-sm text-muted-foreground">{me?.email ?? "—"}</p>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section: Invite
+// ─────────────────────────────────────────────────────────────────────────────
+
+function InviteSection() {
+  const { data, refetch } = api.user.getInviteToken.useQuery();
+  const regenerate = api.user.regenerateInviteToken.useMutation({
+    onSuccess: () => void refetch(),
+  });
+  const [copied, setCopied] = useState(false);
+
+  const inviteUrl = typeof window !== "undefined" && data?.token
+    ? `${window.location.origin}/invite/${data.token}`
+    : "";
+
+  function handleCopy() {
+    if (!inviteUrl) return;
+    void navigator.clipboard.writeText(inviteUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Invite a friend</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Share your personal invite link. Anyone who visits it can send you a friend request.
+        </p>
+      </div>
+
+      <div className="rounded-xl border bg-card p-5 space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Regenerating the link invalidates the old one.
+        </p>
+        {data?.token ? (
+          <>
+            <div className="flex gap-2">
+              <Input readOnly value={inviteUrl} className="font-mono text-xs" />
+              <Button variant="outline" onClick={handleCopy} className="shrink-0">
+                {copied ? "Copied!" : "Copy"}
+              </Button>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground"
+              disabled={regenerate.isPending}
+              onClick={() => {
+                if (window.confirm("Regenerate your invite link? The old link will stop working.")) {
+                  regenerate.mutate();
+                }
+              }}
+            >
+              {regenerate.isPending ? "Regenerating…" : "Regenerate link"}
+            </Button>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">Generating link…</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section: Notifications
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PREF_DEFAULTS: Required<NotificationPrefs> = {
+  friendRequestReceived: true,
+  friendRequestAccepted: true,
+  groupInviteReceived: true,
+  emailFriendRequest: false,
+  emailEventConfirmed: true,
+  emailEventCancelled: true,
+  emailEventRsvpReminder: true,
+  emailPollOpened: true,
+  emailPollClosed: false,
+  emailGroupInvite: true,
+};
+
+function mergePrefs(saved: NotificationPrefs | undefined): Required<NotificationPrefs> {
+  return { ...PREF_DEFAULTS, ...(saved ?? {}) };
+}
+
+function NotificationsSection() {
+  const { data: me } = api.user.me.useQuery();
+  const [prefs, setPrefs] = useState<Required<NotificationPrefs>>(PREF_DEFAULTS);
+  const [prefsSaved, setPrefsSaved] = useState(false);
+
+  useEffect(() => {
+    if (me) setPrefs(mergePrefs(me.notificationPrefs as NotificationPrefs | undefined));
+  }, [me]);
+
+  const updatePrefs = api.user.updateNotificationPrefs.useMutation({
+    onSuccess: () => { setPrefsSaved(true); setTimeout(() => setPrefsSaved(false), 2500); },
+  });
+
+  function setPref(key: keyof NotificationPrefs, value: boolean) {
+    setPrefs((p) => ({ ...p, [key]: value }));
+    updatePrefs.mutate({ [key]: value });
+  }
+
+  function SubHeading({ label }: { label: string }) {
+    return (
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-2 pb-1">
+        {label}
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Notifications</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Control what alerts you receive.</p>
+        </div>
+        {prefsSaved && <span className="text-xs text-green-600">Saved</span>}
+      </div>
+
+      <div className="rounded-xl border bg-card p-5 space-y-1">
+        <SubHeading label="In-app alerts" />
+        <div className="divide-y">
+          <ToggleRow label="Friend request received" checked={prefs.friendRequestReceived} onChange={(v) => setPref("friendRequestReceived", v)} disabled={updatePrefs.isPending} />
+          <ToggleRow label="Friend request accepted" checked={prefs.friendRequestAccepted} onChange={(v) => setPref("friendRequestAccepted", v)} disabled={updatePrefs.isPending} />
+          <ToggleRow label="Group invite received"   checked={prefs.groupInviteReceived}   onChange={(v) => setPref("groupInviteReceived", v)}   disabled={updatePrefs.isPending} />
+        </div>
+
+        <SubHeading label="Email — Events" />
+        <div className="divide-y">
+          <ToggleRow label="Event confirmed"  description="When an event you RSVP'd to is confirmed with a time." checked={prefs.emailEventConfirmed}     onChange={(v) => setPref("emailEventConfirmed", v)}     disabled={updatePrefs.isPending} />
+          <ToggleRow label="Event cancelled"  description="When an event you RSVP'd to is cancelled."            checked={prefs.emailEventCancelled}     onChange={(v) => setPref("emailEventCancelled", v)}     disabled={updatePrefs.isPending} />
+          <ToggleRow label="RSVP reminder"    description="A reminder before an event if you haven't RSVP'd yet." checked={prefs.emailEventRsvpReminder} onChange={(v) => setPref("emailEventRsvpReminder", v)} disabled={updatePrefs.isPending} />
+        </div>
+
+        <SubHeading label="Email — Polls" />
+        <div className="divide-y">
+          <ToggleRow label="Poll opened" description="When a new poll is opened in a group you're in." checked={prefs.emailPollOpened} onChange={(v) => setPref("emailPollOpened", v)} disabled={updatePrefs.isPending} />
+          <ToggleRow label="Poll closed" description="When a poll you voted on is closed."             checked={prefs.emailPollClosed} onChange={(v) => setPref("emailPollClosed", v)} disabled={updatePrefs.isPending} />
+        </div>
+
+        <SubHeading label="Email — Social" />
+        <div className="divide-y">
+          <ToggleRow label="Group invite"   description="When someone invites you to a group."           checked={prefs.emailGroupInvite}  onChange={(v) => setPref("emailGroupInvite", v)}  disabled={updatePrefs.isPending} />
+          <ToggleRow label="Friend request" description="When someone sends you a friend request."       checked={prefs.emailFriendRequest} onChange={(v) => setPref("emailFriendRequest", v)} disabled={updatePrefs.isPending} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section: Connected accounts
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ConnectedSection() {
+  const utils = api.useUtils();
+  const { data: me } = api.user.me.useQuery();
+  const unlink = api.user.steamUnlink.useMutation({ onSuccess: () => void utils.user.me.invalidate() });
+  const syncLibrary = api.user.steamSyncLibrary.useMutation({ onSuccess: () => void utils.user.me.invalidate() });
+  const setLibraryPublic = api.user.steamSetLibraryPublic.useMutation({ onSuccess: () => void utils.user.me.invalidate() });
+
+  const [flash, setFlash] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("steam_linked") === "1") {
+      setFlash({ type: "success", message: "Steam account linked!" });
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (sp.get("steam_error")) {
+      const MSGS: Record<string, string> = {
+        invalid_return_to: "Steam link failed: invalid return URL",
+        verification_request_failed: "Steam verification failed — please try again",
+        verification_failed: "Steam verification failed — please try again",
+        invalid_steam_id: "Could not extract Steam ID",
+        already_linked: "This Steam account is already linked to another user",
+      };
+      const code = sp.get("steam_error")!;
+      setFlash({ type: "error", message: MSGS[code] ?? "Steam link failed — please try again" });
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Connected accounts</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">Link external accounts to enrich your profile.</p>
+      </div>
+
+      {flash && (
+        <p className={`text-sm rounded-lg px-3 py-2 border ${flash.type === "success" ? "text-green-600 border-green-500/30 bg-green-500/10" : "text-destructive border-destructive/30 bg-destructive/10"}`}>
+          {flash.message}
+        </p>
+      )}
+
+      <div className="rounded-xl border bg-card p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <svg viewBox="0 0 24 24" className="h-6 w-6 fill-current shrink-0" aria-hidden="true">
+              <path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.718L.22 15.996C1.555 20.781 6.318 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.606 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.497 1.009 2.455-.397.957-1.497 1.41-2.455 1.012H7.54zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.662 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.252 0-2.265-1.014-2.265-2.265z" />
+            </svg>
+            <div>
+              <p className="text-sm font-medium">Steam</p>
+              {me?.steamId ? (
+                <p className="text-xs text-muted-foreground">
+                  ID: {me.steamId}
+                  {me.steamProfileUrl && (
+                    <> · <a href={me.steamProfileUrl} target="_blank" rel="noopener noreferrer" className="underline">View profile</a></>
+                  )}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Not connected</p>
+              )}
+            </div>
+          </div>
+          {me?.steamId ? (
+            <Button variant="outline" size="sm" disabled={unlink.isPending}
+              onClick={() => { if (window.confirm("Disconnect your Steam account?")) unlink.mutate(); }}>
+              {unlink.isPending ? "Disconnecting…" : "Disconnect"}
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" asChild>
+              <a href="/api/steam/connect">Connect Steam</a>
+            </Button>
+          )}
+        </div>
+
+        {me?.steamId && (
+          <div className="pt-3 border-t space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Steam library</p>
+                <p className="text-xs text-muted-foreground">
+                  {me.steamLibrarySyncedAt
+                    ? `Last synced ${new Date(me.steamLibrarySyncedAt).toLocaleDateString()}`
+                    : "Never synced"}
+                </p>
+              </div>
+              <Button variant="outline" size="sm" disabled={syncLibrary.isPending} onClick={() => syncLibrary.mutate()}>
+                {syncLibrary.isPending ? "Syncing…" : "Sync now"}
+              </Button>
+            </div>
+            {syncLibrary.isSuccess && <p className="text-xs text-green-600">Sync queued — your library will update shortly.</p>}
+            {syncLibrary.isError && <p className="text-xs text-destructive">{syncLibrary.error.message}</p>}
+            <div className="flex items-center justify-between pt-2 border-t">
+              <div>
+                <p className="text-sm">Visible to group members</p>
+                <p className="text-xs text-muted-foreground">Group members can see which games you own for poll suggestions.</p>
+              </div>
+              <ToggleRow
+                label=""
+                checked={me.steamLibraryPublic}
+                onChange={(v) => setLibraryPublic.mutate({ public: v })}
+                disabled={setLibraryPublic.isPending}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section: Privacy & Safety
+// ─────────────────────────────────────────────────────────────────────────────
+
+function initials(name: string) {
+  return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+}
+
+function PrivacySection() {
+  const { data: blocked, refetch } = api.friends.listBlocked.useQuery();
+  const unblock = api.friends.unblock.useMutation({ onSuccess: () => void refetch() });
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Privacy & Safety</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">Manage who can see you and who you&apos;ve blocked.</p>
+      </div>
+
+      <div className="rounded-xl border bg-card p-5 space-y-3">
+        <h3 className="text-sm font-semibold">Blocked users</h3>
+        {!blocked?.length ? (
+          <p className="text-sm text-muted-foreground">You haven&apos;t blocked anyone.</p>
+        ) : (
+          <ul className="space-y-2">
+            {blocked.map((u) => (
+              <li key={u.id} className="flex items-center justify-between rounded-lg border p-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center text-xs font-semibold shrink-0">
+                    {initials(u.name)}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{u.name}</p>
+                    {u.username && <p className="text-xs text-muted-foreground">@{u.username}</p>}
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" disabled={unblock.isPending}
+                  onClick={() => unblock.mutate({ targetId: u.id })}>
+                  Unblock
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section: Danger zone
+// ─────────────────────────────────────────────────────────────────────────────
+
+function DangerSection() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [confirmation, setConfirmation] = useState("");
+  const [error, setError] = useState("");
+
+  const deleteAccount = api.user.deleteAccount.useMutation({
+    onSuccess: () => {
+      queryClient.clear();
+      router.replace("/login");
+    },
+    onError: (e) => setError(e.message),
+  });
+
+  function handleDelete() {
+    if (confirmation !== "DELETE") return;
+    setError("");
+    deleteAccount.mutate({ confirmation });
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold text-destructive">Danger zone</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">Irreversible actions — proceed with care.</p>
+      </div>
+
+      <div className="rounded-xl border border-destructive/40 bg-card p-5 space-y-4">
+        <div>
+          <p className="text-sm font-semibold">Delete account</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Permanently removes your profile, posts, and group memberships. This cannot be undone.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="delete-confirm">
+            Type <span className="font-mono font-bold">DELETE</span> to confirm
+          </Label>
           <div className="flex gap-2">
             <Input
-              id="username"
-              value={username}
-              onChange={(e) => { setUsername(e.target.value); setUsernameError(""); setUsernameSaved(false); }}
-              placeholder="your_handle"
+              id="delete-confirm"
+              value={confirmation}
+              onChange={(e) => { setConfirmation(e.target.value); setError(""); }}
+              placeholder="DELETE"
+              className="max-w-48"
             />
             <Button
-              onClick={() => { setUsernameError(""); setUsernameMutation.mutate({ username }); }}
-              disabled={!username.trim() || setUsernameMutation.isPending}
+              variant="destructive"
+              disabled={confirmation !== "DELETE" || deleteAccount.isPending}
+              onClick={handleDelete}
             >
-              {setUsernameMutation.isPending ? "Saving…" : "Save"}
+              {deleteAccount.isPending ? "Deleting…" : "Delete account"}
             </Button>
           </div>
-          {usernameError && <p className="text-xs text-destructive">{usernameError}</p>}
-          {usernameSaved && <p className="text-xs text-green-600">Username saved!</p>}
-          <p className="text-xs text-muted-foreground">3–20 chars, lowercase letters, numbers and underscores only.</p>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Settings page shell
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SECTION_COMPONENTS: Record<SectionId, React.ComponentType> = {
+  appearance:    AppearanceSection,
+  profile:       ProfileSection,
+  invite:        InviteSection,
+  notifications: NotificationsSection,
+  connected:     ConnectedSection,
+  privacy:       PrivacySection,
+  danger:        DangerSection,
+};
+
+export default function SettingsPage() {
+  const searchParams = useSearchParams();
+  const paramSection = searchParams.get("section") as SectionId | null;
+  const [active, setActive] = useState<SectionId>(
+    paramSection && NAV_ITEMS.some((n) => n.id === paramSection) ? paramSection : "appearance"
+  );
+
+  const ActiveSection = SECTION_COMPONENTS[active];
+
+  return (
+    <div className="space-y-4">
+      <h1 className="text-2xl font-bold">Settings</h1>
+
+      <div className="flex gap-8 min-h-0">
+        {/* Category nav — sticky on desktop */}
+        <nav className="hidden sm:flex flex-col gap-0.5 w-44 shrink-0 pt-1">
+          {NAV_ITEMS.map(({ id, label, icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setActive(id)}
+              className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-left transition-colors ${
+                active === id
+                  ? "bg-accent text-foreground font-semibold"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent"
+              } ${id === "danger" ? "mt-4 text-destructive hover:text-destructive" : ""}`}
+            >
+              <span className="shrink-0">{icon}</span>
+              {label}
+            </button>
+          ))}
+        </nav>
+
+        {/* Mobile: horizontal tab strip */}
+        <div className="sm:hidden flex gap-1 overflow-x-auto pb-2 -mx-4 px-4">
+          {NAV_ITEMS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setActive(id)}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors border ${
+                active === id
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "text-muted-foreground border-border hover:bg-accent"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
-        <div className="space-y-1 pt-2 border-t">
-          <Label>Email</Label>
-          <p className="text-sm text-muted-foreground">{me?.email ?? "—"}</p>
+        {/* Section content */}
+        <div className="flex-1 min-w-0">
+          <ActiveSection />
         </div>
-      </section>
-
-      {/* ── Invite a friend ──────────────────────────────────────────────────── */}
-      <InviteSection />
-
-      {/* ── Notifications ────────────────────────────────────────────────────── */}
-      <section className="space-y-1">
-        <div className="flex items-center justify-between border-b pb-2">
-          <h2 className="text-base font-semibold">Notifications</h2>
-          {prefsSaved && <span className="text-xs text-green-600">Saved</span>}
-        </div>
-
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-3 pb-1">
-            In-app alerts
-          </p>
-          <div className="divide-y">
-            <ToggleRow
-              label="Friend request received"
-              checked={prefs.friendRequestReceived}
-              onChange={(v) => setPref("friendRequestReceived", v)}
-              disabled={updatePrefs.isPending}
-            />
-            <ToggleRow
-              label="Friend request accepted"
-              checked={prefs.friendRequestAccepted}
-              onChange={(v) => setPref("friendRequestAccepted", v)}
-              disabled={updatePrefs.isPending}
-            />
-            <ToggleRow
-              label="Group invite received"
-              checked={prefs.groupInviteReceived}
-              onChange={(v) => setPref("groupInviteReceived", v)}
-              disabled={updatePrefs.isPending}
-            />
-          </div>
-
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-4 pb-1">
-            Email — Events
-          </p>
-          <div className="divide-y">
-            <ToggleRow
-              label="Event confirmed"
-              description="When an event you RSVP'd to is confirmed with a time."
-              checked={prefs.emailEventConfirmed}
-              onChange={(v) => setPref("emailEventConfirmed", v)}
-              disabled={updatePrefs.isPending}
-            />
-            <ToggleRow
-              label="Event cancelled"
-              description="When an event you RSVP'd to is cancelled."
-              checked={prefs.emailEventCancelled}
-              onChange={(v) => setPref("emailEventCancelled", v)}
-              disabled={updatePrefs.isPending}
-            />
-            <ToggleRow
-              label="RSVP reminder"
-              description="A reminder before an event if you haven't RSVP'd yet."
-              checked={prefs.emailEventRsvpReminder}
-              onChange={(v) => setPref("emailEventRsvpReminder", v)}
-              disabled={updatePrefs.isPending}
-            />
-          </div>
-
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-4 pb-1">
-            Email — Polls
-          </p>
-          <div className="divide-y">
-            <ToggleRow
-              label="Poll opened"
-              description="When a new poll is opened in a group you're in."
-              checked={prefs.emailPollOpened}
-              onChange={(v) => setPref("emailPollOpened", v)}
-              disabled={updatePrefs.isPending}
-            />
-            <ToggleRow
-              label="Poll closed"
-              description="When a poll you voted on is closed."
-              checked={prefs.emailPollClosed}
-              onChange={(v) => setPref("emailPollClosed", v)}
-              disabled={updatePrefs.isPending}
-            />
-          </div>
-
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-4 pb-1">
-            Email — Social
-          </p>
-          <div className="divide-y">
-            <ToggleRow
-              label="Group invite"
-              description="When someone invites you to a group."
-              checked={prefs.emailGroupInvite}
-              onChange={(v) => setPref("emailGroupInvite", v)}
-              disabled={updatePrefs.isPending}
-            />
-            <ToggleRow
-              label="Friend request"
-              description="When someone sends you a friend request."
-              checked={prefs.emailFriendRequest}
-              onChange={(v) => setPref("emailFriendRequest", v)}
-              disabled={updatePrefs.isPending}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* ── Connected accounts ────────────────────────────────────────────────── */}
-      <ConnectedAccountsSection />
-
-      {/* ── Blocked users ─────────────────────────────────────────────────────── */}
-      <BlockedUsersSection />
-
-      {/* ── Danger zone ───────────────────────────────────────────────────────── */}
-      <DangerZoneSection />
+      </div>
     </div>
   );
 }
