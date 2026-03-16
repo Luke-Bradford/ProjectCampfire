@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { and, eq, ilike, ne, or } from "drizzle-orm";
+import { and, countDistinct, eq, ilike, ne, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { user, friendships, notifications, groupMemberships, groups } from "@/server/db/schema";
+import { user, friendships, notifications, groupMemberships, groups, gameOwnerships } from "@/server/db/schema";
 import { enqueueFriendRequest, enqueueFriendRequestAccepted } from "@/server/jobs/email-jobs";
 import { assertRateLimit } from "@/server/ratelimit";
 
@@ -325,5 +325,54 @@ export const friendsRouter = createTRPCRouter({
       });
       void enqueueFriendRequest({ requesterName: ctx.user.name ?? "Someone", recipientUserId: found.id })
         .catch((err) => console.error("enqueueFriendRequest failed", err));
+    }),
+
+  // Return a user's public game library — visible only when their profile is open (CAMP-115).
+  // Returns up to `limit` games (default 12) plus the total count.
+  getProfileGames: protectedProcedure
+    .input(z.object({ userId: z.string(), limit: z.number().int().min(1).max(50).default(12) }))
+    .query(async ({ ctx, input }) => {
+      await assertRateLimit(`rl:profile:games:${ctx.user.id}`, 30, 60);
+      // Only show games for open profiles
+      const profile = await db.query.user.findFirst({
+        where: eq(user.id, input.userId),
+        columns: { profileVisibility: true },
+      });
+      if (!profile || profile.profileVisibility !== "open") {
+        return { items: [], total: 0 };
+      }
+
+      // Count distinct games (not ownership rows) — a game owned on multiple platforms
+      // produces multiple rows, so countDistinct avoids inflating the total.
+      const [countRow] = await db
+        .select({ total: countDistinct(gameOwnerships.gameId) })
+        .from(gameOwnerships)
+        .where(and(eq(gameOwnerships.userId, input.userId), eq(gameOwnerships.hidden, false)));
+      const total = countRow?.total ?? 0;
+
+      // Fetch cover art for the first `limit` games (one row per ownership, dedupe in JS)
+      const rows = await db.query.gameOwnerships.findMany({
+        where: and(eq(gameOwnerships.userId, input.userId), eq(gameOwnerships.hidden, false)),
+        with: { game: { columns: { id: true, title: true, coverUrl: true } } },
+        orderBy: (t, { asc }) => [asc(t.gameId)],
+        // Fetch up to limit+50 to allow JS-side dedup to fill `limit` unique games
+        limit: input.limit + 50,
+      });
+
+      // Deduplicate by gameId (a game owned on multiple platforms has one row per platform).
+      // Note: fetching limit+50 rows covers the common case but may yield fewer than `limit`
+      // unique games if the user owns many games on 3+ platforms. Acceptable at MVP scale.
+      const seen = new Set<string>();
+      const items: { id: string; title: string; coverUrl: string | null }[] = [];
+      for (const r of rows) {
+        if (seen.has(r.gameId)) continue;
+        seen.add(r.gameId);
+        // Guard against orphaned ownership rows (FK to a deleted game)
+        if (!r.game) continue;
+        items.push(r.game);
+        if (items.length >= input.limit) break;
+      }
+
+      return { items, total };
     }),
 });
