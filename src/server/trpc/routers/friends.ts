@@ -359,12 +359,16 @@ export const friendsRouter = createTRPCRouter({
         limit: input.limit + 50,
       });
 
-      // Deduplicate by gameId (a game owned on multiple platforms has one row per platform)
+      // Deduplicate by gameId (a game owned on multiple platforms has one row per platform).
+      // Note: fetching limit+50 rows covers the common case but may yield fewer than `limit`
+      // unique games if the user owns many games on 3+ platforms. Acceptable at MVP scale.
       const seen = new Set<string>();
       const items: { id: string; title: string; coverUrl: string | null }[] = [];
       for (const r of rows) {
         if (seen.has(r.gameId)) continue;
         seen.add(r.gameId);
+        // Guard against orphaned ownership rows (FK to a deleted game)
+        if (!r.game) continue;
         items.push(r.game);
         if (items.length >= input.limit) break;
       }
