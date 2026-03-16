@@ -416,7 +416,12 @@ export const friendsRouter = createTRPCRouter({
       const json = (await res.json()) as {
         friendslist?: { friends?: { steamid: string }[] };
       };
-      steamFriendIds = json.friendslist?.friends?.map((f) => f.steamid) ?? [];
+      // Filter to valid Steam64 IDs (17-digit numeric strings) to guard against
+      // malformed or missing steamid fields in the response.
+      const STEAM_ID_RE = /^\d{17}$/;
+      steamFriendIds = (json.friendslist?.friends ?? [])
+        .map((f) => f.steamid)
+        .filter((id): id is string => typeof id === "string" && STEAM_ID_RE.test(id));
     } catch (err) {
       log.warn("GetFriendList fetch error", { userId: ctx.user.id, err: String(err) });
       return [];
@@ -440,11 +445,9 @@ export const friendsRouter = createTRPCRouter({
     // Exclude users with an existing friendship row in either direction
     const matchIds = matches.map((u) => u.id);
     const existing = await db.query.friendships.findMany({
-      where: and(
-        or(
-          and(eq(friendships.requesterId, ctx.user.id), inArray(friendships.addresseeId, matchIds)),
-          and(inArray(friendships.requesterId, matchIds), eq(friendships.addresseeId, ctx.user.id)),
-        )
+      where: or(
+        and(eq(friendships.requesterId, ctx.user.id), inArray(friendships.addresseeId, matchIds)),
+        and(inArray(friendships.requesterId, matchIds), eq(friendships.addresseeId, ctx.user.id)),
       ),
       columns: { requesterId: true, addresseeId: true, status: true },
     });

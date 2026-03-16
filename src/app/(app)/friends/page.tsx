@@ -58,7 +58,7 @@ function SteamSuggestions() {
         </div>
       ) : (
         <ul className="space-y-2">
-          {suggestions!.map((u) => (
+          {(suggestions ?? []).map((u) => (
             <li key={u.id} className="flex items-center justify-between rounded-xl border bg-card shadow-sm px-4 py-3">
               <Link
                 href={u.username ? `/u/${u.username}` : "#"}
