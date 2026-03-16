@@ -213,7 +213,7 @@ export default function EventsPage() {
               <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
             </svg>
           }
-          heading="No groups yet"
+          heading="No events yet"
           description="Join or create a group to start planning gaming sessions."
           action={<Button asChild size="sm"><Link href="/groups">Go to Groups</Link></Button>}
         />
