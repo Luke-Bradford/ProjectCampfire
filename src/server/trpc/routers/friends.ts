@@ -429,7 +429,8 @@ export const friendsRouter = createTRPCRouter({
 
     if (steamFriendIds.length === 0) return [];
 
-    // Find Campfire users who have any of these Steam IDs
+    // Find Campfire users who have any of these Steam IDs.
+    // Fetch 60 (slight over-fetch) to allow for post-exclusion trimming to 50.
     const matches = await db
       .select({ id: user.id, name: user.name, username: user.username, image: user.image })
       .from(user)
@@ -438,7 +439,8 @@ export const friendsRouter = createTRPCRouter({
           ne(user.id, ctx.user.id),
           inArray(user.steamId, steamFriendIds),
         )
-      );
+      )
+      .limit(60);
 
     if (matches.length === 0) return [];
 
