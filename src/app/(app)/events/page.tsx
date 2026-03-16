@@ -140,7 +140,7 @@ function GroupEvents({ groupId, groupName }: { groupId: string; groupName: strin
                       )}
                     </div>
                   ) : (
-                    <div className="w-12 shrink-0 flex items-center justify-center">
+                    <div className="w-16 shrink-0 flex items-center justify-center">
                       <span className="text-xs text-muted-foreground">TBD</span>
                     </div>
                   )}

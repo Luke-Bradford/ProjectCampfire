@@ -99,7 +99,7 @@ export default function PeoplePage() {
             onChange={(e) => setQuery(e.target.value)}
             className="max-w-sm"
           />
-          <Button type="submit" disabled={!query.trim()}>
+          <Button type="submit" disabled={!query.trim()} className="disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100">
             Search
           </Button>
         </form>
