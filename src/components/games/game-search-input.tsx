@@ -53,7 +53,7 @@ export function GameSearchInput({
         onFocus={() => { if (query.trim()) setShowDropdown(true); }}
         autoComplete="off"
         autoFocus={autoFocus}
-        disabled={disabled ?? quickAdd.isPending}
+        disabled={disabled || quickAdd.isPending}
       />
       {showDropdown && query.trim().length >= 1 && (
         <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow-md text-sm overflow-hidden">
