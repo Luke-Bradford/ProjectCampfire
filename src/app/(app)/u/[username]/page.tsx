@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { TRPCError } from "@trpc/server";
+import { Gamepad2 } from "lucide-react";
 import { trpc } from "@/trpc/server";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AddFriendButton } from "./add-friend-button";
@@ -31,6 +32,11 @@ export default async function UserProfilePage({
 
   const isPrivate = profile.profileVisibility === "private";
 
+  // Fetch game library in parallel with page render (only for open profiles)
+  const profileGames = isPrivate
+    ? { items: [], total: 0 }
+    : await trpc.friends.getProfileGames({ userId: profile.id }).catch(() => ({ items: [], total: 0 }));
+
   return (
     <div className="mx-auto max-w-lg space-y-6">
       <div className="flex items-center gap-5">
@@ -54,6 +60,41 @@ export default async function UserProfilePage({
           {profile.bio && (
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">{profile.bio}</p>
           )}
+
+          {/* Game library */}
+          {profileGames.total > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold flex items-center gap-1.5">
+                  <Gamepad2 size={14} className="text-muted-foreground" />
+                  {profileGames.total} game{profileGames.total === 1 ? "" : "s"}
+                </p>
+              </div>
+              <div className="grid grid-cols-6 gap-2">
+                {profileGames.items.map((g) => (
+                  <div
+                    key={g.id}
+                    title={g.title}
+                    className="aspect-[3/4] rounded-md overflow-hidden bg-muted border"
+                  >
+                    {g.coverUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={g.coverUrl}
+                        alt={g.title}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Gamepad2 size={16} className="text-muted-foreground/40" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <ProfileGroups userId={profile.id} />
           <AddFriendButton targetId={profile.id} />
         </>

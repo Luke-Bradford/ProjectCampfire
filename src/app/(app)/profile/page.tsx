@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Layers, Gamepad2, Calendar, ExternalLink, Settings } from "lucide-react";
+import { Users, Layers, Gamepad2, Calendar, ExternalLink, Settings, ChevronRight } from "lucide-react";
 
 function initials(name: string) {
   return name
@@ -39,6 +39,131 @@ function StatCard({
       <span className="text-2xl font-bold tabular-nums">{count}</span>
       <span className="text-xs text-muted-foreground font-medium">{label}</span>
     </Link>
+  );
+}
+
+const PLATFORM_LABELS: Record<string, string> = {
+  pc: "PC",
+  playstation: "PS",
+  xbox: "Xbox",
+  nintendo: "NS",
+  other: "Other",
+};
+
+function GamesTab() {
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    api.games.myGames.useInfiniteQuery(
+      { limit: 24 },
+      { getNextPageParam: (p) => p.nextCursor }
+    );
+
+  const allGames = data?.pages.flatMap((p) => p.items) ?? [];
+  const total = data?.pages[0]?.total ?? 0;
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+        {Array.from({ length: 12 }).map((_, i) => (
+          <Skeleton key={i} className="aspect-[3/4] rounded-lg" />
+        ))}
+      </div>
+    );
+  }
+
+  if (allGames.length === 0) {
+    return (
+      <div className="rounded-xl border bg-card shadow-sm p-6 flex flex-col items-center gap-3 text-center">
+        <Gamepad2 size={32} className="text-muted-foreground" />
+        <div>
+          <p className="font-semibold">No games yet</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Add games to your library to track what you own.
+          </p>
+        </div>
+        <Button asChild size="sm">
+          <Link href="/games">
+            <ExternalLink size={13} className="mr-1.5" />
+            Add games
+          </Link>
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          {total} game{total === 1 ? "" : "s"} in your library
+        </p>
+        <Button asChild variant="ghost" size="sm" className="text-xs gap-1 h-7 px-2">
+          <Link href="/games">
+            Manage
+            <ChevronRight size={12} />
+          </Link>
+        </Button>
+      </div>
+
+      {/* Cover grid */}
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+        {allGames.map((g) => (
+          <Link
+            key={g.id}
+            href={`/games/${g.id}`}
+            className="group relative flex flex-col gap-1"
+            title={g.title}
+          >
+            {/* Cover art */}
+            <div className="aspect-[3/4] rounded-lg overflow-hidden bg-muted border">
+              {g.coverUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={g.coverUrl}
+                  alt={g.title}
+                  className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Gamepad2 size={20} className="text-muted-foreground/40" />
+                </div>
+              )}
+            </div>
+
+            {/* Title */}
+            <p className="text-[11px] leading-snug truncate text-muted-foreground group-hover:text-foreground transition-colors">
+              {g.title}
+            </p>
+
+            {/* Platform badges */}
+            <div className="flex flex-wrap gap-0.5">
+              {g.platforms.map((p) => (
+                <span
+                  key={p}
+                  className="text-[9px] font-medium px-1 py-0.5 rounded bg-muted text-muted-foreground leading-none"
+                >
+                  {PLATFORM_LABELS[p] ?? p}
+                </span>
+              ))}
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      {/* Load more */}
+      {hasNextPage && (
+        <div className="flex justify-center pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isFetchingNextPage}
+            onClick={() => void fetchNextPage()}
+          >
+            {isFetchingNextPage ? "Loading…" : "Load more"}
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -164,25 +289,7 @@ export default function MyProfilePage() {
 
         {/* ── Games ── */}
         <TabsContent value="games" className="mt-4">
-          <div className="rounded-xl border bg-card shadow-sm p-6 flex flex-col items-center gap-3 text-center">
-            <Gamepad2 size={32} className="text-muted-foreground" />
-            <div>
-              <p className="font-semibold">Your game library</p>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {statsLoading
-                  ? "Loading…"
-                  : stats?.gameCount
-                  ? `${stats.gameCount} game${stats.gameCount === 1 ? "" : "s"} in your library.`
-                  : "No games added yet."}
-              </p>
-            </div>
-            <Button asChild size="sm">
-              <Link href="/games">
-                <ExternalLink size={13} className="mr-1.5" />
-                Manage games
-              </Link>
-            </Button>
-          </div>
+          <GamesTab />
         </TabsContent>
 
         {/* ── Availability ── */}
