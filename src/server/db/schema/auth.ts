@@ -13,6 +13,8 @@ export const profileVisibilityEnum = pgEnum("profile_visibility", [
   "private",
 ]);
 
+export const userStatusEnum = pgEnum("user_status", ["online", "busy", "offline"]);
+
 export type NotificationPrefs = {
   // ── In-app (bell) ───────────────────────────────────────────
   friendRequestReceived?: boolean;  // default on
@@ -65,6 +67,8 @@ export const user = pgTable("user", {
   // Steam library sync
   steamLibrarySyncedAt: timestamp("steam_library_synced_at"),
   steamLibraryPublic: boolean("steam_library_public").notNull().default(true),
+  // Presence
+  status: userStatusEnum("status").notNull().default("online"),
 });
 
 // better-auth session table
