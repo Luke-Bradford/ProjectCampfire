@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createId } from "@paralleldrive/cuid2";
 import { auth } from "@/server/auth";
-import { validateImage, uploadImage, ImageValidationError } from "@/server/storage";
+import { validateImage, uploadImage, ImageValidationError, GIF_MAX_BYTES } from "@/server/storage";
 import { assertRateLimit } from "@/server/ratelimit";
 
-const MAX_BYTES = 5 * 1024 * 1024; // 5 MB — must match validateImage in storage.ts
+// Stream cap is the highest allowed limit across all types.
+// validateImage enforces the per-type limit (5 MB non-GIF, 10 MB GIF) after buffering.
+const MAX_BYTES = GIF_MAX_BYTES; // 10 MB
 // uploadId is a client-generated cuid used only to namespace the MinIO path.
 // better-auth user IDs use mixed-case alphanumeric — pattern must allow uppercase.
 const UPLOAD_ID_RE = /^[A-Za-z0-9]{10,}$/;
@@ -38,7 +40,9 @@ export async function POST(req: NextRequest) {
     totalBytes += value.byteLength;
     if (totalBytes > MAX_BYTES) {
       await reader.cancel();
-      return NextResponse.json({ error: "Image exceeds the 5 MB size limit." }, { status: 413 });
+      // Generic message — validateImage() will surface the per-type limit (5 MB / 10 MB)
+      // once the full buffer is available. This only fires for truly oversized requests.
+      return NextResponse.json({ error: "Image exceeds the maximum allowed size." }, { status: 413 });
     }
     chunks.push(value);
   }

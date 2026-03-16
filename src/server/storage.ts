@@ -10,7 +10,8 @@ export const ALLOWED_IMAGE_MIME_TYPES = [
 export type AllowedImageMimeType = (typeof ALLOWED_IMAGE_MIME_TYPES)[number];
 
 const ALLOWED_SET = new Set<string>(ALLOWED_IMAGE_MIME_TYPES);
-const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_BYTES = 5 * 1024 * 1024; // 5 MB for non-GIF images
+export const GIF_MAX_BYTES = 10 * 1024 * 1024; // 10 MB for GIFs (animated)
 
 // MINIO_ENDPOINT is the hostname only (e.g. "localhost" or "minio").
 // Port is configured separately via MINIO_PORT (default 9000).
@@ -30,7 +31,29 @@ export class ImageValidationError extends Error {
 }
 
 /**
+ * Returns true if the buffer starts with the GIF87a or GIF89a magic bytes.
+ * Checks all 6 header bytes: "GIF" + "87a" or "89a".
+ */
+export function bufferIsGif(buffer: Buffer): boolean {
+  if (buffer.length < 6) return false;
+  // "GIF"
+  if (buffer[0] !== 0x47 || buffer[1] !== 0x49 || buffer[2] !== 0x46) return false;
+  // "87a" or "89a"
+  if (buffer[3] !== 0x38) return false; // "8"
+  if (buffer[4] !== 0x37 && buffer[4] !== 0x39) return false; // "7" or "9"
+  if (buffer[5] !== 0x61) return false; // "a"
+  return true;
+}
+
+/**
  * Validates an image buffer before any storage operation.
+ * The size limit is determined by the actual file type (magic bytes), not the
+ * declared MIME type — this prevents a client from bypassing the 5 MB non-GIF
+ * limit by declaring image/gif on a JPEG or PNG.
+ *
+ * GIFs: up to GIF_MAX_BYTES (10 MB).
+ * All other types: up to MAX_BYTES (5 MB).
+ *
  * Throws ImageValidationError if the type or size is not allowed.
  */
 export function validateImage(buffer: Buffer, mimeType: string): void {
@@ -39,9 +62,17 @@ export function validateImage(buffer: Buffer, mimeType: string): void {
       `Unsupported image type "${mimeType}". Allowed: jpeg, png, gif, webp.`,
     );
   }
-  if (buffer.byteLength > MAX_BYTES) {
+  // Use actual magic bytes to decide the size limit — the declared mimeType is
+  // client-controlled and cannot be trusted for limit selection.
+  // Note: we still validate mimeType against the allowlist above (decorative type gate),
+  // but the size limit is always based on actual bytes. A GIF declared as image/jpeg
+  // gets 10 MB; a JPEG declared as image/gif gets 5 MB. Both are safe outcomes.
+  const actuallyGif = bufferIsGif(buffer);
+  const limit = actuallyGif ? GIF_MAX_BYTES : MAX_BYTES;
+  const limitMB = limit / 1024 / 1024;
+  if (buffer.byteLength > limit) {
     throw new ImageValidationError(
-      `Image exceeds the 5 MB size limit (got ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB).`,
+      `Image exceeds the ${limitMB} MB size limit (got ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB).`,
     );
   }
 }

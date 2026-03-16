@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 const MAX_CHARS = 1000;
 const MAX_IMAGES = 4;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const MAX_BYTES = 5 * 1024 * 1024; // 5 MB for non-GIF images
+const GIF_MAX_BYTES = 10 * 1024 * 1024; // 10 MB for GIFs
 
 type SelectedImage = {
   /** Stable id used as the postId in the upload path — NOT the real DB post id. */
@@ -58,7 +60,12 @@ export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string;
       file,
       preview: URL.createObjectURL(file),
       key: null,
-      error: ALLOWED_TYPES.includes(file.type) ? null : `Unsupported type "${file.type}"`,
+      error: (() => {
+        if (!ALLOWED_TYPES.includes(file.type)) return `Unsupported type "${file.type}"`;
+        const limit = file.type === "image/gif" ? GIF_MAX_BYTES : MAX_BYTES;
+        if (file.size > limit) return `File too large (max ${limit / 1024 / 1024} MB for ${file.type === "image/gif" ? "GIFs" : "images"})`;
+        return null;
+      })(),
       abort: new AbortController(),
     }));
 
