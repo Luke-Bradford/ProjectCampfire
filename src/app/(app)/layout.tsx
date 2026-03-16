@@ -38,7 +38,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <CampfireLogo size={18} />
         </header>
 
-        <main className="flex-1 px-4 pt-6 pb-20 md:pb-6 md:px-6">
+        <main className="flex-1 w-full max-w-4xl mx-auto px-4 pt-6 pb-20 md:pb-6 md:px-8">
           {children}
         </main>
       </div>
