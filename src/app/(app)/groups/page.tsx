@@ -5,7 +5,7 @@ import Link from "next/link";
 import { formatDistanceToNow, format, isToday, isTomorrow } from "date-fns";
 import { Calendar, Vote } from "lucide-react";
 import { api } from "@/trpc/react";
-import type { rsvpStatusEnum } from "@/server/db/schema";
+import { rsvpStatusEnum } from "@/server/db/schema";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -36,6 +36,47 @@ const STRIP_COLORS = [
 function groupColor(name: string): string {
   const hash = [...name].reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
   return STRIP_COLORS[hash % STRIP_COLORS.length]!;
+}
+
+// Offered Going/Skip — the subset of rsvpStatusEnum used on the groups list.
+// Derived at module level from the actual enum so a future rename is a compile error.
+const RSVP_QUICK_OPTIONS = rsvpStatusEnum.enumValues.filter(
+  (v): v is "yes" | "no" => v === "yes" || v === "no"
+);
+
+function RsvpButtons({
+  eventId,
+  myRsvp,
+}: {
+  eventId: string;
+  myRsvp: string | null;
+}) {
+  const utils = api.useUtils();
+  const upsertRsvp = api.events.upsertRsvp.useMutation({
+    onSuccess: () => void utils.groups.list.invalidate(),
+  });
+
+  return (
+    <div className="flex gap-1 shrink-0">
+      {RSVP_QUICK_OPTIONS.map((s) => (
+        <button
+          key={s}
+          type="button"
+          disabled={upsertRsvp.isPending}
+          onClick={() => upsertRsvp.mutate({ eventId, status: s })}
+          className={`rounded-md px-2 py-0.5 text-[11px] font-medium border transition-colors disabled:opacity-50 ${
+            myRsvp === s
+              ? s === "yes"
+                ? "bg-emerald-500 border-emerald-500 text-white"
+                : "bg-destructive/80 border-destructive/80 text-white"
+              : "border-border text-muted-foreground hover:bg-accent"
+          }`}
+        >
+          {s === "yes" ? "Going" : "Skip"}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function CreateGroupDialog({ onCreated }: { onCreated: () => void }) {
@@ -118,12 +159,7 @@ function formatEventDate(d: Date): string {
 }
 
 export default function GroupsPage() {
-  const utils = api.useUtils();
   const { data: myGroups = [], isLoading, refetch } = api.groups.list.useQuery();
-
-  const upsertRsvp = api.events.upsertRsvp.useMutation({
-    onSuccess: () => void utils.groups.list.invalidate(),
-  });
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -199,32 +235,7 @@ export default function GroupsPage() {
                           </p>
                         </div>
                       </div>
-                      {/* Inline RSVP toggle — typed via rsvpStatusEnum to catch future enum renames */}
-                      {(() => {
-                        const eventId = g.nextEvent.id;
-                        const rsvpOptions: (typeof rsvpStatusEnum.enumValues)[number][] = ["yes", "no"];
-                        return (
-                          <div className="flex gap-1 shrink-0">
-                            {rsvpOptions.map((s) => (
-                              <button
-                                key={s}
-                                type="button"
-                                disabled={upsertRsvp.isPending}
-                                onClick={() => upsertRsvp.mutate({ eventId, status: s })}
-                                className={`rounded-md px-2 py-0.5 text-[11px] font-medium border transition-colors disabled:opacity-50 ${
-                                  g.nextEvent?.myRsvp === s
-                                    ? s === "yes"
-                                      ? "bg-emerald-500 border-emerald-500 text-white"
-                                      : "bg-destructive/80 border-destructive/80 text-white"
-                                    : "border-border text-muted-foreground hover:bg-accent"
-                                }`}
-                              >
-                                {s === "yes" ? "Going" : "Skip"}
-                              </button>
-                            ))}
-                          </div>
-                        );
-                      })()}
+                      <RsvpButtons eventId={g.nextEvent.id} myRsvp={g.nextEvent.myRsvp} />
                     </div>
                   ) : g.activePoll ? (
                     <Link
