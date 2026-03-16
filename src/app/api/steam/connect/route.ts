@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/server/auth";
 import { env } from "@/env";
 import { headers } from "next/headers";
@@ -10,21 +10,28 @@ import { headers } from "next/headers";
  * The user must be logged in — this links Steam to an existing account,
  * it does not register a new one.
  *
+ * Optional query param: `return_to` — an internal path to redirect to after
+ * linking. If omitted, the callback defaults to /settings. Must be a relative
+ * path (validated in the callback to prevent open-redirect attacks).
+ *
  * Redirects the browser to the Steam login page with a return URL pointing
  * to /api/steam/callback.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) {
     return NextResponse.redirect(new URL("/login", env.NEXT_PUBLIC_APP_URL));
   }
 
-  const callbackUrl = `${env.NEXT_PUBLIC_APP_URL}/api/steam/callback`;
+  // Pass an optional return_to through the callback as a query param.
+  const returnTo = req.nextUrl.searchParams.get("return_to") ?? "";
+  const callbackUrl = new URL(`${env.NEXT_PUBLIC_APP_URL}/api/steam/callback`);
+  if (returnTo) callbackUrl.searchParams.set("return_to", returnTo);
 
   const params = new URLSearchParams({
     "openid.ns": "http://specs.openid.net/auth/2.0",
     "openid.mode": "checkid_setup",
-    "openid.return_to": callbackUrl,
+    "openid.return_to": callbackUrl.toString(),
     "openid.realm": env.NEXT_PUBLIC_APP_URL,
     "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
     "openid.claimed_id": "http://specs.openid.net/auth/2.0/identifier_select",

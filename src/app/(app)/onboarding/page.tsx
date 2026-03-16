@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useRef, useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
@@ -378,25 +378,82 @@ function StepInvite({ onDone }: { onDone: () => void }) {
   );
 }
 
+// ── Step 4: Connect Steam (skippable) ─────────────────────────────────────────
+
+function StepSteam({ onDone, justLinked }: { onDone: () => void; justLinked: boolean }) {
+  return (
+    <Card className="w-full max-w-sm">
+      <CardHeader>
+        <CardTitle>Connect Steam</CardTitle>
+        <CardDescription>
+          Link your Steam account so your group can see what games you own and play together.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {justLinked ? (
+          <div className="flex items-center gap-2 rounded-md bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-400">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            Steam account connected!
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Your library will sync automatically so friends can see who already owns a game before voting.
+          </p>
+        )}
+      </CardContent>
+      <CardFooter className="flex gap-2">
+        {justLinked ? (
+          <Button className="w-full" onClick={onDone}>
+            Continue
+          </Button>
+        ) : (
+          <>
+            <Button type="button" variant="ghost" className="flex-1" onClick={onDone}>
+              Skip
+            </Button>
+            <Button asChild className="flex-1">
+              <a href="/api/steam/connect?return_to=/onboarding%3Fstep%3Dsteam">
+                Connect Steam
+              </a>
+            </Button>
+          </>
+        )}
+      </CardFooter>
+    </Card>
+  );
+}
+
 // ── Onboarding shell ──────────────────────────────────────────────────────────
 
-const STEPS = ["username", "profile", "invite"] as const;
+const STEPS = ["username", "profile", "invite", "steam"] as const;
 type Step = (typeof STEPS)[number];
 
 const STEP_LABELS: Record<Step, string> = {
   username: "Username",
   profile: "Profile",
   invite: "Invite",
+  steam: "Steam",
 };
 
-export default function OnboardingPage() {
+function OnboardingContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [step, setStep] = useState<Step>("username");
+
+  // When Steam OAuth redirects back with ?step=steam&steam_linked=1, jump to the steam step.
+  useEffect(() => {
+    if (searchParams.get("step") === "steam") {
+      setStep("steam");
+    }
+  }, [searchParams]);
 
   // Fetch current user to pre-fill the display name in step 2
   const { data: me } = api.user.me.useQuery();
 
   const stepIndex = STEPS.indexOf(step);
+  const justLinked = searchParams.get("steam_linked") === "1";
 
   function next() {
     const nextStep = STEPS[stepIndex + 1];
@@ -442,6 +499,15 @@ export default function OnboardingPage() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       )}
       {step === "invite" && <StepInvite onDone={next} />}
+      {step === "steam" && <StepSteam onDone={next} justLinked={justLinked} />}
     </div>
+  );
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={null}>
+      <OnboardingContent />
+    </Suspense>
   );
 }
