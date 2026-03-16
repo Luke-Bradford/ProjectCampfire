@@ -51,10 +51,7 @@ export function ProfileCard({
   const unreadCount = notifData?.count ?? 0;
   const setStatus = api.user.setStatus.useMutation({
     onSuccess: () => void utils.user.me.invalidate(),
-    onError: () => {
-      // Mutation failed silently — status reverts on next me refetch.
-      // No toast needed; the dropdown closes and state stays consistent.
-    },
+    onError: () => void utils.user.me.invalidate(),
   });
 
   const displayName = me?.name ?? name;
