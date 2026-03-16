@@ -159,7 +159,7 @@ export default function GroupsPage() {
           {myGroups.map((g) => (
             <div
               key={g.id}
-              className="rounded-xl border bg-card shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+              className="rounded-xl border bg-card shadow-sm overflow-hidden"
             >
               {/* Deterministic colour strip */}
               <div className={`h-1.5 w-full ${groupColor(g.name)}`} />
@@ -198,28 +198,31 @@ export default function GroupsPage() {
                           </p>
                         </div>
                       </div>
-                      {/* Inline RSVP toggle */}
-                      <div className="flex gap-1 shrink-0">
-                        {(["yes", "no"] as const).map((s) => (
-                          <button
-                            key={s}
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              upsertRsvp.mutate({ eventId: g.nextEvent!.id, status: s });
-                            }}
-                            className={`rounded-md px-2 py-0.5 text-[11px] font-medium border transition-colors ${
-                              g.nextEvent?.myRsvp === s
-                                ? s === "yes"
-                                  ? "bg-emerald-500 border-emerald-500 text-white"
-                                  : "bg-destructive/80 border-destructive/80 text-white"
-                                : "border-border text-muted-foreground hover:bg-accent"
-                            }`}
-                          >
-                            {s === "yes" ? "Going" : "Skip"}
-                          </button>
-                        ))}
-                      </div>
+                      {/* Inline RSVP toggle — status values match rsvpStatusEnum ("yes"|"no"|"maybe") */}
+                      {(() => {
+                        const eventId = g.nextEvent.id;
+                        return (
+                          <div className="flex gap-1 shrink-0">
+                            {(["yes", "no"] as const).map((s) => (
+                              <button
+                                key={s}
+                                type="button"
+                                disabled={upsertRsvp.isPending}
+                                onClick={() => upsertRsvp.mutate({ eventId, status: s })}
+                                className={`rounded-md px-2 py-0.5 text-[11px] font-medium border transition-colors disabled:opacity-50 ${
+                                  g.nextEvent?.myRsvp === s
+                                    ? s === "yes"
+                                      ? "bg-emerald-500 border-emerald-500 text-white"
+                                      : "bg-destructive/80 border-destructive/80 text-white"
+                                    : "border-border text-muted-foreground hover:bg-accent"
+                                }`}
+                              >
+                                {s === "yes" ? "Going" : "Skip"}
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </div>
                   ) : g.activePoll ? (
                     <Link

@@ -68,7 +68,7 @@ export const groupsRouter = createTRPCRouter({
       Promise.all(
         groupIds.map((id) =>
           db.query.posts.findFirst({
-            where: and(eq(posts.groupId, id)),
+            where: eq(posts.groupId, id),
             orderBy: desc(posts.createdAt),
             columns: { createdAt: true },
           }).then((p) => ({ id, lastPostAt: p?.createdAt ?? null }))
