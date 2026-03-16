@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, countDistinct, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, asc, count, countDistinct, eq, gt, ilike, inArray, or, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -195,6 +195,33 @@ export const gamesRouter = createTRPCRouter({
         platform: input.platform,
         source: "manual",
       });
+      return { owned: true };
+    }),
+
+  // Insert-only ownership add — used by the catalog "Add to library" CTA.
+  // Unlike toggleOwnership, this never deletes. Safe for double-clicks and stale cache.
+  // onConflictDoNothing makes it idempotent.
+  addToLibrary: protectedProcedure
+    .input(z.object({ gameId: z.string(), platform: z.enum(PLATFORMS) }))
+    .mutation(async ({ ctx, input }) => {
+      const game = await db.query.games.findFirst({
+        where: eq(games.id, input.gameId),
+        columns: { id: true },
+      });
+      if (!game) throw new TRPCError({ code: "NOT_FOUND", message: "Game not found." });
+
+      await db
+        .insert(gameOwnerships)
+        .values({
+          userId: ctx.user.id,
+          gameId: input.gameId,
+          platform: input.platform,
+          source: "manual",
+        })
+        // Specify conflict target explicitly so only the PK violation is silenced.
+        // gameOwnerships PK is (userId, gameId, platform).
+        .onConflictDoNothing({ target: [gameOwnerships.userId, gameOwnerships.gameId, gameOwnerships.platform] });
+
       return { owned: true };
     }),
 
@@ -401,6 +428,82 @@ export const gamesRouter = createTRPCRouter({
           poll.groupId === input.groupId ||
           (poll.event && poll.event.groupId === input.groupId)
       );
+    }),
+
+  // Browse the instance-wide game catalog with optional title search (CAMP-085).
+  // Returns paginated results with per-game owned status for the current user.
+  // Cursor is gameId (lexicographic, stable across pages).
+  catalog: protectedProcedure
+    .input(
+      z.object({
+        search: z.string().max(100).optional(),
+        cursor: z.string().optional(),
+        limit: z.number().int().min(1).max(50).default(24),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      await assertRateLimit(`rl:games:catalog:${ctx.user.id}`, 30, 60);
+
+      const term = input.search?.trim() ?? "";
+      // Escape LIKE metacharacters so user input is treated as a literal substring.
+      // Use sql`` with an explicit ESCAPE clause so PostgreSQL honours the backslash
+      // escaping — ilike() alone does not emit ESCAPE, making \% and \_ ineffective.
+      const escaped = term.replace(/[%_\\]/g, "\\$&");
+      const titleFilter = term.length > 0
+        ? sql`${games.title} ILIKE ${"%" + escaped + "%"} ESCAPE '\\'`
+        : undefined;
+
+      const where = and(
+        titleFilter,
+        input.cursor ? gt(games.id, input.cursor) : undefined,
+      );
+
+      // Total matching games (without cursor filter so it stays consistent across pages)
+      const totalWhere = titleFilter;
+      const [countRow] = await db
+        .select({ total: count(games.id) })
+        .from(games)
+        .where(totalWhere);
+      const total = countRow?.total ?? 0;
+
+      const rows = await db
+        .select({
+          id: games.id,
+          title: games.title,
+          coverUrl: games.coverUrl,
+          genres: games.genres,
+          minPlayers: games.minPlayers,
+          maxPlayers: games.maxPlayers,
+        })
+        .from(games)
+        .where(where)
+        .orderBy(asc(games.id))
+        .limit(input.limit + 1);
+
+      const hasMore = rows.length > input.limit;
+      const items = rows.slice(0, input.limit);
+      const nextCursor = hasMore ? items[items.length - 1]?.id : undefined;
+
+      // Check which of these games the current user already owns
+      const gameIds = items.map((g) => g.id);
+      const ownedRows = gameIds.length > 0
+        ? await db
+            .select({ gameId: gameOwnerships.gameId })
+            .from(gameOwnerships)
+            .where(
+              and(
+                eq(gameOwnerships.userId, ctx.user.id),
+                inArray(gameOwnerships.gameId, gameIds),
+              )
+            )
+        : [];
+      const ownedSet = new Set(ownedRows.map((r) => r.gameId));
+
+      return {
+        items: items.map((g) => ({ ...g, owned: ownedSet.has(g.id) })),
+        nextCursor,
+        total,
+      };
     }),
 
   // Ownership overlap for a game within a group (CAMP-104)
