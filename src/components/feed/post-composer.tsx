@@ -5,6 +5,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { GifPicker, type GifResult } from "./gif-picker";
 
 const MAX_CHARS = 1000;
 const MAX_IMAGES = 4;
@@ -26,6 +27,8 @@ export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string;
   const [body, setBody] = useState("");
   const [images, setImages] = useState<SelectedImage[]>([]);
   const [uploadingCount, setUploadingCount] = useState(0);
+  const [selectedGif, setSelectedGif] = useState<GifResult | null>(null);
+  const [gifPickerOpen, setGifPickerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const create = api.feed.create.useMutation({
@@ -33,6 +36,7 @@ export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string;
       images.forEach((img) => URL.revokeObjectURL(img.preview));
       setBody("");
       setImages([]);
+      setSelectedGif(null);
       onPosted();
     },
   });
@@ -48,6 +52,14 @@ export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string;
     !create.isPending &&
     !hasErrors &&
     allUploaded;
+
+  function handleGifSelect(gif: GifResult) {
+    setSelectedGif(gif);
+    setGifPickerOpen(false);
+    // Clear any uploaded images — GIF and images are mutually exclusive
+    images.forEach((img) => { img.abort.abort(); URL.revokeObjectURL(img.preview); });
+    setImages([]);
+  }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -134,6 +146,7 @@ export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string;
       groupId,
       eventId,
       imageKeys: imageKeys.length ? imageKeys : undefined,
+      gifUrl: selectedGif?.url,
     });
   }
 
@@ -147,6 +160,7 @@ export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string;
         maxLength={MAX_CHARS}
       />
 
+      {/* Uploaded images */}
       {images.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {images.map((img) => (
@@ -176,9 +190,30 @@ export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string;
         </div>
       )}
 
+      {/* Selected GIF preview */}
+      {selectedGif && (
+        <div className="relative inline-block">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={selectedGif.previewUrl}
+            alt={selectedGif.title}
+            className="max-h-48 rounded object-contain"
+          />
+          <button
+            type="button"
+            aria-label="Remove GIF"
+            className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border bg-background text-xs text-muted-foreground hover:text-destructive"
+            onClick={() => setSelectedGif(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {images.length < MAX_IMAGES && (
+          {/* Photo button — hidden when a GIF is selected */}
+          {!selectedGif && images.length < MAX_IMAGES && (
             <>
               <button
                 type="button"
@@ -196,6 +231,24 @@ export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string;
                 onChange={handleFileChange}
               />
             </>
+          )}
+          {/* GIF button — hidden when images are attached */}
+          {images.length === 0 && (
+            <div className="relative">
+              <button
+                type="button"
+                className={`text-xs hover:text-foreground ${selectedGif ? "text-foreground font-medium" : "text-muted-foreground"}`}
+                onClick={() => setGifPickerOpen((o) => !o)}
+              >
+                GIF
+              </button>
+              {gifPickerOpen && (
+                <GifPicker
+                  onSelect={handleGifSelect}
+                  onClose={() => setGifPickerOpen(false)}
+                />
+              )}
+            </div>
           )}
           <span className={`text-xs ${nearLimit ? "text-destructive" : "text-muted-foreground"}`}>
             {remaining} chars remaining

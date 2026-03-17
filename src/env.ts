@@ -38,6 +38,9 @@ export const env = createEnv({
     STEAM_API_KEY: z.string().optional(),
     // Minimum log level. One of: error | warn | info | debug. Defaults to "info".
     LOG_LEVEL: z.enum(["error", "warn", "info", "debug"]).default("info"),
+    // Tenor GIF API key — optional. When set, the GIF picker is enabled in the composer.
+    // Get a free key at https://developers.google.com/tenor/guides/quickstart
+    TENOR_API_KEY: z.string().optional(),
     // Web Push (VAPID) — optional. When set, browser push notifications are enabled.
     // Generate keys with: npx web-push generate-vapid-keys
     VAPID_PUBLIC_KEY: z.string().optional(),
@@ -85,6 +88,7 @@ export const env = createEnv({
     DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID,
     DISCORD_CLIENT_SECRET: process.env.DISCORD_CLIENT_SECRET,
     STEAM_API_KEY: process.env.STEAM_API_KEY,
+    TENOR_API_KEY: process.env.TENOR_API_KEY,
     LOG_LEVEL: process.env.LOG_LEVEL,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,

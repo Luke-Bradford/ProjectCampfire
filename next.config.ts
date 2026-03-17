@@ -64,6 +64,8 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "cdn.akamai.steamstatic.com", pathname: "/steam/apps/**" },
       // IGDB / Twitch CDN — game cover art
       { protocol: "https", hostname: "images.igdb.com", pathname: "/**" },
+      // Tenor GIF CDN — GIFs embedded via the GIF picker
+      { protocol: "https", hostname: "media.tenor.com", pathname: "/**" },
     ],
   },
 };
