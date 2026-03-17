@@ -45,6 +45,7 @@ export const events = pgTable("events", {
   status: eventStatusEnum("status").notNull().default("draft"),
   gameId: text("game_id").references(() => games.id, { onDelete: "set null" }),
   gameOptional: boolean("game_optional").notNull().default(false),
+  location: text("location"),
   confirmedStartsAt: timestamp("confirmed_starts_at"),
   confirmedEndsAt: timestamp("confirmed_ends_at"),
   /** Set when this event was auto-generated from a recurring template */

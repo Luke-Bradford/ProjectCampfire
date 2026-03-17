@@ -53,10 +53,11 @@ function CreateEventDialog({ groupId, onCreated }: { groupId: string; onCreated:
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [location, setLocation] = useState("");
   const [error, setError] = useState("");
 
   const create = api.events.create.useMutation({
-    onSuccess: () => { setOpen(false); setTitle(""); setDescription(""); onCreated(); },
+    onSuccess: () => { setOpen(false); setTitle(""); setDescription(""); setLocation(""); onCreated(); },
     onError: (e) => setError(e.message),
   });
 
@@ -68,7 +69,16 @@ function CreateEventDialog({ groupId, onCreated }: { groupId: string; onCreated:
       <DialogContent>
         <DialogHeader><DialogTitle>Create event</DialogTitle></DialogHeader>
         <form
-          onSubmit={(e) => { e.preventDefault(); setError(""); create.mutate({ groupId, title, description: description || undefined }); }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            setError("");
+            create.mutate({
+              groupId,
+              title,
+              description: description || undefined,
+              location: location || undefined,
+            });
+          }}
           className="space-y-4"
         >
           {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
@@ -79,6 +89,10 @@ function CreateEventDialog({ groupId, onCreated }: { groupId: string; onCreated:
           <div className="space-y-2">
             <Label htmlFor="event-desc">Description (optional)</Label>
             <Input id="event-desc" placeholder="What are you planning?" value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="event-location">Location (optional)</Label>
+            <Input id="event-location" placeholder="e.g. Discord #gaming, 123 Main St" value={location} onChange={(e) => setLocation(e.target.value)} />
           </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
