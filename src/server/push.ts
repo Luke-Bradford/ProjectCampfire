@@ -44,7 +44,7 @@ export async function sendPush(
 ): Promise<{ ok: boolean; expired: boolean }> {
   configure();
   if (!_configured) {
-    log.warn("sendPush called but VAPID not configured — skipping");
+    log.warn("sendPush called but VAPID not configured — VAPID env vars may be missing");
     return { ok: false, expired: false };
   }
 
