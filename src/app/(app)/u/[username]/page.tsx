@@ -5,6 +5,7 @@ import { trpc } from "@/trpc/server";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AddFriendButton } from "./add-friend-button";
 import { ProfileGroups } from "./profile-groups";
+import { ProfilePosts } from "./profile-posts";
 
 function initials(name: string) {
   return name
@@ -32,10 +33,13 @@ export default async function UserProfilePage({
 
   const isPrivate = profile.profileVisibility === "private";
 
-  // Fetch game library in parallel with page render (only for open profiles)
-  const profileGames = isPrivate
-    ? { items: [], total: 0 }
-    : await trpc.friends.getProfileGames({ userId: profile.id }).catch(() => ({ items: [], total: 0 }));
+  // Fetch game library and current user in parallel (games only for open profiles)
+  const [me, profileGames] = await Promise.all([
+    trpc.user.me(),
+    isPrivate
+      ? Promise.resolve({ items: [], total: 0 })
+      : trpc.friends.getProfileGames({ userId: profile.id }).catch(() => ({ items: [], total: 0 })),
+  ]);
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
@@ -96,6 +100,7 @@ export default async function UserProfilePage({
           )}
 
           <ProfileGroups userId={profile.id} />
+          {me && <ProfilePosts userId={profile.id} currentUserId={me.id} />}
           <AddFriendButton targetId={profile.id} />
         </>
       )}

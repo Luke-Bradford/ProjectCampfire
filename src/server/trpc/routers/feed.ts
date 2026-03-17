@@ -639,6 +639,128 @@ export const feedRouter = createTRPCRouter({
       return { liked: true };
     }),
 
+  // Cursor-paginated posts by a specific user (CAMP-165).
+  // Visibility: caller must be friends with the target OR share a group.
+  // Group-scoped posts are only shown if the caller is a member of that group.
+  // Block check: returns empty if caller has blocked target or target has blocked caller.
+  listForUser: protectedProcedure
+    .input(z.object({
+      userId: z.string(),
+      cursor: z.string().optional(),
+      limit: z.number().min(1).max(50).default(20),
+    }))
+    .query(async ({ ctx, input }) => {
+      const me = ctx.user.id;
+
+      // Can't view your own posts via this endpoint — use feed.list with filter=friends
+      // (own posts appear there). This endpoint is for other users' profiles.
+      // Allow it anyway so the profile page can use a single component for self and others.
+
+      // Block check: if either party has blocked the other, return empty.
+      const blockRow = await db.query.friendships.findFirst({
+        where: and(
+          or(
+            and(eq(friendships.requesterId, me), eq(friendships.addresseeId, input.userId)),
+            and(eq(friendships.requesterId, input.userId), eq(friendships.addresseeId, me))
+          ),
+          eq(friendships.status, "blocked")
+        ),
+        columns: { requesterId: true },
+      });
+      if (blockRow) return { items: [], nextCursor: undefined };
+
+      // Own posts are always visible (caller viewing their own profile).
+      const isSelf = me === input.userId;
+
+      // Check friendship
+      const friendRow = isSelf ? null : await db.query.friendships.findFirst({
+        where: and(
+          or(
+            and(eq(friendships.requesterId, me), eq(friendships.addresseeId, input.userId)),
+            and(eq(friendships.requesterId, input.userId), eq(friendships.addresseeId, me))
+          ),
+          eq(friendships.status, "accepted")
+        ),
+        columns: { requesterId: true },
+      });
+      const isFriend = !!friendRow;
+
+      // Groups shared with the target user (to show group-scoped posts)
+      const myGroupRows = await db
+        .select({ groupId: groupMemberships.groupId })
+        .from(groupMemberships)
+        .where(eq(groupMemberships.userId, me));
+      const myGroupIds = myGroupRows.map((r) => r.groupId);
+
+      // If not self and not friend and no shared groups, caller can't see any posts.
+      if (!isSelf && !isFriend && myGroupIds.length === 0) {
+        return { items: [], nextCursor: undefined };
+      }
+
+      // Build visibility filter for posts by input.userId:
+      //   - non-group posts: visible if caller is self or friend
+      //   - group posts: visible if caller is a member of that group
+      const nonGroupClause = (isSelf || isFriend) ? isNull(posts.groupId) : undefined;
+      const groupClause = myGroupIds.length > 0 ? inArray(posts.groupId, myGroupIds) : undefined;
+      const visibilityOr = nonGroupClause || groupClause
+        ? or(nonGroupClause, groupClause)
+        : undefined;
+
+      if (!visibilityOr) return { items: [], nextCursor: undefined };
+
+      // Parse compound cursor
+      let cursorDate: Date | undefined;
+      let cursorId: string | undefined;
+      if (input.cursor) {
+        const sep = input.cursor.lastIndexOf("_");
+        if (sep !== -1) {
+          cursorDate = new Date(input.cursor.slice(0, sep));
+          cursorId = input.cursor.slice(sep + 1);
+          if (isNaN(cursorDate.getTime()) || !cursorId) {
+            cursorDate = undefined;
+            cursorId = undefined;
+          }
+        }
+      }
+
+      const rows = await db.query.posts.findMany({
+        where: and(
+          eq(posts.authorId, input.userId),
+          isNull(posts.deletedAt),
+          visibilityOr,
+          cursorDate && cursorId
+            ? or(
+                lt(posts.createdAt, cursorDate),
+                and(eq(posts.createdAt, cursorDate), lt(posts.id, cursorId))
+              )
+            : undefined
+        ),
+        orderBy: [desc(posts.createdAt)],
+        limit: input.limit + 1,
+        with: {
+          author: { columns: { id: true, name: true, username: true, image: true } },
+          group: { columns: { id: true, name: true } },
+          event: { columns: { id: true, title: true } },
+          reactions: { columns: { id: true, userId: true, type: true } },
+          comments: {
+            where: isNull(comments.deletedAt),
+            orderBy: [asc(comments.createdAt)],
+            limit: 20,
+            with: {
+              author: { columns: { id: true, name: true, username: true, image: true } },
+              reactions: { columns: { id: true, userId: true, type: true } },
+            },
+          },
+        },
+      });
+
+      const hasMore = rows.length > input.limit;
+      const items = hasMore ? rows.slice(0, input.limit) : rows;
+      const last = items[items.length - 1];
+      const nextCursor = hasMore && last ? `${last.createdAt.toISOString()}_${last.id}` : undefined;
+      return { items, nextCursor };
+    }),
+
   // Fetch a single post by id for the permalink page (/feed/[postId]).
   // Caller must be able to see the post: either it is on a group they belong to,
   // or the author is a friend (same visibility rules as the feed list).
