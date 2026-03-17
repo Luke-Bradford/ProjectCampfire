@@ -271,7 +271,8 @@ export const feedRouter = createTRPCRouter({
   create: protectedProcedure
     .input(
       z.object({
-        body: z.string().min(1).max(1000),
+        // body is required unless a GIF is attached (GIF-only posts have body = "").
+        body: z.string().max(1000).default(""),
         groupId: z.string().optional(),
         // eventId: scopes the post to a specific event's discussion thread (CAMP-094).
         // The event must belong to a group the caller is a member of.
@@ -285,9 +286,19 @@ export const feedRouter = createTRPCRouter({
           .array(z.string().regex(/^posts\/[A-Za-z0-9]+\/[A-Za-z0-9]{10,}\/[a-z0-9]+-raw$/))
           .max(4)
           .optional(),
+        // gifUrl: a Tenor CDN URL selected via the GIF picker.
+        // Stored directly in imageUrls (no MinIO processing needed — it's an external URL).
+        // Mutually exclusive with imageKeys: one post has either uploaded images or one GIF.
+        gifUrl: z.string().url().regex(/^https:\/\/media\.tenor\.com\//).optional(),
       }).refine(
+        (v) => v.body.trim().length > 0 || !!v.gifUrl || !!v.imageKeys?.length,
+        { message: "Post must have body text, a GIF, or at least one image." }
+      ).refine(
         (v) => !(v.groupId && v.eventId),
         { message: "groupId and eventId are mutually exclusive" }
+      ).refine(
+        (v) => !(v.gifUrl && v.imageKeys?.length),
+        { message: "gifUrl and imageKeys are mutually exclusive" }
       )
     )
     .mutation(async ({ ctx, input }) => {
@@ -351,7 +362,8 @@ export const feedRouter = createTRPCRouter({
         body: input.body,
         groupId: resolvedGroupId,
         eventId: input.eventId ?? null,
-        imageUrls: [],
+        // GIF URL stored directly — no worker processing needed (external CDN URL).
+        imageUrls: input.gifUrl ? [input.gifUrl] : [],
       });
       // Enqueue processing for any uploaded images. Each key was already uploaded to MinIO
       // by the /api/upload/post-image route before the post was created.
