@@ -3,6 +3,7 @@ import { eq, and, inArray } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { db } from "@/server/db";
 import { user, games, gameOwnerships } from "@/server/db/schema";
+import type { RecentlyPlayedEntry } from "@/server/db/schema";
 import { env } from "@/env";
 import type { SteamJobPayload } from "@/server/jobs/steam-jobs";
 import { snapshotSteamSpyData } from "@/server/lib/steamspy";
@@ -36,6 +37,19 @@ type SteamGetOwnedGamesResponse = {
   response?: {
     game_count?: number;
     games?: SteamOwnedGame[];
+  };
+};
+
+type SteamRecentGame = {
+  appid: number;
+  name?: string;
+  playtime_2weeks?: number;
+};
+
+type SteamGetRecentlyPlayedResponse = {
+  response?: {
+    total_count?: number;
+    games?: SteamRecentGame[];
   };
 };
 
@@ -93,6 +107,42 @@ async function syncSteamLibrary(userId: string): Promise<void> {
 
   await db.update(user).set({ steamLibrarySyncedAt: new Date() }).where(eq(user.id, userId));
   log.info("sync complete", { userId, ownershipRowsProcessed: synced });
+
+  // Fetch recently played — non-fatal if it fails (library sync already succeeded)
+  await syncRecentlyPlayed(userId, userRow.steamId).catch((err: unknown) =>
+    log.warn("recently played sync failed (non-fatal)", { userId, err: String(err) })
+  );
+}
+
+async function syncRecentlyPlayed(userId: string, steamId: string): Promise<void> {
+  const url = new URL("https://api.steampowered.com/IPlayerService/GetRecentlyPlayedGames/v1/");
+  url.searchParams.set("key", env.STEAM_API_KEY!);
+  url.searchParams.set("steamid", steamId);
+  url.searchParams.set("count", "3");
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    // 401 = private profile; log and skip without throwing
+    log.warn("GetRecentlyPlayedGames failed", { status: res.status, userId });
+    return;
+  }
+
+  const json = (await res.json()) as SteamGetRecentlyPlayedResponse;
+  const games = json.response?.games ?? [];
+
+  const entries: RecentlyPlayedEntry[] = games
+    .filter((g): g is SteamRecentGame & { name: string; playtime_2weeks: number } =>
+      typeof g.name === "string" && typeof g.playtime_2weeks === "number"
+    )
+    .slice(0, 3)
+    .map((g) => ({ appId: g.appid, name: g.name, playtime2weeks: g.playtime_2weeks }));
+
+  await db
+    .update(user)
+    .set({ recentlyPlayedJson: entries.length > 0 ? entries : null, recentlyPlayedSyncedAt: new Date() })
+    .where(eq(user.id, userId));
+
+  log.info("recently played synced", { userId, count: entries.length });
 }
 
 /**

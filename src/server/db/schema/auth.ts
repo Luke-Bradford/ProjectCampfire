@@ -37,6 +37,12 @@ export type NotificationPrefs = {
   emailFeedDigest?: "daily" | "weekly" | "off"; // default "off"
 };
 
+export type RecentlyPlayedEntry = {
+  appId: number;
+  name: string;
+  playtime2weeks: number; // minutes
+};
+
 // better-auth user table extended with our profile fields.
 // "name" = display name, "image" = avatar URL (better-auth conventions).
 export const user = pgTable("user", {
@@ -69,6 +75,9 @@ export const user = pgTable("user", {
   // Steam library sync
   steamLibrarySyncedAt: timestamp("steam_library_synced_at"),
   steamLibraryPublic: boolean("steam_library_public").notNull().default(true),
+  // Steam recently played (top 3 entries, refreshed alongside library sync)
+  recentlyPlayedJson: jsonb("recently_played_json").$type<RecentlyPlayedEntry[]>(),
+  recentlyPlayedSyncedAt: timestamp("recently_played_synced_at"),
   // Presence
   status: userStatusEnum("status").notNull().default("online"),
 });

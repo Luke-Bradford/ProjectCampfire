@@ -54,15 +54,33 @@ export function ProfileSidebar() {
               <StatItem label="Games" value={stats?.gameCount} />
             </div>
 
-            {/* Steam badge */}
-            {me.steamId && (
-              <div className="w-full rounded-md bg-muted px-3 py-1.5 flex items-center gap-2">
-                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-current shrink-0 text-muted-foreground" aria-hidden="true">
-                  <path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.718L.22 15.996C1.555 20.781 6.318 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.606 0 11.979 0z" />
-                </svg>
-                <span className="text-xs text-muted-foreground truncate">Steam linked</span>
-              </div>
-            )}
+            {/* Steam badge / recently played */}
+            {me.steamId && (() => {
+              // Only surface recently played data if it was synced within the last 7 days
+              const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+              const syncedAt = me.recentlyPlayedSyncedAt ? new Date(me.recentlyPlayedSyncedAt) : null;
+              const isFresh = syncedAt && Date.now() - syncedAt.getTime() < SEVEN_DAYS_MS;
+              const topGame = isFresh ? (me.recentlyPlayedJson?.[0] ?? null) : null;
+
+              return (
+                <div className="w-full rounded-md bg-muted px-3 py-1.5 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-current shrink-0 text-muted-foreground" aria-hidden="true">
+                      <path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.718L.22 15.996C1.555 20.781 6.318 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.606 0 11.979 0z" />
+                    </svg>
+                    <span className="text-xs text-muted-foreground truncate">Steam linked</span>
+                  </div>
+                  {topGame && (
+                    <p className="text-xs text-muted-foreground truncate pl-5">
+                      Playing: <span className="text-foreground font-medium">{topGame.name}</span>
+                      {topGame.playtime2weeks > 0 && (
+                        <span> · {Math.round(topGame.playtime2weeks / 60)}h this fortnight</span>
+                      )}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </>
         ) : (
           /* Loading skeleton */
