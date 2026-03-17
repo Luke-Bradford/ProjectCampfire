@@ -464,13 +464,12 @@ function CatalogTab() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type ViewMode = "list" | "grid";
-type SortOption = "alphabetical" | "most_played" | "recently_played" | "recently_added";
+type SortOption = "alphabetical" | "most_played" | "recently_played";
 
 const SORT_LABELS: Record<SortOption, string> = {
   alphabetical:    "A–Z",
   most_played:     "Most played",
   recently_played: "Recently played",
-  recently_added:  "Recently added",
 };
 
 /** Format playtime minutes as "142h 33m" (or "33m" if under an hour). */
