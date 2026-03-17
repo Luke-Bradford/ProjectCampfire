@@ -162,19 +162,21 @@ function FeedTabs({ filter, onFilter }: { filter: string; onFilter: (f: string) 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Feed list — keyed by filter so each tab has its own infinite query + cursor
+// Feed list — keyed by filter+sort so each tab/sort combo has its own query
 // ─────────────────────────────────────────────────────────────────────────────
 
 function FeedList({
   filter,
+  sort,
   currentUserId,
 }: {
   filter: string;
+  sort: "new" | "hot";
   currentUserId: string;
 }) {
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, refetch } =
     api.feed.list.useInfiniteQuery(
-      { limit: 20, filter },
+      { limit: 20, filter, sort },
       { getNextPageParam: (lastPage) => lastPage.nextCursor }
     );
 
@@ -228,7 +230,7 @@ function FeedList({
         />
       ))}
 
-      {hasNextPage && (
+      {sort === "new" && hasNextPage && (
         <div className="flex justify-center pt-2">
           <button
             className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
@@ -254,11 +256,17 @@ function FeedPageInner() {
   const utils = api.useUtils();
 
   const [filter, setFilter] = useState<string>(() => searchParams.get("tab") ?? "all");
+  const [sort, setSort] = useState<"new" | "hot">(() => {
+    const s = searchParams.get("sort");
+    return s === "hot" ? "hot" : "new";
+  });
 
-  // Sync filter if URL changes after mount (back/forward navigation)
+  // Sync filter/sort if URL changes after mount (back/forward navigation)
   useEffect(() => {
     const tab = searchParams.get("tab") ?? "all";
     setFilter(tab);
+    const s = searchParams.get("sort");
+    setSort(s === "hot" ? "hot" : "new");
   }, [searchParams]);
 
   function handleFilter(f: string) {
@@ -273,16 +281,47 @@ function FeedPageInner() {
     router.replace(qs ? `/feed?${qs}` : "/feed", { scroll: false });
   }
 
+  function handleSort(s: "new" | "hot") {
+    setSort(s);
+    const params = new URLSearchParams(searchParams.toString());
+    if (s === "new") {
+      params.delete("sort");
+    } else {
+      params.set("sort", s);
+    }
+    const qs = params.toString();
+    router.replace(qs ? `/feed?${qs}` : "/feed", { scroll: false });
+  }
+
+  function sortTabClass(active: boolean) {
+    return `px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+      active
+        ? "bg-accent text-foreground"
+        : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+    }`;
+  }
+
   return (
     <div className="max-w-3xl mx-auto space-y-4">
       {/* Invalidate all feed.list cache entries so the active tab refetches after a new post. */}
       <PostComposer onPosted={() => void utils.feed.list.invalidate()} />
 
-      <FeedTabs filter={filter} onFilter={handleFilter} />
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <FeedTabs filter={filter} onFilter={handleFilter} />
+        {/* Sort toggle — New (chronological) vs Hot (engagement-weighted) */}
+        <div className="flex items-center gap-0.5 rounded-lg border bg-card px-1 py-1">
+          <button type="button" onClick={() => handleSort("new")} className={sortTabClass(sort === "new")}>
+            New
+          </button>
+          <button type="button" onClick={() => handleSort("hot")} className={sortTabClass(sort === "hot")}>
+            Hot
+          </button>
+        </div>
+      </div>
 
-      {/* Key by filter so each tab mounts its own infinite query + independent cursor. */}
+      {/* Key by filter+sort so each combination has its own query + cursor. */}
       {me && (
-        <FeedList key={filter} filter={filter} currentUserId={me.id} />
+        <FeedList key={`${filter}:${sort}`} filter={filter} sort={sort} currentUserId={me.id} />
       )}
       {!me && !meError && <FeedSkeleton />}
       {meError && (
