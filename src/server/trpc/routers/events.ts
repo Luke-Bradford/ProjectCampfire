@@ -133,7 +133,12 @@ export const eventsRouter = createTRPCRouter({
           polls: {
             with: {
               options: {
-                with: { votes: { columns: { userId: true } } },
+                with: {
+                  votes: {
+                    columns: { userId: true },
+                    with: { user: { columns: { name: true, image: true } } },
+                  },
+                },
                 orderBy: (t, { asc }) => [asc(t.sortOrder)],
               },
             },
