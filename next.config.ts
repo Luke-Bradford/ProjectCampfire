@@ -5,14 +5,14 @@ type RemotePattern = NonNullable<NonNullable<NextConfig["images"]>["remotePatter
 /**
  * Derive next/image remotePatterns entries for MinIO.
  *
- * /_next/image fetches the src URL server-side. In Docker Compose, the app
- * container must use the internal hostname (e.g. "minio") to reach MinIO,
- * not the browser-facing "localhost". We therefore allow both:
- *   1. MINIO_PUBLIC_URL origin — what storageUrl() stores; the server-reachable base.
- *   2. MINIO_ENDPOINT + MINIO_PORT — the direct internal hostname, so that URLs
- *      stored before MINIO_PUBLIC_URL was configured also continue to work.
+ * Avatars and post images are served as plain <img> tags (not via /_next/image),
+ * so MINIO_PUBLIC_URL must be browser-accessible (e.g. http://localhost:9000/campfire).
+ * The app container reaches MinIO via MINIO_ENDPOINT (e.g. "minio"), which is separate.
  *
- * Browsers never fetch MinIO directly — they always go through /_next/image.
+ * We allow both origins so that:
+ *   1. MINIO_PUBLIC_URL origin — what storageUrl() stores; the browser-accessible URL.
+ *   2. MINIO_ENDPOINT + MINIO_PORT — URLs stored before MINIO_PUBLIC_URL was configured,
+ *      and any server-side image optimisation paths that use the internal hostname.
  */
 function minioRemotePatterns(): RemotePattern[] {
   const patterns: RemotePattern[] = [];
