@@ -69,10 +69,15 @@ function AddGameDialog({ onAdded }: { onAdded: () => void }) {
     onError: (err) => setError(err.message),
   });
 
+  const utils = api.useUtils();
+
   const toggleOwnership = api.games.toggleOwnership.useMutation({
     onSuccess: () => {
       setOpen(false);
       reset();
+      // Invalidate both caches so the catalog 'Owned' badge reflects the new
+      // ownership immediately without needing a manual refetch (CAMP-288).
+      void utils.games.catalog.invalidate();
       onAdded();
     },
     onError: (err) => setError(err.message),
