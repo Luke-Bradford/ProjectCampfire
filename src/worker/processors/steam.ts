@@ -115,22 +115,28 @@ async function syncSteamLibrary(userId: string): Promise<void> {
 }
 
 async function syncRecentlyPlayed(userId: string, steamId: string): Promise<void> {
+  if (!env.STEAM_API_KEY) {
+    log.warn("STEAM_API_KEY not configured — skipping recently played sync", { userId });
+    return;
+  }
+
   const url = new URL("https://api.steampowered.com/IPlayerService/GetRecentlyPlayedGames/v1/");
-  url.searchParams.set("key", env.STEAM_API_KEY!);
+  url.searchParams.set("key", env.STEAM_API_KEY);
   url.searchParams.set("steamid", steamId);
   url.searchParams.set("count", "3");
 
   const res = await fetch(url);
   if (!res.ok) {
-    // 401 = private profile; log and skip without throwing
+    // 401 = private profile; consume body to avoid socket leak, then log and skip
+    await res.text();
     log.warn("GetRecentlyPlayedGames failed", { status: res.status, userId });
     return;
   }
 
   const json = (await res.json()) as SteamGetRecentlyPlayedResponse;
-  const games = json.response?.games ?? [];
+  const recentGames = json.response?.games ?? [];
 
-  const entries: RecentlyPlayedEntry[] = games
+  const entries: RecentlyPlayedEntry[] = recentGames
     .filter((g): g is SteamRecentGame & { name: string; playtime_2weeks: number } =>
       typeof g.name === "string" && typeof g.playtime_2weeks === "number"
     )
