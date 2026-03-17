@@ -464,6 +464,23 @@ function CatalogTab() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type ViewMode = "list" | "grid";
+type SortOption = "alphabetical" | "most_played" | "recently_played" | "recently_added";
+
+const SORT_LABELS: Record<SortOption, string> = {
+  alphabetical:    "A–Z",
+  most_played:     "Most played",
+  recently_played: "Recently played",
+  recently_added:  "Recently added",
+};
+
+/** Format playtime minutes as "142h 33m" (or "33m" if under an hour). */
+function formatPlaytime(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
 
 export default function GamesPage() {
   const [tab, setTab] = useState<Tab>("library");
@@ -472,11 +489,14 @@ export default function GamesPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [sort, setSort] = useState<SortOption>("alphabetical");
 
-  // Read persisted view mode after mount to avoid SSR/hydration mismatch.
+  // Read persisted preferences after mount to avoid SSR/hydration mismatch.
   useEffect(() => {
-    const stored = localStorage.getItem("games-view-mode");
-    if (stored === "list" || stored === "grid") setViewMode(stored);
+    const storedView = localStorage.getItem("games-view-mode");
+    if (storedView === "list" || storedView === "grid") setViewMode(storedView);
+    const storedSort = localStorage.getItem("games-sort");
+    if (storedSort && storedSort in SORT_LABELS) setSort(storedSort as SortOption);
   }, []);
 
   // Debounce search input — update the query param 300ms after the user stops typing.
@@ -490,7 +510,7 @@ export default function GamesPage() {
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     api.games.myGames.useInfiniteQuery(
-      { platform: filterPlatform, showHidden, search: search || undefined, limit: 50 },
+      { platform: filterPlatform, showHidden, search: search || undefined, limit: 50, sort },
       { getNextPageParam: (lastPage) => lastPage.nextCursor }
     );
 
@@ -506,6 +526,11 @@ export default function GamesPage() {
     localStorage.setItem("games-view-mode", mode);
   }
 
+  function setSortOption(option: SortOption) {
+    setSort(option);
+    localStorage.setItem("games-sort", option);
+  }
+
   return (
     <div className="max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
@@ -513,6 +538,18 @@ export default function GamesPage() {
         <div className="flex items-center gap-2">
           {tab === "library" && (
             <>
+              {/* Sort selector */}
+              <select
+                value={sort}
+                onChange={(e) => setSortOption(e.target.value as SortOption)}
+                className="rounded-md border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                aria-label="Sort games"
+              >
+                {(Object.entries(SORT_LABELS) as [SortOption, string][]).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+
               {/* View mode toggle */}
               <div className="flex rounded-md border overflow-hidden">
                 <button
@@ -682,6 +719,14 @@ export default function GamesPage() {
                       </Badge>
                     </div>
                   )}
+                  {/* Playtime badge — visible on hover when data exists */}
+                  {g.playtimeMinutes != null && g.playtimeMinutes > 0 && (
+                    <div className="absolute bottom-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Badge variant="secondary" className="text-xs px-1.5 py-0.5 bg-background/80 backdrop-blur-sm">
+                        {formatPlaytime(g.playtimeMinutes)}
+                      </Badge>
+                    </div>
+                  )}
                 </Link>
                 <div className="mt-1.5 flex items-start justify-between gap-1">
                   <Link href={`/games/${g.id}`} className="text-xs font-medium leading-tight line-clamp-2 hover:underline flex-1">
@@ -748,6 +793,9 @@ export default function GamesPage() {
                     )}
                     {g.genres && g.genres.length > 0 && (
                       <span className="text-xs text-muted-foreground">{g.genres.join(", ")}</span>
+                    )}
+                    {g.playtimeMinutes != null && g.playtimeMinutes > 0 && (sort === "most_played" || sort === "recently_played") && (
+                      <span className="text-xs text-muted-foreground">{formatPlaytime(g.playtimeMinutes)}</span>
                     )}
                   </div>
                 </div>
