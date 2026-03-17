@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { CalendarDays } from "lucide-react";
-import { api } from "@/trpc/react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+
+import type { RouterOutputs } from "@/trpc/react";
+
+type UpcomingEvent = RouterOutputs["events"]["upcoming"][number];
 
 function formatEventDate(date: Date | null) {
   if (!date) return null;
@@ -25,11 +28,13 @@ const RSVP_LABELS: Record<string, string> = {
   maybe: "Maybe",
 };
 
-export function UpcomingEventsPanel() {
-  const { data: upcoming, isLoading } = api.events.upcoming.useQuery({ limit: 3 });
-
-  if (!isLoading && (!upcoming || upcoming.length === 0)) return null;
-
+export function UpcomingEventsPanel({
+  upcoming,
+  isLoading,
+}: {
+  upcoming: UpcomingEvent[] | undefined;
+  isLoading: boolean;
+}) {
   return (
     <aside className="flex flex-col gap-3">
       <div className="rounded-xl border bg-card p-4">
@@ -48,7 +53,6 @@ export function UpcomingEventsPanel() {
             ))}
           </div>
         )}
-
 
         {upcoming && upcoming.length > 0 && (
           <div className="flex flex-col divide-y">

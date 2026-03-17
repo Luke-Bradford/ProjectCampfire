@@ -11,8 +11,8 @@ export function RightPanel() {
   const pathname = usePathname();
   const hidden = HIDDEN_ON.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
-  // Pre-fetch so we can suppress the entire aside when there are no events.
-  // UpcomingEventsPanel uses the same query key — result is served from cache.
+  // Single query — result passed as props to UpcomingEventsPanel to avoid
+  // duplicate fetches and ensure both components share the same data snapshot.
   const { data: upcoming, isLoading } = api.events.upcoming.useQuery(
     { limit: 3 },
     { enabled: !hidden }
@@ -24,7 +24,7 @@ export function RightPanel() {
 
   return (
     <aside className="hidden xl:block w-60 shrink-0 sticky top-0 h-screen overflow-y-auto py-4 px-3">
-      <UpcomingEventsPanel />
+      <UpcomingEventsPanel upcoming={upcoming} isLoading={isLoading} />
     </aside>
   );
 }
