@@ -133,11 +133,16 @@ export const feedRouter = createTRPCRouter({
       if (input.sort === "hot") {
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-        // Step 1: candidate post IDs within the visibility window
+        // Step 1: candidate post IDs within the visibility window.
+        // Capped at 1000 most-recent to avoid unbounded IN-list parameters downstream.
+        // Hot scoring over the 1000 most-recent visible posts is a good-enough approximation
+        // at MVP scale; truly viral older posts naturally decay below newer ones anyway.
         const candidateRows = await db
           .select({ id: posts.id, createdAt: posts.createdAt })
           .from(posts)
-          .where(and(isNull(posts.deletedAt), visibilityFilter, gt(posts.createdAt, thirtyDaysAgo)));
+          .where(and(isNull(posts.deletedAt), visibilityFilter, gt(posts.createdAt, thirtyDaysAgo)))
+          .orderBy(desc(posts.createdAt))
+          .limit(1000);
 
         if (candidateRows.length === 0) return { items: [], nextCursor: undefined };
 
@@ -179,6 +184,7 @@ export const feedRouter = createTRPCRouter({
           .slice(0, 50);
 
         const topIds = scored.map((r) => r.id);
+        if (topIds.length === 0) return { items: [], nextCursor: undefined };
 
         const hotPosts = await db.query.posts.findMany({
           where: inArray(posts.id, topIds),

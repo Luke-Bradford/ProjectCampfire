@@ -177,7 +177,8 @@ function FeedList({
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, refetch } =
     api.feed.list.useInfiniteQuery(
       { limit: 20, filter, sort },
-      { getNextPageParam: (lastPage) => lastPage.nextCursor }
+      // Hot sort never paginates — always returns top 50 with no cursor.
+      { getNextPageParam: (lastPage) => sort === "new" ? lastPage.nextCursor : undefined }
     );
 
   const allItems = data?.pages.flatMap((p) => p.items) ?? [];
