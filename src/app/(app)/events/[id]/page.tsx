@@ -51,7 +51,7 @@ function PollCard({
       id: string;
       label: string;
       gameId?: string | null;
-      votes: { userId: string }[];
+      votes: { userId: string; user: { name: string; image: string | null } }[];
       startsAt?: Date | string | null;
       endsAt?: Date | string | null;
     }[];
@@ -66,6 +66,9 @@ function PollCard({
   const totalVotes = poll.options.reduce((s, o) => s + o.votes.length, 0);
   const isClosed = poll.status === "closed";
   const isCreator = poll.createdBy === myUserId;
+
+  // Winner = option(s) with the most votes (only relevant when closed)
+  const maxVotes = isClosed ? Math.max(...poll.options.map((o) => o.votes.length)) : 0;
 
   // Fetch ownership overlap for game polls (CAMP-104)
   const gameIds = poll.type === "game"
@@ -97,6 +100,8 @@ function PollCard({
         {poll.options.map((opt) => {
           const count = opt.votes.length;
           const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+          const iVoted = opt.votes.some((v) => v.userId === myUserId);
+          const isWinner = isClosed && count === maxVotes && count > 0;
           const owners = opt.gameId ? (ownershipMap?.[opt.gameId] ?? []) : [];
           const iOwn = owners.some((o) => o.user.id === myUserId);
           const otherOwners = owners.filter((o) => o.user.id !== myUserId);
@@ -107,15 +112,20 @@ function PollCard({
             : owners.length > 0
             ? `${owners.length} member${owners.length === 1 ? "" : "s"} own this`
             : null;
+          // Avatar stack: up to 5 voters shown
+          const avatarVoters = opt.votes.slice(0, 5);
+          const extraVoters = opt.votes.length - avatarVoters.length;
           return (
             <li key={opt.id}>
               <button
                 disabled={isClosed || vote.isPending}
                 onClick={() => vote.mutate({ pollOptionId: opt.id })}
-                className="w-full text-left"
+                className={`w-full text-left rounded-md px-2 py-1 -mx-2 transition-colors ${isWinner ? "bg-primary/8 ring-1 ring-primary/30" : ""}`}
               >
-                <div className={`flex items-center justify-between text-sm mb-0.5 ${opt.votes.some((v) => v.userId === myUserId) ? "font-medium" : ""}`}>
-                  <span>
+                <div className={`flex items-center justify-between text-sm mb-0.5 ${iVoted ? "font-medium" : ""}`}>
+                  <span className="flex items-center gap-1.5">
+                    {isWinner && <span className="text-sm">🏆</span>}
+                    {iVoted && !isWinner && <span className="text-primary text-xs">✓</span>}
                     {opt.label}
                     {opt.startsAt && (
                       <span className="text-muted-foreground ml-1.5">
@@ -130,10 +140,40 @@ function PollCard({
                 </div>
                 <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                   <div
-                    className="h-full bg-primary transition-all"
+                    className={`h-full transition-all ${isWinner ? "bg-primary" : "bg-primary/60"}`}
                     style={{ width: `${pct}%` }}
                   />
                 </div>
+                {/* Avatar stack — who voted for this option */}
+                {count > 0 && (
+                  <div className="flex items-center gap-1 mt-1">
+                    <div className="flex -space-x-1.5">
+                      {avatarVoters.map((v) => (
+                        v.user.image ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={v.userId}
+                            src={v.user.image}
+                            alt={v.user.name}
+                            title={v.user.name}
+                            className="h-5 w-5 rounded-full border border-background object-cover"
+                          />
+                        ) : (
+                          <span
+                            key={v.userId}
+                            title={v.user.name}
+                            className="h-5 w-5 rounded-full border border-background bg-muted flex items-center justify-center text-[9px] font-medium text-muted-foreground"
+                          >
+                            {v.user.name[0]?.toUpperCase() ?? "?"}
+                          </span>
+                        )
+                      ))}
+                    </div>
+                    {extraVoters > 0 && (
+                      <span className="text-[10px] text-muted-foreground">+{extraVoters}</span>
+                    )}
+                  </div>
+                )}
                 {ownerLabel && (
                   <p className={`text-xs mt-0.5 ${iOwn ? "text-primary" : "text-muted-foreground"}`}>
                     {ownerLabel}
