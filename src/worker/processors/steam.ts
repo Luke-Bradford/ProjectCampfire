@@ -231,7 +231,9 @@ async function upsertBatch(userId: string, steamGames: SteamOwnedGame[]): Promis
         gameId,
         platform: "pc" as const,
         source: "steam" as const,
-        playtimeMinutes: g.playtime_forever ?? null,
+        // Normalise 0 to null — Steam uses 0 for "never launched" and for
+        // games where playtime tracking is unavailable.
+        playtimeMinutes: g.playtime_forever && g.playtime_forever > 0 ? g.playtime_forever : null,
         lastPlayedAt,
       };
     })

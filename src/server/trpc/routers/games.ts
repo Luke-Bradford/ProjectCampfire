@@ -282,20 +282,24 @@ export const gamesRouter = createTRPCRouter({
       // TODO(tech-debt): replace with SQL GROUP BY + array_agg for large libraries.
       // Safe at MVP scale: Steam sync caps at ~2000 games per user and the full set
       // fits comfortably in a single round-trip at this size.
-      // Determine sort order for ownership rows.
-      const orderBy = (() => {
-        switch (input.sort) {
-          case "most_played":
-            // Nulls last: games with no playtime data appear at the end.
-            return [sql`${gameOwnerships.playtimeMinutes} DESC NULLS LAST`, asc(gameOwnerships.gameId)];
-          case "recently_played":
-            return [sql`${gameOwnerships.lastPlayedAt} DESC NULLS LAST`, asc(gameOwnerships.gameId)];
-          case "recently_added":
-            return [desc(gameOwnerships.gameId)]; // gameId is a cuid — lexicographically ordered by creation
-          default: // alphabetical — sort by title after grouping
-            return [asc(gameOwnerships.gameId)];
-        }
-      })();
+
+      // Sort order for the raw ownership query. Alphabetical needs the title, which comes
+      // from the joined game row — re-sort in JS after grouping instead.
+      let orderByClause;
+      switch (input.sort) {
+        case "most_played":
+          // Nulls last: games with no playtime data appear at the end.
+          orderByClause = [sql`${gameOwnerships.playtimeMinutes} DESC NULLS LAST`, asc(gameOwnerships.gameId)];
+          break;
+        case "recently_played":
+          orderByClause = [sql`${gameOwnerships.lastPlayedAt} DESC NULLS LAST`, asc(gameOwnerships.gameId)];
+          break;
+        case "recently_added":
+          orderByClause = [desc(gameOwnerships.createdAt), asc(gameOwnerships.gameId)];
+          break;
+        default: // alphabetical
+          orderByClause = [asc(gameOwnerships.gameId)];
+      }
 
       const allRows = await db.query.gameOwnerships.findMany({
         where: ownershipWhere,
@@ -311,10 +315,11 @@ export const gamesRouter = createTRPCRouter({
             },
           },
         },
-        orderBy: () => orderBy,
+        orderBy: () => orderByClause,
       });
 
-      // Group by gameId — collect platforms, pick playtime/hidden/source from first row.
+      // Group by gameId — collect platforms, track max playtime / most-recent lastPlayedAt
+      // across all platforms (Steam only populates PC rows, but this is future-proof).
       const gameMap = new Map<string, {
         id: string; title: string; coverUrl: string | null;
         genres: string[]; minPlayers: number | null; maxPlayers: number | null;
@@ -325,6 +330,13 @@ export const gamesRouter = createTRPCRouter({
         const existing = gameMap.get(r.gameId);
         if (existing) {
           existing.platforms.push(r.platform);
+          // Keep the maximum playtime and most-recent lastPlayedAt across platforms.
+          if (r.playtimeMinutes != null && (existing.playtimeMinutes == null || r.playtimeMinutes > existing.playtimeMinutes)) {
+            existing.playtimeMinutes = r.playtimeMinutes;
+          }
+          if (r.lastPlayedAt != null && (existing.lastPlayedAt == null || r.lastPlayedAt > existing.lastPlayedAt)) {
+            existing.lastPlayedAt = r.lastPlayedAt;
+          }
         } else {
           gameMap.set(r.gameId, {
             ...r.game,
@@ -338,7 +350,10 @@ export const gamesRouter = createTRPCRouter({
       }
 
       // Apply cursor and limit to the deduplicated list.
-      // For alphabetical sort, re-sort by title after grouping.
+      // Pagination works correctly here because all rows are fetched in one query and
+      // sliced in JS — the cursor finds its position in the stable sorted array, so
+      // there are no cross-page duplicates or gaps regardless of sort order.
+      // For alphabetical, re-sort by title after grouping (title requires the join).
       const allGames = input.sort === "alphabetical"
         ? [...gameMap.values()].sort((a, b) => a.title.localeCompare(b.title))
         : [...gameMap.values()];

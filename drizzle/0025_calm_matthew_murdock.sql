@@ -1,0 +1,1 @@
+ALTER TABLE "game_ownerships" ADD COLUMN "created_at" timestamp DEFAULT now() NOT NULL;
