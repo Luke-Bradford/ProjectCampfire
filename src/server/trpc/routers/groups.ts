@@ -131,7 +131,7 @@ export const groupsRouter = createTRPCRouter({
           memberships: {
             with: {
               user: {
-                columns: { id: true, name: true, username: true, image: true },
+                columns: { id: true, name: true, username: true, image: true, status: true },
               },
             },
           },

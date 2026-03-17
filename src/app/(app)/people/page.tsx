@@ -6,6 +6,7 @@ import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { StatusDot } from "@/components/ui/status-dot";
 
 function initials(name: string) {
   return name
@@ -118,10 +119,13 @@ export default function PeoplePage() {
               return (
                 <li key={u.id} className="flex items-center justify-between rounded-lg border p-3">
                   <Link href={u.username ? `/u/${u.username}` : "#"} className="flex items-center gap-3 hover:opacity-80">
-                    <Avatar className="h-9 w-9">
-                      <AvatarImage src={u.image ?? undefined} />
-                      <AvatarFallback>{initials(u.name)}</AvatarFallback>
-                    </Avatar>
+                    <div className="relative shrink-0">
+                      <Avatar className="h-9 w-9">
+                        <AvatarImage src={u.image ?? undefined} />
+                        <AvatarFallback>{initials(u.name)}</AvatarFallback>
+                      </Avatar>
+                      <StatusDot status={u.status} className="absolute -bottom-0.5 -right-0.5" />
+                    </div>
                     <div>
                       <p className="text-sm font-medium">{u.name}</p>
                       {u.username && (
