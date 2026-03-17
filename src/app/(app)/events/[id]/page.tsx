@@ -68,7 +68,7 @@ function PollCard({
   const isCreator = poll.createdBy === myUserId;
 
   // Winner = option(s) with the most votes (only relevant when closed)
-  const maxVotes = isClosed ? Math.max(...poll.options.map((o) => o.votes.length)) : 0;
+  const maxVotes = isClosed ? Math.max(0, ...poll.options.map((o) => o.votes.length)) : 0;
 
   // Fetch ownership overlap for game polls (CAMP-104)
   const gameIds = poll.type === "game"

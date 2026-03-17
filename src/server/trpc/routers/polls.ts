@@ -178,9 +178,9 @@ export const pollsRouter = createTRPCRouter({
           options: {
             with: {
               votes: {
-              columns: { userId: true },
-              with: { user: { columns: { name: true, image: true } } },
-            },
+                columns: { userId: true },
+                with: { user: { columns: { name: true, image: true } } },
+              },
               game: { columns: { id: true, title: true } },
             },
             orderBy: (t, { asc }) => [asc(t.sortOrder)],
