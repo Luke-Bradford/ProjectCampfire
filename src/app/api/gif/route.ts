@@ -62,20 +62,30 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Giphy API error" }, { status: 502 });
   }
 
-  // Runtime guard: treat the response as unknown and validate field by field.
+  // Runtime guard: treat the response as unknown, validate field-by-field.
+  // Note on GIPHY_URL_RE: Giphy `.gif` URLs embed all parameters in the path
+  // (e.g. /media/v1.Y2lk.../giphy.gif) and carry no query string. Empirically
+  // verified against real API responses — the $ anchor is intentional and correct.
+  // We only request `.gif` format (not `.webp` or `.mp4`) so the extension is always gif.
   const body = await res.json() as { data?: unknown };
-  const items: GiphyItem[] = Array.isArray(body.data)
-    ? (body.data as GiphyItem[])
-    : [];
+  const rawItems = Array.isArray(body.data) ? body.data : [];
 
-  const results = items
+  const results = rawItems
+    .filter(
+      // Runtime element guard: drop anything that doesn't have the expected shape.
+      (r): r is GiphyItem =>
+        typeof r === "object" &&
+        r !== null &&
+        typeof (r as GiphyItem).id === "string" &&
+        typeof (r as GiphyItem).title === "string"
+    )
     .map((r) => {
       const orig = r.images?.original;
       // Prefer fixed_width_small for preview; fall back to fixed_width (never original — too large).
       const preview = r.images?.fixed_width_small ?? r.images?.fixed_width;
       return {
-        id: r.id ?? "",
-        title: r.title ?? "",
+        id: r.id,
+        title: r.title,
         url: orig?.url ?? "",
         previewUrl: preview?.url ?? "",
         width: parseInt(orig?.width ?? "0", 10),
