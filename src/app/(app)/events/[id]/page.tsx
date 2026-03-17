@@ -32,6 +32,57 @@ const STATUS_LABEL: Record<string, string> = {
 const RSVP_LABELS = { yes: "Going", no: "Not going", maybe: "Maybe" } as const;
 type RsvpStatus = keyof typeof RSVP_LABELS;
 
+// ── Ownership avatar stack (CAMP-180) ─────────────────────────────────────────
+
+type OwnerEntry = { user: { id: string; name: string | null; image: string | null } };
+
+function OwnershipAvatarStack({
+  owners,
+  myUserId,
+}: {
+  owners: OwnerEntry[];
+  myUserId: string;
+}) {
+  if (owners.length === 0) return null;
+  const unique = owners.filter((o, idx, arr) => arr.findIndex((x) => x.user.id === o.user.id) === idx);
+  const avatars = unique.slice(0, 4);
+  const extra = unique.length - avatars.length;
+  const iOwn = owners.some((o) => o.user.id === myUserId);
+  const label = iOwn
+    ? unique.length > 1
+      ? `You + ${unique.length - 1} other${unique.length - 1 === 1 ? "" : "s"} own this`
+      : "You own this"
+    : `${unique.length} member${unique.length === 1 ? "" : "s"} own this`;
+  return (
+    <div className="flex items-center gap-1.5 mt-0.5">
+      <div className="flex -space-x-1">
+        {avatars.map((o) =>
+          o.user.image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={o.user.id}
+              src={o.user.image}
+              alt={o.user.name ?? ""}
+              title={o.user.name ?? ""}
+              className="h-4 w-4 rounded-full border border-background object-cover"
+            />
+          ) : (
+            <span
+              key={o.user.id}
+              title={o.user.name ?? ""}
+              className="h-4 w-4 rounded-full border border-background bg-muted flex items-center justify-center text-[8px] font-medium text-muted-foreground"
+            >
+              {(o.user.name ?? "?")[0]?.toUpperCase() ?? "?"}
+            </span>
+          )
+        )}
+      </div>
+      {extra > 0 && <span className="text-[10px] text-muted-foreground">+{extra}</span>}
+      <p className={`text-xs ${iOwn ? "text-primary" : "text-muted-foreground"}`}>{label}</p>
+    </div>
+  );
+}
+
 // ── Poll card ─────────────────────────────────────────────────────────────────
 
 function PollCard({
@@ -103,20 +154,6 @@ function PollCard({
           const iVoted = opt.votes.some((v) => v.userId === myUserId);
           const isWinner = isClosed && count === maxVotes && count > 0;
           const owners = opt.gameId ? (ownershipMap?.[opt.gameId] ?? []) : [];
-          const iOwn = owners.some((o) => o.user.id === myUserId);
-          // Deduplicate owners by userId (a user may own on multiple platforms)
-          const uniqueOwners = owners.filter(
-            (o, idx, arr) => arr.findIndex((x) => x.user.id === o.user.id) === idx
-          );
-          const ownerAvatars = uniqueOwners.slice(0, 4);
-          const extraOwners = uniqueOwners.length - ownerAvatars.length;
-          const ownerLabel = iOwn
-            ? uniqueOwners.length > 1
-              ? `You + ${uniqueOwners.length - 1} other${uniqueOwners.length - 1 === 1 ? "" : "s"} own this`
-              : "You own this"
-            : uniqueOwners.length > 0
-            ? `${uniqueOwners.length} member${uniqueOwners.length === 1 ? "" : "s"} own this`
-            : null;
           // Avatar stack: up to 5 voters shown
           const avatarVoters = opt.votes.slice(0, 5);
           const extraVoters = opt.votes.length - avatarVoters.length;
@@ -179,38 +216,7 @@ function PollCard({
                     )}
                   </div>
                 )}
-                {uniqueOwners.length > 0 && (
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <div className="flex -space-x-1">
-                      {ownerAvatars.map((o) => (
-                        o.user.image ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            key={o.user.id}
-                            src={o.user.image}
-                            alt={o.user.name}
-                            title={o.user.name}
-                            className="h-4 w-4 rounded-full border border-background object-cover"
-                          />
-                        ) : (
-                          <span
-                            key={o.user.id}
-                            title={o.user.name}
-                            className="h-4 w-4 rounded-full border border-background bg-muted flex items-center justify-center text-[8px] font-medium text-muted-foreground"
-                          >
-                            {o.user.name[0]?.toUpperCase() ?? "?"}
-                          </span>
-                        )
-                      ))}
-                    </div>
-                    {extraOwners > 0 && (
-                      <span className="text-[10px] text-muted-foreground">+{extraOwners}</span>
-                    )}
-                    <p className={`text-xs ${iOwn ? "text-primary" : "text-muted-foreground"}`}>
-                      {ownerLabel}
-                    </p>
-                  </div>
-                )}
+                <OwnershipAvatarStack owners={owners} myUserId={myUserId} />
               </button>
             </li>
           );
@@ -894,48 +900,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                 <span className="text-xs text-muted-foreground">Optional — bring your own choice</span>
               )}
               {/* Who in the group owns this game (CAMP-180) */}
-              {gameOwners && gameOwners.length > 0 && (() => {
-                const uniqueGameOwners = gameOwners.filter(
-                  (o, idx, arr) => arr.findIndex((x) => x.user.id === o.user.id) === idx
-                );
-                const avatars = uniqueGameOwners.slice(0, 4);
-                const extra = uniqueGameOwners.length - avatars.length;
-                const iOwn = gameOwners.some((o) => o.user.id === myUserId);
-                return (
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <div className="flex -space-x-1">
-                      {avatars.map((o) => (
-                        o.user.image ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            key={o.user.id}
-                            src={o.user.image}
-                            alt={o.user.name}
-                            title={o.user.name}
-                            className="h-4 w-4 rounded-full border border-background object-cover"
-                          />
-                        ) : (
-                          <span
-                            key={o.user.id}
-                            title={o.user.name}
-                            className="h-4 w-4 rounded-full border border-background bg-muted flex items-center justify-center text-[8px] font-medium text-muted-foreground"
-                          >
-                            {o.user.name[0]?.toUpperCase() ?? "?"}
-                          </span>
-                        )
-                      ))}
-                    </div>
-                    {extra > 0 && <span className="text-[10px] text-muted-foreground">+{extra}</span>}
-                    <p className={`text-xs ${iOwn ? "text-primary" : "text-muted-foreground"}`}>
-                      {iOwn
-                        ? uniqueGameOwners.length > 1
-                          ? `You + ${uniqueGameOwners.length - 1} other${uniqueGameOwners.length - 1 === 1 ? "" : "s"} own this`
-                          : "You own this"
-                        : `${uniqueGameOwners.length} member${uniqueGameOwners.length === 1 ? "" : "s"} own this`}
-                    </p>
-                  </div>
-                );
-              })()}
+              {gameOwners && <OwnershipAvatarStack owners={gameOwners} myUserId={myUserId} />}
             </div>
             {isEventCreator && event.status !== "cancelled" && (
               <div className="flex items-center gap-2 shrink-0">
