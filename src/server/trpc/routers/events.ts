@@ -4,13 +4,16 @@ import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { events, eventRsvps, groupMemberships, groups, games } from "@/server/db/schema";
+import { events, eventRsvps, groupMemberships, groups, games, notifications } from "@/server/db/schema";
 import {
   enqueueEventConfirmed,
   enqueueEventCancelled,
   enqueueEventRsvpReminder,
 } from "@/server/jobs/email-jobs";
 import { enqueuePush } from "@/server/jobs/push-jobs";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("events");
 
 const EVENT_STATUSES = ["draft", "open", "confirmed", "cancelled"] as const;
 
@@ -185,7 +188,15 @@ export const eventsRouter = createTRPCRouter({
             confirmedEndsAt: confirmedEndsAt?.toISOString() ?? null,
             recipientUserIds: attendeeIds,
           });
-          for (const uid of attendeeIds) {
+          // In-app + push notifications for attendees (fire-and-forget, must not block status update)
+          const notifData = { eventId: input.id, eventTitle: event.title, groupName };
+          for (const uid of attendeeIds.filter((id) => id !== ctx.user.id)) {
+            void db.insert(notifications).values({
+              id: createId(),
+              userId: uid,
+              type: "event_confirmed",
+              data: notifData,
+            }).catch((err: unknown) => log.error("notification insert(event_confirmed) failed", { err: String(err) }));
             void enqueuePush(uid, {
               title: `Event confirmed: ${event.title}`,
               body: `"${event.title}" in ${groupName} has been confirmed.`,
@@ -231,7 +242,14 @@ export const eventsRouter = createTRPCRouter({
             groupName,
             recipientUserIds: attendeeIds,
           });
-          for (const uid of attendeeIds) {
+          const notifDataCancel = { eventId: input.id, eventTitle: event.title, groupName };
+          for (const uid of attendeeIds.filter((id) => id !== ctx.user.id)) {
+            void db.insert(notifications).values({
+              id: createId(),
+              userId: uid,
+              type: "event_cancelled",
+              data: notifDataCancel,
+            }).catch((err: unknown) => log.error("notification insert(event_cancelled) failed", { err: String(err) }));
             void enqueuePush(uid, {
               title: `Event cancelled: ${event.title}`,
               body: `"${event.title}" in ${groupName} has been cancelled.`,
