@@ -31,6 +31,10 @@ export async function POST(req: NextRequest) {
     chunks.push(value);
   }
 
+  // Re-parse the accumulated bytes as FormData. This is the same pattern used by
+  // the post-image route. Trade-off: the file bytes exist in three buffers briefly
+  // (chunks[], bodyBuffer, then file.arrayBuffer()). At the 5 MB cap this is ~15 MB
+  // per concurrent upload — acceptable for low-frequency avatar changes.
   const contentType = req.headers.get("content-type") ?? "";
   const bodyBuffer = Buffer.concat(chunks);
   const formData = await new Request("http://localhost", {

@@ -15,6 +15,13 @@ const AVATAR_SIZE = 400; // px, square
 /**
  * Extracts the MinIO object key from a full storage URL.
  * Returns null for external URLs (e.g. Steam CDN, OAuth avatars).
+ *
+ * MINIO_PUBLIC_URL contract (mirrors storageUrl() in src/server/storage.ts):
+ *   - When set, storageUrl() returns `${MINIO_PUBLIC_URL}/${key}`
+ *   - MINIO_PUBLIC_URL must NOT include a trailing slash or the bucket name
+ *   - e.g. "http://localhost:9000/campfire" → key = everything after the last "/"
+ *   If MINIO_PUBLIC_URL already includes the bucket, storageUrl() and this
+ *   function will both be wrong — update storageUrl() first if that changes.
  */
 function extractMinioKey(imageUrl: string): string | null {
   try {

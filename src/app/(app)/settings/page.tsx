@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/trpc/react";
@@ -126,6 +126,10 @@ function ProfileSection() {
   const [usernameSaved, setUsernameSaved] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState("");
+  const avatarPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clean up any in-flight avatar poll on unmount.
+  useEffect(() => () => { if (avatarPollRef.current) clearInterval(avatarPollRef.current); }, []);
 
   const updateProfile = api.user.updateProfile.useMutation({
     onSuccess: () => { setProfileSaved(true); setTimeout(() => setProfileSaved(false), 2500); },
@@ -148,6 +152,8 @@ function ProfileSection() {
   async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Reset input immediately so the same file can be re-selected after an error.
+    e.target.value = "";
     setAvatarError("");
     setAvatarUploading(true);
     try {
@@ -155,25 +161,39 @@ function ProfileSection() {
       form.append("file", file);
       const res = await fetch("/api/upload/avatar", { method: "POST", body: form });
       if (!res.ok) {
-        const body = (await res.json()) as { error?: string };
-        setAvatarError(body.error ?? "Upload failed.");
+        const json: unknown = await res.json();
+        const message = typeof json === "object" && json !== null && "error" in json && typeof (json as { error: unknown }).error === "string"
+          ? (json as { error: string }).error
+          : "Upload failed.";
+        setAvatarError(message);
+        setAvatarUploading(false);
         return;
       }
       // Worker processes asynchronously — poll user.me until image URL changes.
+      // avatarUploading stays true throughout so the overlay remains visible.
       const oldImage = me?.image;
       let attempts = 0;
-      const poll = setInterval(async () => {
+      if (avatarPollRef.current) clearInterval(avatarPollRef.current);
+      avatarPollRef.current = setInterval(() => {
         attempts++;
-        await utils.user.me.invalidate();
-        const fresh = await utils.user.me.fetch();
-        if (fresh?.image !== oldImage || attempts >= 20) clearInterval(poll);
+        utils.user.me.invalidate()
+          .then(() => utils.user.me.fetch())
+          .then((fresh) => {
+            if (fresh?.image !== oldImage || attempts >= 20) {
+              clearInterval(avatarPollRef.current!);
+              avatarPollRef.current = null;
+              setAvatarUploading(false);
+            }
+          })
+          .catch(() => {
+            clearInterval(avatarPollRef.current!);
+            avatarPollRef.current = null;
+            setAvatarUploading(false);
+          });
       }, 1500);
     } catch {
       setAvatarError("Upload failed. Please try again.");
-    } finally {
       setAvatarUploading(false);
-      // Reset input so the same file can be re-selected after an error
-      e.target.value = "";
     }
   }
 
