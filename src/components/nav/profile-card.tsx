@@ -235,7 +235,6 @@ export function ProfileCard({
           <ThemeToggle />
         </div>
       </div>
-
     </div>
   );
 }
