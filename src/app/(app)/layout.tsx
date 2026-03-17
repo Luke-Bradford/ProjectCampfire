@@ -36,7 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {/* Mobile-only top bar with profile drawer */}
         <MobileHeader name={session.user.name} image={session.user.image} />
 
-        <main className="flex-1 w-full max-w-4xl mx-auto px-4 pt-6 pb-20 md:pb-6 md:px-8">
+        <main className="flex-1 w-full max-w-2xl px-4 pt-6 pb-20 md:pb-6 md:px-6">
           {children}
         </main>
       </div>

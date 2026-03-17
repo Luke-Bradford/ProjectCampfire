@@ -99,27 +99,27 @@ export function ProfileCard({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Bounded profile card */}
-      <div className="rounded-xl border bg-card shadow-sm p-4 flex flex-col gap-4">
+    <div className="flex flex-col gap-4 flex-1">
+      {/* Profile section — flows directly into nav, no inner box */}
+      <div className="flex flex-col gap-3 px-1">
         {/* Avatar + name row */}
         <div className="flex items-center gap-3">
           <Link href={profileHref} onClick={onNavigate} className="relative group shrink-0">
             {me ? (
               <>
-                <Avatar className="h-12 w-12">
+                <Avatar className="h-10 w-10">
                   <AvatarImage src={displayImage ?? undefined} />
-                  <AvatarFallback className="text-base font-semibold">
+                  <AvatarFallback className="text-sm font-semibold">
                     {initials(displayName)}
                   </AvatarFallback>
                 </Avatar>
                 {/* Camera overlay on hover */}
                 <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Camera size={14} className="text-white" />
+                  <Camera size={12} className="text-white" />
                 </div>
               </>
             ) : (
-              <Skeleton className="h-12 w-12 rounded-full" />
+              <Skeleton className="h-10 w-10 rounded-full" />
             )}
           </Link>
 
@@ -186,7 +186,7 @@ export function ProfileCard({
         )}
 
         {/* Stat counts — navigation links */}
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-0.5">
           {stats ? (
             <>
               <StatRow href="/friends" label="Friends" count={stats.friendCount} active={isActive("/friends")} pendingCount={stats.pendingRequestCount} onClick={onNavigate} />
@@ -203,6 +203,9 @@ export function ProfileCard({
         </div>
       </div>
 
+      {/* Divider */}
+      <div className="border-t border-border/60 mx-1" />
+
       {/* Primary nav */}
       <nav className="flex flex-col gap-0.5 px-1">
         <NavLink href="/feed"         icon={<Newspaper size={13} />}   label="Feed"         active={isActive("/feed")}         onClick={onNavigate} />
@@ -212,9 +215,7 @@ export function ProfileCard({
       </nav>
 
       {/* Divider */}
-      <div className="px-1">
-        <div className="border-t border-border/50" />
-      </div>
+      <div className="border-t border-border/60 mx-1" />
 
       {/* Utility links */}
       <div className="flex flex-col gap-0.5 px-1">
@@ -246,8 +247,8 @@ export function ProfileCard({
         </button>
       </div>
 
-      {/* Theme toggle */}
-      <div className="px-1">
+      {/* Push theme toggle to bottom */}
+      <div className="mt-auto px-1 pb-1">
         <ThemeToggle />
       </div>
     </div>
