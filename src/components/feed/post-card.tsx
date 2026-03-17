@@ -109,7 +109,12 @@ function CommentRow({
         <AvatarFallback className="text-xs">{initials(comment.author.name)}</AvatarFallback>
       </Avatar>
       <div className="flex-1 space-y-0.5">
-        <p className="px-1 text-xs font-medium">{comment.author.name}</p>
+        <Link
+          href={comment.author.username ? `/u/${comment.author.username}` : (isOwn ? "/profile" : "#")}
+          className="px-1 text-xs font-medium hover:underline"
+        >
+          {comment.author.name}
+        </Link>
         {editing ? (
           <form
             onSubmit={(e) => {
