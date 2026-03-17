@@ -475,8 +475,9 @@ const SORT_LABELS: Record<SortOption, string> = {
 
 /** Format playtime minutes as "142h 33m" (or "33m" if under an hour). */
 function formatPlaytime(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
+  const total = Math.round(Math.abs(minutes));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
   if (h === 0) return `${m}m`;
   if (m === 0) return `${h}h`;
   return `${h}h ${m}m`;
@@ -541,7 +542,10 @@ export default function GamesPage() {
               {/* Sort selector */}
               <select
                 value={sort}
-                onChange={(e) => setSortOption(e.target.value as SortOption)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (Object.hasOwn(SORT_LABELS, v)) setSortOption(v as SortOption);
+                }}
                 className="rounded-md border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 aria-label="Sort games"
               >
