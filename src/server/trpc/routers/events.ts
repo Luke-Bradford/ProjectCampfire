@@ -330,9 +330,9 @@ export const eventsRouter = createTRPCRouter({
   update: protectedProcedure
     .input(
       z.object({
-        id: z.string(),
-        title: z.string().min(1).max(200).optional(),
-        description: z.string().max(2000).nullable().optional(),
+        id: z.string().min(1),
+        title: z.string().trim().min(1).max(200).optional(),
+        description: z.string().trim().max(2000).nullable().optional(),
       }).refine(
         (d) => d.title !== undefined || d.description !== undefined,
         { message: "At least one field must be provided." }
