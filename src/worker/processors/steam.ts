@@ -1,5 +1,5 @@
 import type { Job } from "bullmq";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { db } from "@/server/db";
 import { user, games, gameOwnerships } from "@/server/db/schema";
@@ -31,6 +31,7 @@ type SteamOwnedGame = {
   appid: number;
   name?: string;
   playtime_forever?: number;
+  rtime_last_played?: number; // Unix timestamp (seconds); 0 = never played
 };
 
 type SteamGetOwnedGamesResponse = {
@@ -214,17 +215,53 @@ async function upsertBatch(userId: string, steamGames: SteamOwnedGame[]): Promis
     }
   }
 
-  // Upsert ownership records (pc platform, steam source)
+  // Upsert ownership records (pc platform, steam source).
+  //
+  // Playtime semantics — high-water-mark: stored playtime is never decreased.
+  //
+  // Both "Steam says 0 minutes" and "Steam omitted the field" normalise to null
+  // (Steam uses playtime_forever=0 for "never launched" AND for games where playtime
+  // tracking is unavailable; there is no way to distinguish these). The COALESCE
+  // on conflict preserves the existing non-null value in both cases. This means:
+  //   - If a user genuinely plays 0 minutes after previously having playtime stored,
+  //     the old value is kept. In practice this cannot happen — Steam playtime is
+  //     cumulative and never decreases.
+  //   - If Steam omits the field on a re-sync (partial response), existing data is kept.
+  // lastPlayedAt follows the same semantics: null from Steam never overwrites a stored date.
   const ownershipRows = steamGames
     .map((g) => {
       const gameId = existingByAppId.get(String(g.appid));
       if (!gameId) return null;
-      return { userId, gameId, platform: "pc" as const, source: "steam" as const };
+      // rtime_last_played: 0 means "never played", undefined means "field omitted" —
+      // both map to null and COALESCE preserves old data. Uses explicit !== undefined
+      // check (consistent with playtimeMinutes below) to signal intent clearly.
+      const lastPlayedAt =
+        g.rtime_last_played !== undefined && g.rtime_last_played > 0
+          ? new Date(g.rtime_last_played * 1000)
+          : null;
+      return {
+        userId,
+        gameId,
+        platform: "pc" as const,
+        source: "steam" as const,
+        // 0 → null: Steam uses 0 for both "never launched" and "tracking unavailable".
+        playtimeMinutes: g.playtime_forever !== undefined && g.playtime_forever > 0 ? g.playtime_forever : null,
+        lastPlayedAt,
+      };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
 
   if (ownershipRows.length > 0) {
-    await db.insert(gameOwnerships).values(ownershipRows).onConflictDoNothing();
+    await db
+      .insert(gameOwnerships)
+      .values(ownershipRows)
+      .onConflictDoUpdate({
+        target: [gameOwnerships.userId, gameOwnerships.gameId, gameOwnerships.platform],
+        set: {
+          playtimeMinutes: sql`COALESCE(excluded.playtime_minutes, ${gameOwnerships.playtimeMinutes})`,
+          lastPlayedAt: sql`COALESCE(excluded.last_played_at, ${gameOwnerships.lastPlayedAt})`,
+        },
+      });
   }
 
   return ownershipRows.length;

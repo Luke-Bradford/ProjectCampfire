@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, asc, count, countDistinct, eq, gt, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, count, countDistinct, desc, eq, gt, ilike, inArray, or, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -237,6 +237,7 @@ export const gamesRouter = createTRPCRouter({
         cursor: z.string().optional(), // last gameId from previous page
         limit: z.number().int().min(1).max(100).default(50),
         showHidden: z.boolean().default(false),
+        sort: z.enum(["alphabetical", "most_played", "recently_played", "recently_added"]).default("alphabetical"),
       })
     )
     .query(async ({ ctx, input }) => {
@@ -281,6 +282,25 @@ export const gamesRouter = createTRPCRouter({
       // TODO(tech-debt): replace with SQL GROUP BY + array_agg for large libraries.
       // Safe at MVP scale: Steam sync caps at ~2000 games per user and the full set
       // fits comfortably in a single round-trip at this size.
+
+      // Sort order for the raw ownership query. Alphabetical needs the title, which comes
+      // from the joined game row — re-sort in JS after grouping instead.
+      let orderByClause;
+      switch (input.sort) {
+        case "most_played":
+          // Nulls last: games with no playtime data appear at the end.
+          orderByClause = [sql`${gameOwnerships.playtimeMinutes} DESC NULLS LAST`, asc(gameOwnerships.gameId)];
+          break;
+        case "recently_played":
+          orderByClause = [sql`${gameOwnerships.lastPlayedAt} DESC NULLS LAST`, asc(gameOwnerships.gameId)];
+          break;
+        case "recently_added":
+          orderByClause = [desc(gameOwnerships.createdAt), asc(gameOwnerships.gameId)];
+          break;
+        default: // alphabetical
+          orderByClause = [asc(gameOwnerships.gameId)];
+      }
+
       const allRows = await db.query.gameOwnerships.findMany({
         where: ownershipWhere,
         with: {
@@ -295,31 +315,55 @@ export const gamesRouter = createTRPCRouter({
             },
           },
         },
-        orderBy: (t, { asc }) => [asc(t.gameId)],
+        orderBy: () => orderByClause,
       });
 
-      // Group by gameId — collect platforms, pick hidden/source from first row.
+      // Group by gameId — collect platforms, track max playtime / most-recent lastPlayedAt
+      // across all platforms (Steam only populates PC rows, but this is future-proof).
       const gameMap = new Map<string, {
         id: string; title: string; coverUrl: string | null;
         genres: string[]; minPlayers: number | null; maxPlayers: number | null;
         platforms: (typeof PLATFORMS)[number][]; source: string; hidden: boolean;
+        playtimeMinutes: number | null; lastPlayedAt: Date | null;
       }>();
       for (const r of allRows) {
         const existing = gameMap.get(r.gameId);
         if (existing) {
           existing.platforms.push(r.platform);
+          // Keep the maximum playtime and most-recent lastPlayedAt across platforms.
+          if (r.playtimeMinutes != null && (existing.playtimeMinutes == null || r.playtimeMinutes > existing.playtimeMinutes)) {
+            existing.playtimeMinutes = r.playtimeMinutes;
+          }
+          if (r.lastPlayedAt != null && (existing.lastPlayedAt == null || r.lastPlayedAt > existing.lastPlayedAt)) {
+            existing.lastPlayedAt = r.lastPlayedAt;
+          }
         } else {
           gameMap.set(r.gameId, {
             ...r.game,
             platforms: [r.platform],
             source: r.source,
             hidden: r.hidden,
+            playtimeMinutes: r.playtimeMinutes ?? null,
+            lastPlayedAt: r.lastPlayedAt ?? null,
           });
         }
       }
 
       // Apply cursor and limit to the deduplicated list.
-      const allGames = [...gameMap.values()];
+      // All rows are fetched in one query and sliced in JS. The cursor (gameId) is
+      // stable regardless of sort order — it identifies the last-seen item positionally.
+      //
+      // Known trade-off: a background Steam re-sync between page 1 and page 2 can shift
+      // sort positions for most_played/recently_played/recently_added, which may cause a
+      // game to appear on both pages or be skipped entirely. This is acceptable at MVP
+      // scale (libraries are small, re-syncs are infrequent, and full-page refreshes are
+      // the primary access pattern). A stable per-request snapshot would require storing
+      // the sorted list server-side — not warranted at this stage.
+      //
+      // For alphabetical, re-sort by title after grouping (title requires the join).
+      const allGames = input.sort === "alphabetical"
+        ? [...gameMap.values()].sort((a, b) => a.title.localeCompare(b.title))
+        : [...gameMap.values()];
       let startIdx = 0;
       if (input.cursor) {
         const cursorIdx = allGames.findIndex((g) => g.id === input.cursor);
