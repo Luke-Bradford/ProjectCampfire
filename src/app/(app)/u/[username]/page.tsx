@@ -35,7 +35,7 @@ export default async function UserProfilePage({
 
   // Fetch game library and current user in parallel (games only for open profiles)
   const [me, profileGames] = await Promise.all([
-    trpc.user.me(),
+    trpc.user.me().catch(() => null),
     isPrivate
       ? Promise.resolve({ items: [], total: 0 })
       : trpc.friends.getProfileGames({ userId: profile.id }).catch(() => ({ items: [], total: 0 })),

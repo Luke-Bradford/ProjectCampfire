@@ -652,25 +652,24 @@ export const feedRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const me = ctx.user.id;
 
-      // Can't view your own posts via this endpoint — use feed.list with filter=friends
-      // (own posts appear there). This endpoint is for other users' profiles.
-      // Allow it anyway so the profile page can use a single component for self and others.
+      // Own posts are always visible (caller viewing their own profile).
+      // Block check is skipped for self — a user cannot block themselves.
+      const isSelf = me === input.userId;
 
       // Block check: if either party has blocked the other, return empty.
-      const blockRow = await db.query.friendships.findFirst({
-        where: and(
-          or(
-            and(eq(friendships.requesterId, me), eq(friendships.addresseeId, input.userId)),
-            and(eq(friendships.requesterId, input.userId), eq(friendships.addresseeId, me))
+      if (!isSelf) {
+        const blockRow = await db.query.friendships.findFirst({
+          where: and(
+            or(
+              and(eq(friendships.requesterId, me), eq(friendships.addresseeId, input.userId)),
+              and(eq(friendships.requesterId, input.userId), eq(friendships.addresseeId, me))
+            ),
+            eq(friendships.status, "blocked")
           ),
-          eq(friendships.status, "blocked")
-        ),
-        columns: { requesterId: true },
-      });
-      if (blockRow) return { items: [], nextCursor: undefined };
-
-      // Own posts are always visible (caller viewing their own profile).
-      const isSelf = me === input.userId;
+          columns: { requesterId: true },
+        });
+        if (blockRow) return { items: [], nextCursor: undefined };
+      }
 
       // Check friendship
       const friendRow = isSelf ? null : await db.query.friendships.findFirst({
