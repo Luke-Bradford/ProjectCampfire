@@ -364,7 +364,7 @@ async function sendFeedDigest(userId: string, frequency: "daily" | "weekly"): Pr
   // Cap at 20 posts per digest to keep emails readable.
   const visibilityFilter = or(
     friendIds.length > 0 ? and(inArray(posts.authorId, friendIds), isNull(posts.groupId)) : undefined,
-    myGroupIds.length > 0 ? and(inArray(posts.groupId, myGroupIds)) : undefined
+    myGroupIds.length > 0 ? inArray(posts.groupId, myGroupIds) : undefined
   );
 
   if (!visibilityFilter) return;
@@ -416,7 +416,7 @@ async function sendFeedDigest(userId: string, frequency: "daily" | "weekly"): Pr
   const postItemsHtml = digestPosts
     .map(
       (p) =>
-        `<li style="margin-bottom:12px"><strong>${esc(p.authorName)}</strong><br/><span style="color:#444">${esc(p.body ?? "(image or link)")}</span><br/><a href="${appUrl()}/feed" style="font-size:12px;color:#888">View post →</a></li>`
+        `<li style="margin-bottom:12px"><strong>${esc(p.authorName)}</strong><br/><span style="color:#444">${esc(p.body ?? "(image or link)")}</span></li>`
     )
     .join("\n");
 
