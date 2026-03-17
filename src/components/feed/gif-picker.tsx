@@ -24,6 +24,8 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
   const [results, setResults] = useState<GifResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
+  // true = open above the trigger, false = open below
+  const [openUpward, setOpenUpward] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -34,20 +36,41 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
+  // Decide whether to open above or below based on available viewport space.
+  // The picker is ~320px tall (search + 256px grid + attribution).
+  useEffect(() => {
+    if (containerRef.current) {
+      // The picker hasn't fully laid out yet — use the parent element's position
+      // to determine available space above/below the trigger.
+      const parent = containerRef.current.parentElement;
+      if (parent) {
+        const parentRect = parent.getBoundingClientRect();
+        const spaceAbove = parentRect.top;
+        const spaceBelow = window.innerHeight - parentRect.bottom;
+        setOpenUpward(spaceAbove >= 320 || spaceAbove >= spaceBelow);
+      }
+    }
+  }, []);
+
   // Focus the search input when the picker opens
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  // Close on outside click
+  // Close on outside click.
+  // Registered after a tick so the mousedown that opened the picker
+  // doesn't immediately trigger the handler and close it again.
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         onCloseRef.current();
       }
     }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    const t = setTimeout(() => document.addEventListener("mousedown", handler), 0);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener("mousedown", handler);
+    };
   }, []);
 
   // Close on Escape
@@ -112,7 +135,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
   return (
     <div
       ref={containerRef}
-      className="absolute z-50 bottom-full mb-1 left-0 w-80 rounded-xl border bg-popover shadow-lg overflow-hidden"
+      className={`absolute z-50 left-0 w-80 rounded-xl border bg-popover shadow-lg overflow-hidden ${openUpward ? "bottom-full mb-1" : "top-full mt-1"}`}
     >
       {/* Search */}
       <div className="p-2 border-b">
