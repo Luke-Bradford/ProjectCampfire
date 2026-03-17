@@ -155,9 +155,11 @@ function CommentRow({
           </form>
         ) : (
           <>
-            <div className="rounded-lg bg-muted px-3 py-2 text-sm">
-              {comment.body}
-            </div>
+            {comment.body && (
+              <div className="rounded-lg bg-muted px-3 py-2 text-sm">
+                {comment.body}
+              </div>
+            )}
             {(() => {
               const imgs = (comment.imageUrls ?? []).filter((u): u is string => {
                 if (!u) return false;
