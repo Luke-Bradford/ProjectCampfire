@@ -58,8 +58,8 @@ export default async function UserProfilePage({
           {profile.username && (
             <p className="text-muted-foreground">@{profile.username}</p>
           )}
-          {"status" in profile && !isPrivate && (
-            <StatusDot status={profile.status} showLabel />
+          {!isPrivate && (
+            <StatusDot status={"status" in profile ? profile.status : null} showLabel />
           )}
           {isPrivate && (
             <p className="text-sm text-muted-foreground">This profile is private.</p>

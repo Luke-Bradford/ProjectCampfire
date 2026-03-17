@@ -40,9 +40,9 @@ export function StatusDot({
 
   return (
     <span
-      className={cn("block h-2.5 w-2.5 rounded-full border-2 border-background", colour, className)}
-      title={label}
+      role="img"
       aria-label={label}
+      className={cn("block h-2.5 w-2.5 rounded-full border-2 border-background", colour, className)}
     />
   );
 }
