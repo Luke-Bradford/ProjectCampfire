@@ -104,13 +104,18 @@ function PollCard({
           const isWinner = isClosed && count === maxVotes && count > 0;
           const owners = opt.gameId ? (ownershipMap?.[opt.gameId] ?? []) : [];
           const iOwn = owners.some((o) => o.user.id === myUserId);
-          const otherOwners = owners.filter((o) => o.user.id !== myUserId);
+          // Deduplicate owners by userId (a user may own on multiple platforms)
+          const uniqueOwners = owners.filter(
+            (o, idx, arr) => arr.findIndex((x) => x.user.id === o.user.id) === idx
+          );
+          const ownerAvatars = uniqueOwners.slice(0, 4);
+          const extraOwners = uniqueOwners.length - ownerAvatars.length;
           const ownerLabel = iOwn
-            ? otherOwners.length > 0
-              ? `You + ${otherOwners.length} other${otherOwners.length === 1 ? "" : "s"} own this`
+            ? uniqueOwners.length > 1
+              ? `You + ${uniqueOwners.length - 1} other${uniqueOwners.length - 1 === 1 ? "" : "s"} own this`
               : "You own this"
-            : owners.length > 0
-            ? `${owners.length} member${owners.length === 1 ? "" : "s"} own this`
+            : uniqueOwners.length > 0
+            ? `${uniqueOwners.length} member${uniqueOwners.length === 1 ? "" : "s"} own this`
             : null;
           // Avatar stack: up to 5 voters shown
           const avatarVoters = opt.votes.slice(0, 5);
@@ -174,10 +179,37 @@ function PollCard({
                     )}
                   </div>
                 )}
-                {ownerLabel && (
-                  <p className={`text-xs mt-0.5 ${iOwn ? "text-primary" : "text-muted-foreground"}`}>
-                    {ownerLabel}
-                  </p>
+                {uniqueOwners.length > 0 && (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <div className="flex -space-x-1">
+                      {ownerAvatars.map((o) => (
+                        o.user.image ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={o.user.id}
+                            src={o.user.image}
+                            alt={o.user.name}
+                            title={o.user.name}
+                            className="h-4 w-4 rounded-full border border-background object-cover"
+                          />
+                        ) : (
+                          <span
+                            key={o.user.id}
+                            title={o.user.name}
+                            className="h-4 w-4 rounded-full border border-background bg-muted flex items-center justify-center text-[8px] font-medium text-muted-foreground"
+                          >
+                            {o.user.name[0]?.toUpperCase() ?? "?"}
+                          </span>
+                        )
+                      ))}
+                    </div>
+                    {extraOwners > 0 && (
+                      <span className="text-[10px] text-muted-foreground">+{extraOwners}</span>
+                    )}
+                    <p className={`text-xs ${iOwn ? "text-primary" : "text-muted-foreground"}`}>
+                      {ownerLabel}
+                    </p>
+                  </div>
                 )}
               </button>
             </li>
@@ -735,6 +767,12 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
     onError: (e) => setStatusError(e.message),
   });
 
+  // Game ownership overlap for the attached game (CAMP-180)
+  const { data: gameOwners } = api.games.ownershipOverlap.useQuery(
+    { gameId: event?.game?.id ?? "", groupId: event?.groupId ?? "" },
+    { enabled: !!event?.game?.id && !!event?.groupId, staleTime: 60_000 }
+  );
+
   // Game attach/detach (CAMP-193)
   const [showGamePicker, setShowGamePicker] = useState(false);
   const attachGame = api.events.attachGame.useMutation({
@@ -855,6 +893,49 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
               {event.gameOptional && (
                 <span className="text-xs text-muted-foreground">Optional — bring your own choice</span>
               )}
+              {/* Who in the group owns this game (CAMP-180) */}
+              {gameOwners && gameOwners.length > 0 && (() => {
+                const uniqueGameOwners = gameOwners.filter(
+                  (o, idx, arr) => arr.findIndex((x) => x.user.id === o.user.id) === idx
+                );
+                const avatars = uniqueGameOwners.slice(0, 4);
+                const extra = uniqueGameOwners.length - avatars.length;
+                const iOwn = gameOwners.some((o) => o.user.id === myUserId);
+                return (
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <div className="flex -space-x-1">
+                      {avatars.map((o) => (
+                        o.user.image ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={o.user.id}
+                            src={o.user.image}
+                            alt={o.user.name}
+                            title={o.user.name}
+                            className="h-4 w-4 rounded-full border border-background object-cover"
+                          />
+                        ) : (
+                          <span
+                            key={o.user.id}
+                            title={o.user.name}
+                            className="h-4 w-4 rounded-full border border-background bg-muted flex items-center justify-center text-[8px] font-medium text-muted-foreground"
+                          >
+                            {o.user.name[0]?.toUpperCase() ?? "?"}
+                          </span>
+                        )
+                      ))}
+                    </div>
+                    {extra > 0 && <span className="text-[10px] text-muted-foreground">+{extra}</span>}
+                    <p className={`text-xs ${iOwn ? "text-primary" : "text-muted-foreground"}`}>
+                      {iOwn
+                        ? uniqueGameOwners.length > 1
+                          ? `You + ${uniqueGameOwners.length - 1} other${uniqueGameOwners.length - 1 === 1 ? "" : "s"} own this`
+                          : "You own this"
+                        : `${uniqueGameOwners.length} member${uniqueGameOwners.length === 1 ? "" : "s"} own this`}
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
             {isEventCreator && event.status !== "cancelled" && (
               <div className="flex items-center gap-2 shrink-0">

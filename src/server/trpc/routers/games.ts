@@ -570,10 +570,10 @@ export const gamesRouter = createTRPCRouter({
           inArray(gameOwnerships.gameId, input.gameIds),
           inArray(gameOwnerships.userId, memberIds)
         ),
-        with: { user: { columns: { id: true, name: true, username: true } } },
+        with: { user: { columns: { id: true, name: true, username: true, image: true } } },
       });
       // Group by gameId
-      const result: Record<string, { user: { id: string; name: string; username: string | null }; platform: string }[]> = {};
+      const result: Record<string, { user: { id: string; name: string; username: string | null; image: string | null }; platform: string }[]> = {};
       for (const o of ownerships) {
         if (!result[o.gameId]) result[o.gameId] = [];
         result[o.gameId]!.push({ user: o.user, platform: o.platform });
@@ -722,7 +722,7 @@ export const gamesRouter = createTRPCRouter({
           eq(gameOwnerships.gameId, input.gameId),
           or(...memberIds.map((id) => eq(gameOwnerships.userId, id)))
         ),
-        with: { user: { columns: { id: true, name: true, username: true } } },
+        with: { user: { columns: { id: true, name: true, username: true, image: true } } },
       });
       return ownerships.map((o) => ({ user: o.user, platform: o.platform }));
     }),
