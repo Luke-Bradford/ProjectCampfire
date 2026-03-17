@@ -74,16 +74,26 @@ async function sweepIgdbReenrichment(): Promise<void> {
   }
 
   const queue = getIgdbQueue();
-  await queue.addBulk(
-    staleGames.map((g) => ({
+  const jobs = staleGames.flatMap((g) => {
+    const igdbId = parseInt(g.externalId!, 10);
+    if (!Number.isFinite(igdbId)) {
+      log.warn("igdb sweep: non-numeric externalId, skipping", { gameId: g.id, externalId: g.externalId });
+      return [];
+    }
+    return [{
       name: "reenrich_igdb_game",
+      // Stable jobId deduplicates if a previous sweep's job is still queued/running
+      opts: { jobId: `reenrich_igdb_game:${g.id}` },
       data: {
         type: "reenrich_igdb_game" as const,
         gameId: g.id,
-        igdbId: parseInt(g.externalId!, 10),
+        igdbId,
       },
-    }))
-  );
+    }];
+  });
+
+  if (jobs.length === 0) return;
+  await queue.addBulk(jobs);
 
   log.info("igdb re-enrichment sweep: enqueued", { count: staleGames.length });
 }
@@ -93,11 +103,13 @@ async function sweepIgdbReenrichment(): Promise<void> {
 async function reenrichIgdbGame(gameId: string, igdbId: number): Promise<void> {
   const igdbGame = await fetchIgdbGame(igdbId);
 
+  const now = new Date();
+
   if (!igdbGame) {
     // Game removed from IGDB — stamp enrichedAt so we don't keep retrying
     await db
       .update(games)
-      .set({ igdbEnrichedAt: new Date(), updatedAt: new Date() })
+      .set({ igdbEnrichedAt: now, updatedAt: now })
       .where(eq(games.id, gameId));
     log.warn("igdb re-enrichment: game not found on IGDB, stamped enrichedAt", { gameId, igdbId });
     return;
@@ -107,6 +119,11 @@ async function reenrichIgdbGame(gameId: string, igdbId: number): Promise<void> {
   const steamAppId = extractSteamAppId(igdbGame);
   const coverUrl = normalizeCoverUrl(igdbGame.cover?.url);
   const genres = igdbGame.genres?.map((g) => g.name) ?? [];
+
+  // Use sql.param() to send the JSON as a bound parameter rather than
+  // interpolating it directly into the SQL text. This is safe even if the
+  // IGDB response contains characters that would otherwise break the literal.
+  const igdbJsonParam = sql.param(JSON.stringify({ igdb: igdbGame }));
 
   await db
     .update(games)
@@ -122,9 +139,9 @@ async function reenrichIgdbGame(gameId: string, igdbId: number): Promise<void> {
       ...(steamAppId ? { steamAppId } : {}),
       // Atomic jsonb merge — preserves existing keys (e.g. steamspy data) without
       // a read-then-write race. Matches the pattern in server/lib/steamspy.ts.
-      metadataJson: sql`COALESCE(${games.metadataJson}, '{}'::jsonb) || ${JSON.stringify({ igdb: igdbGame })}::jsonb`,
-      igdbEnrichedAt: new Date(),
-      updatedAt: new Date(),
+      metadataJson: sql`COALESCE(${games.metadataJson}, '{}'::jsonb) || ${igdbJsonParam}::jsonb`,
+      igdbEnrichedAt: now,
+      updatedAt: now,
     })
     .where(eq(games.id, gameId));
 
