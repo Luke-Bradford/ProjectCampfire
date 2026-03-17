@@ -8,12 +8,12 @@ import { FeedSkeleton } from "@/components/ui/skeletons";
 
 export default function PostPermalinkPage({ params }: { params: Promise<{ postId: string }> }) {
   const { postId } = use(params);
-  const { data: me } = api.user.me.useQuery();
-  const { data: post, isLoading, refetch } = api.feed.getPost.useQuery({ id: postId });
+  const { data: me, isLoading: meLoading } = api.user.me.useQuery();
+  const { data: post, isLoading: postLoading, refetch } = api.feed.getPost.useQuery({ id: postId });
 
-  if (isLoading || !me) return <FeedSkeleton />;
+  if (postLoading || meLoading) return <FeedSkeleton />;
 
-  if (post === null || post === undefined) {
+  if (!post || !me) {
     return (
       <div className="max-w-2xl mx-auto space-y-4">
         <Link href="/feed" className="text-sm text-muted-foreground hover:text-foreground">

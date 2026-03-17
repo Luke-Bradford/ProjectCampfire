@@ -44,7 +44,6 @@ function notifLink(type: string, data: NotifData): string | null {
   switch (type) {
     case "post_comment":
     case "post_like":
-      return data.postId ? `/feed/${data.postId}` : "/feed";
     case "comment_like":
       return data.postId ? `/feed/${data.postId}` : "/feed";
     case "group_invite_received":

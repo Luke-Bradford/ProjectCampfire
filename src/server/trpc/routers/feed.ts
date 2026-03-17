@@ -449,7 +449,7 @@ export const feedRouter = createTRPCRouter({
       // Fire-and-forget: a notification failure must not roll back the comment insert.
       // commenterName is denormalised at creation time — reflects the name at the time of the comment.
       if (post.authorId !== ctx.user.id) {
-        db.insert(notifications).values({
+        void db.insert(notifications).values({
           id: createId(),
           userId: post.authorId,
           type: "post_comment",
@@ -604,7 +604,7 @@ export const feedRouter = createTRPCRouter({
           columns: { authorId: true },
         });
         if (post && post.authorId !== ctx.user.id) {
-          db.insert(notifications).values({
+          void db.insert(notifications).values({
             id: createId(),
             userId: post.authorId,
             type: "post_like",
@@ -622,7 +622,7 @@ export const feedRouter = createTRPCRouter({
           columns: { authorId: true, postId: true },
         });
         if (comment && comment.authorId !== ctx.user.id) {
-          db.insert(notifications).values({
+          void db.insert(notifications).values({
             id: createId(),
             userId: comment.authorId,
             type: "comment_like",
