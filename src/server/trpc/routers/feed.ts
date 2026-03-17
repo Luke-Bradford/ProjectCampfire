@@ -407,7 +407,7 @@ export const feedRouter = createTRPCRouter({
   comment: protectedProcedure
     .input(z.object({
       postId: z.string(),
-      body: z.string().min(1).max(1000),
+      body: z.string().trim().max(1000),
       // imageKeys: raw MinIO keys returned by /api/upload/post-image (same route).
       // Max 1 image per comment. Pattern: posts/{userId}/{uploadId}/{cuid}-raw
       // Ownership verified by prefix check (same as post images).
@@ -415,7 +415,18 @@ export const feedRouter = createTRPCRouter({
         .array(z.string().regex(/^posts\/[A-Za-z0-9]+\/[A-Za-z0-9]{10,}\/[a-z0-9]+-raw$/))
         .max(1)
         .optional(),
-    }))
+      // gifUrl: a Tenor CDN URL selected via the GIF picker.
+      // Stored directly in imageUrls — no processing needed.
+      gifUrl: z.string().url().regex(/^https:\/\/media\.tenor\.com\//).optional(),
+    })
+    .refine(
+      (v) => v.body.trim().length > 0 || !!v.gifUrl || !!v.imageKeys?.length,
+      { message: "Comment must have a body, GIF, or image." }
+    )
+    .refine(
+      (v) => !(v.gifUrl && v.imageKeys?.length),
+      { message: "gifUrl and imageKeys are mutually exclusive" }
+    ))
     .mutation(async ({ ctx, input }) => {
       // Verify the post exists and is not soft-deleted.
       const post = await db.query.posts.findFirst({
@@ -437,8 +448,8 @@ export const feedRouter = createTRPCRouter({
         postId: input.postId,
         authorId: ctx.user.id,
         body: input.body,
-        // Only set imageUrls placeholder when images are expected — avoids storing [] on text-only comments.
-        imageUrls: input.imageKeys?.length ? [] : undefined,
+        // GIF URL stored directly; images start as [] and are filled by the worker.
+        imageUrls: input.gifUrl ? [input.gifUrl] : input.imageKeys?.length ? [] : undefined,
       });
       if (input.imageKeys?.length) {
         await Promise.all(

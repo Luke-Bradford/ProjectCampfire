@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { GifPicker, type GifResult } from "./gif-picker";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -259,6 +260,8 @@ export function PostCard({
   const [commentImage, setCommentImage] = useState<CommentImageUpload | null>(null);
   const [commentImageUploading, setCommentImageUploading] = useState(false);
   const commentFileInputRef = useRef<HTMLInputElement>(null);
+  const [commentGif, setCommentGif] = useState<GifResult | null>(null);
+  const [commentGifPickerOpen, setCommentGifPickerOpen] = useState(false);
   const [editingPost, setEditingPost] = useState(false);
   const [editPostBody, setEditPostBody] = useState(post.body ?? "");
   const postTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -636,16 +639,33 @@ export function PostCard({
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (!commentBody.trim()) return;
+              if (!commentBody.trim() && !commentGif) return;
               addComment.mutate({
                 postId: post.id,
                 body: commentBody.trim(),
                 imageKeys: commentImage?.key ? [commentImage.key] : undefined,
+                gifUrl: commentGif?.url,
               });
+              setCommentGif(null);
+              setCommentGifPickerOpen(false);
               removeCommentImage();
             }}
             className="space-y-2"
           >
+            {commentGif && (
+              <div className="relative w-40">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={commentGif.previewUrl} alt={commentGif.title} className="rounded object-cover w-full" />
+                <button
+                  type="button"
+                  aria-label="Remove GIF"
+                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border bg-background text-xs text-muted-foreground hover:text-destructive"
+                  onClick={() => setCommentGif(null)}
+                >
+                  ×
+                </button>
+              </div>
+            )}
             {commentImage && (
               <div className="relative h-20 w-20">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -683,7 +703,7 @@ export function PostCard({
                   type="submit"
                   size="sm"
                   disabled={
-                    !commentBody.trim() ||
+                    (!commentBody.trim() && !commentGif) ||
                     addComment.isPending ||
                     commentImageUploading ||
                     (commentImage !== null && commentImage.key === null && !commentImage.error)
@@ -691,7 +711,7 @@ export function PostCard({
                 >
                   Send
                 </Button>
-                {!commentImage && (
+                {!commentImage && !commentGif && (
                   <button
                     type="button"
                     className="text-xs text-muted-foreground hover:text-foreground"
@@ -707,6 +727,24 @@ export function PostCard({
                   className="hidden"
                   onChange={handleCommentFileChange}
                 />
+                {!commentImage && (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      className={cn("text-xs hover:text-foreground", commentGif ? "text-foreground font-medium" : "text-muted-foreground")}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={() => setCommentGifPickerOpen((o) => !o)}
+                    >
+                      GIF
+                    </button>
+                    {commentGifPickerOpen && (
+                      <GifPicker
+                        onSelect={(gif) => { setCommentGif(gif); setCommentGifPickerOpen(false); }}
+                        onClose={() => setCommentGifPickerOpen(false)}
+                      />
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </form>
