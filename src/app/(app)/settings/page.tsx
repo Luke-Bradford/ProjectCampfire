@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/trpc/react";
@@ -8,12 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import type { NotificationPrefs } from "@/server/db/schema";
 import { ThemeToggle } from "@/components/nav/theme-toggle";
 import {
   Bell,
+  Camera,
   Link2,
   Palette,
   Shield,
@@ -115,6 +116,7 @@ function AppearanceSection() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProfileSection() {
+  const utils = api.useUtils();
   const { data: me } = api.user.me.useQuery();
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
@@ -122,6 +124,12 @@ function ProfileSection() {
   const [profileSaved, setProfileSaved] = useState(false);
   const [usernameError, setUsernameError] = useState("");
   const [usernameSaved, setUsernameSaved] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState("");
+  const avatarPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clean up any in-flight avatar poll on unmount.
+  useEffect(() => () => { if (avatarPollRef.current) clearInterval(avatarPollRef.current); }, []);
 
   const updateProfile = api.user.updateProfile.useMutation({
     onSuccess: () => { setProfileSaved(true); setTimeout(() => setProfileSaved(false), 2500); },
@@ -141,6 +149,64 @@ function ProfileSection() {
 
   const isDirty = me ? (displayName !== (me.name ?? "") || bio !== (me.bio ?? "")) : false;
 
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset input immediately so the same file can be re-selected after an error.
+    e.target.value = "";
+    setAvatarError("");
+    setAvatarUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/upload/avatar", { method: "POST", body: form });
+      if (!res.ok) {
+        const json: unknown = await res.json();
+        const message = typeof json === "object" && json !== null && "error" in json && typeof (json as { error: unknown }).error === "string"
+          ? (json as { error: string }).error
+          : "Upload failed.";
+        setAvatarError(message);
+        setAvatarUploading(false);
+        return;
+      }
+      // Worker processes asynchronously — poll user.me until image URL changes.
+      // avatarUploading stays true throughout so the overlay remains visible.
+      const oldImage = me?.image;
+      let attempts = 0;
+      if (avatarPollRef.current) clearInterval(avatarPollRef.current);
+      avatarPollRef.current = setInterval(() => {
+        attempts++;
+        utils.user.me.invalidate()
+          .then(() => utils.user.me.fetch())
+          .then((fresh) => {
+            if (fresh?.image !== oldImage) {
+              // New image is live — done.
+              clearInterval(avatarPollRef.current!);
+              avatarPollRef.current = null;
+              setAvatarUploading(false);
+            } else if (attempts >= 20) {
+              // Timed out — worker may have failed silently.
+              clearInterval(avatarPollRef.current!);
+              avatarPollRef.current = null;
+              setAvatarUploading(false);
+              setAvatarError("Photo upload timed out. Please try again.");
+            }
+          })
+          .catch(() => {
+            clearInterval(avatarPollRef.current!);
+            avatarPollRef.current = null;
+            setAvatarUploading(false);
+            setAvatarError("Upload failed. Please try again.");
+          });
+      }, 1500);
+    } catch {
+      setAvatarError("Upload failed. Please try again.");
+      setAvatarUploading(false);
+    }
+  }
+
+  const avatarFallback = displayName.split(" ").filter(Boolean).map((w) => w[0]).join("").toUpperCase().slice(0, 2) || "?";
+
   return (
     <div className="space-y-6">
       <div>
@@ -149,16 +215,31 @@ function ProfileSection() {
       </div>
 
       <div className="rounded-xl border bg-card p-5 space-y-5">
-        {/* Avatar preview */}
+        {/* Avatar upload */}
         <div className="flex items-center gap-4">
-          <Avatar className="h-16 w-16 shrink-0">
-            <AvatarFallback className="text-lg font-semibold">
-              {displayName.split(" ").filter(Boolean).map((w) => w[0]).join("").toUpperCase().slice(0, 2) || "?"}
-            </AvatarFallback>
-          </Avatar>
+          <label className="relative group cursor-pointer shrink-0">
+            <Avatar className="h-16 w-16">
+              <AvatarImage src={me?.image ?? undefined} />
+              <AvatarFallback className="text-lg font-semibold">{avatarFallback}</AvatarFallback>
+            </Avatar>
+            <div className={`absolute inset-0 rounded-full bg-black/50 flex items-center justify-center transition-opacity ${avatarUploading ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+              {avatarUploading
+                ? <span className="text-white text-[10px] font-medium">...</span>
+                : <Camera size={16} className="text-white" />}
+            </div>
+            <input
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              disabled={avatarUploading}
+              onChange={handleAvatarChange}
+            />
+          </label>
           <div>
             <p className="text-sm font-medium">{displayName || <span className="text-muted-foreground italic">No name set</span>}</p>
             {me?.username && <p className="text-xs text-muted-foreground">@{me.username}</p>}
+            <p className="text-xs text-muted-foreground mt-1">Click photo to change · max 5 MB</p>
+            {avatarError && <p className="text-xs text-destructive mt-1">{avatarError}</p>}
           </div>
         </div>
 
