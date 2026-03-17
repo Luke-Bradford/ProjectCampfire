@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { createId } from "@paralleldrive/cuid2";
 import type { EmbedMetadata } from "@/server/db/schema/posts";
 import { formatDistanceToNow } from "date-fns";
@@ -214,6 +215,23 @@ function CommentRow({
   );
 }
 
+function CopyLinkButton({ postId }: { postId: string }) {
+  const [copied, setCopied] = useState(false);
+  function handleCopy() {
+    void navigator.clipboard.writeText(`${window.location.origin}/feed/${postId}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+  return (
+    <button
+      className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+      onClick={handleCopy}
+    >
+      {copied ? "Copied!" : "Copy link"}
+    </button>
+  );
+}
+
 export function PostCard({
   post,
   currentUserId,
@@ -403,10 +421,17 @@ export function PostCard({
             <AvatarFallback>{initials(post.author.name)}</AvatarFallback>
           </Avatar>
           <div>
-            <p className="text-sm font-medium leading-none">{post.author.name}</p>
+            <Link
+              href={post.author.username ? `/u/${post.author.username}` : (isOwn ? "/profile" : "#")}
+              className="text-sm font-medium leading-none hover:underline"
+            >
+              {post.author.name}
+            </Link>
             <p className="text-xs text-muted-foreground">
               {post.author.username ? `@${post.author.username} · ` : ""}
-              {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}
+              <Link href={`/feed/${post.id}`} className="hover:underline">
+                {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}
+              </Link>
               {post.editedAt && <span className="ml-1">(edited)</span>}
               {post.group && (
                 <> · <span className="font-medium">{post.group.name}</span></>
@@ -584,6 +609,7 @@ export function PostCard({
         >
           💬 {commentCount > 0 && commentCount}
         </button>
+        <CopyLinkButton postId={post.id} />
       </div>
 
       {/* Comments */}

@@ -66,7 +66,7 @@ export function UpcomingEventsPanel() {
               return (
                 <Link
                   key={event.id}
-                  href="/events" /* TODO: link to /events/[id] once event detail routing exists */
+                  href={`/events/${event.id}`}
                   className="flex flex-col gap-1 py-2.5 first:pt-0 last:pb-0 group"
                 >
                   <div className="flex items-start justify-between gap-2">
