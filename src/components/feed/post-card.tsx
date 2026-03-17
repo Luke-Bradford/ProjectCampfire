@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { createId } from "@paralleldrive/cuid2";
 import type { EmbedMetadata } from "@/server/db/schema/posts";
 import { formatDistanceToNow } from "date-fns";
@@ -108,7 +109,12 @@ function CommentRow({
         <AvatarFallback className="text-xs">{initials(comment.author.name)}</AvatarFallback>
       </Avatar>
       <div className="flex-1 space-y-0.5">
-        <p className="px-1 text-xs font-medium">{comment.author.name}</p>
+        <Link
+          href={comment.author.username ? `/u/${comment.author.username}` : (isOwn ? "/profile" : "#")}
+          className="px-1 text-xs font-medium hover:underline"
+        >
+          {comment.author.name}
+        </Link>
         {editing ? (
           <form
             onSubmit={(e) => {
@@ -211,6 +217,28 @@ function CommentRow({
         </div>
       </div>
     </div>
+  );
+}
+
+function CopyLinkButton({ postId }: { postId: string }) {
+  const [copied, setCopied] = useState(false);
+  function handleCopy() {
+    navigator.clipboard.writeText(`${window.location.origin}/feed/${postId}`)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {
+        // Clipboard access denied (non-secure context or permissions) — show nothing
+      });
+  }
+  return (
+    <button
+      className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+      onClick={handleCopy}
+    >
+      {copied ? "Copied!" : "Copy link"}
+    </button>
   );
 }
 
@@ -403,10 +431,17 @@ export function PostCard({
             <AvatarFallback>{initials(post.author.name)}</AvatarFallback>
           </Avatar>
           <div>
-            <p className="text-sm font-medium leading-none">{post.author.name}</p>
+            <Link
+              href={post.author.username ? `/u/${post.author.username}` : (isOwn ? "/profile" : "#")}
+              className="text-sm font-medium leading-none hover:underline"
+            >
+              {post.author.name}
+            </Link>
             <p className="text-xs text-muted-foreground">
               {post.author.username ? `@${post.author.username} · ` : ""}
-              {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}
+              <Link href={`/feed/${post.id}`} className="hover:underline">
+                {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}
+              </Link>
               {post.editedAt && <span className="ml-1">(edited)</span>}
               {post.group && (
                 <> · <span className="font-medium">{post.group.name}</span></>
@@ -584,6 +619,7 @@ export function PostCard({
         >
           💬 {commentCount > 0 && commentCount}
         </button>
+        <CopyLinkButton postId={post.id} />
       </div>
 
       {/* Comments */}
