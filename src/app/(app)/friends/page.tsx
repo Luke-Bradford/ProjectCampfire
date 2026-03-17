@@ -236,6 +236,9 @@ export default function FriendsPage() {
                   {u.username && (
                     <p className="text-xs text-muted-foreground">@{u.username}</p>
                   )}
+                  {u.currentGameName && (
+                    <p className="text-xs text-primary mt-0.5">🎮 {u.currentGameName}</p>
+                  )}
                 </div>
               </Link>
               <Button

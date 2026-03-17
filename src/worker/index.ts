@@ -20,6 +20,7 @@ import type { ImageJobPayload } from "@/server/jobs/image-jobs";
 import type { OgFetchJobPayload } from "@/server/jobs/og-fetch-jobs";
 import type { PollJobPayload } from "@/server/jobs/poll-jobs";
 import type { RecurringJobPayload } from "@/server/jobs/recurring-jobs";
+import { enqueueRefreshNowPlaying } from "@/server/jobs/steam-jobs";
 import type { SteamJobPayload } from "@/server/jobs/steam-jobs";
 import type { PushJobPayload } from "@/server/jobs/push-jobs";
 import type { IgdbJobPayload } from "@/server/jobs/igdb-jobs";
@@ -211,6 +212,8 @@ log.info("Campfire workers started");
         { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: "sweep_igdb_reenrichment" },
       )
     ),
+    // Every 5 minutes: refresh Steam "Now Playing" for all linked users (CAMP-181).
+    registerRepeatableJob("refresh_now_playing", () => enqueueRefreshNowPlaying()),
   ]);
   log.info("Campfire repeatable jobs registered");
 })().catch((err: unknown) => {

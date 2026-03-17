@@ -154,8 +154,8 @@ export const friendsRouter = createTRPCRouter({
         eq(friendships.addresseeId, ctx.user.id)
       ),
       with: {
-        requester: { columns: { id: true, name: true, username: true, image: true, status: true } },
-        addressee: { columns: { id: true, name: true, username: true, image: true, status: true } },
+        requester: { columns: { id: true, name: true, username: true, image: true, status: true, currentGameName: true } },
+        addressee: { columns: { id: true, name: true, username: true, image: true, status: true, currentGameName: true } },
       },
     });
 
@@ -252,6 +252,7 @@ export const friendsRouter = createTRPCRouter({
           bio: true,
           profileVisibility: true,
           status: true,
+          currentGameName: true,
         },
       });
       if (!found) {

@@ -61,6 +61,9 @@ export default async function UserProfilePage({
           {!isPrivate && (
             <StatusDot status={"status" in profile ? profile.status : null} showLabel />
           )}
+          {"currentGameName" in profile && profile.currentGameName && (
+            <p className="text-sm text-primary">🎮 {profile.currentGameName}</p>
+          )}
           {isPrivate && (
             <p className="text-sm text-muted-foreground">This profile is private.</p>
           )}

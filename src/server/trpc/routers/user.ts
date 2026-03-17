@@ -50,6 +50,7 @@ export const userRouter = createTRPCRouter({
         recentlyPlayedJson: true,
         recentlyPlayedSyncedAt: true,
         status: true,
+        currentGameName: true,
       },
     });
   }),
