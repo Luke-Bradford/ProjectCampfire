@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, asc, desc, eq, isNull, lt, or, inArray, not } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, lt, or, inArray, not, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -27,14 +27,16 @@ export const feedRouter = createTRPCRouter({
       limit: z.number().min(1).max(50).default(20),
       // "all" | "friends" | "group:<id>" — defaults to "all" when absent
       filter: z.string().optional(),
+      // "new" (default, chronological cursor-paginated) | "hot" (score-ranked, top 50, no cursor)
+      sort: z.enum(["new", "hot"]).default("new"),
     }))
     .query(async ({ ctx, input }) => {
       const me = ctx.user.id;
 
-      // Parse compound cursor "<isoTimestamp>_<postId>"
+      // Parse compound cursor "<isoTimestamp>_<postId>" — only used for sort=new
       let cursorDate: Date | undefined;
       let cursorId: string | undefined;
-      if (input.cursor) {
+      if (input.sort === "new" && input.cursor) {
         const sep = input.cursor.lastIndexOf("_");
         if (sep === -1) throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid cursor" });
         cursorDate = new Date(input.cursor.slice(0, sep));
@@ -122,6 +124,95 @@ export const feedRouter = createTRPCRouter({
               blockedExclusion
             );
 
+      // ── Hot ranking (sort=hot) ────────────────────────────────────────────────
+      // HN-style score: (reactions + comments*2) / (age_hours + 2)^1.5
+      // Strategy: fetch candidate post IDs (last 30 days, visibility-filtered) using
+      // Drizzle's query builder, then join engagement counts in a single aggregation
+      // query. Score + sort in JS, re-fetch top 50 with full relations.
+      // No cursor: always returns the top 50 posts ranked by score.
+      if (input.sort === "hot") {
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+        // Step 1: candidate post IDs within the visibility window.
+        // Capped at 1000 most-recent to avoid unbounded IN-list parameters downstream.
+        // Hot scoring over the 1000 most-recent visible posts is a good-enough approximation
+        // at MVP scale; truly viral older posts naturally decay below newer ones anyway.
+        const candidateRows = await db
+          .select({ id: posts.id, createdAt: posts.createdAt })
+          .from(posts)
+          .where(and(isNull(posts.deletedAt), visibilityFilter, gt(posts.createdAt, thirtyDaysAgo)))
+          .orderBy(desc(posts.createdAt))
+          .limit(1000);
+
+        if (candidateRows.length === 0) return { items: [], nextCursor: undefined };
+
+        const candidateIds = candidateRows.map((r) => r.id);
+
+        // Step 2: engagement counts for all candidates in one query
+        const engagementRows = await db
+          .select({
+            postId: reactions.postId,
+            reactionCount: sql<number>`COUNT(*)`.mapWith(Number),
+          })
+          .from(reactions)
+          .where(inArray(reactions.postId, candidateIds))
+          .groupBy(reactions.postId);
+
+        const commentCountRows = await db
+          .select({
+            postId: comments.postId,
+            commentCount: sql<number>`COUNT(*)`.mapWith(Number),
+          })
+          .from(comments)
+          .where(and(inArray(comments.postId, candidateIds), isNull(comments.deletedAt)))
+          .groupBy(comments.postId);
+
+        const reactionMap = new Map(engagementRows.map((r) => [r.postId, r.reactionCount]));
+        const commentMap = new Map(commentCountRows.map((r) => [r.postId, r.commentCount]));
+
+        // Step 3: score each candidate and pick top 50
+        const now = Date.now();
+        const scored = candidateRows
+          .map((r) => {
+            const reactionCount = reactionMap.get(r.id) ?? 0;
+            const commentCount = commentMap.get(r.id) ?? 0;
+            const ageHours = (now - r.createdAt.getTime()) / 3_600_000;
+            const score = (reactionCount + commentCount * 2) / Math.pow(ageHours + 2, 1.5);
+            return { id: r.id, score };
+          })
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 50);
+
+        const topIds = scored.map((r) => r.id);
+        if (topIds.length === 0) return { items: [], nextCursor: undefined };
+
+        const hotPosts = await db.query.posts.findMany({
+          where: inArray(posts.id, topIds),
+          with: {
+            author: { columns: { id: true, name: true, username: true, image: true } },
+            group: { columns: { id: true, name: true } },
+            event: { columns: { id: true, title: true } },
+            reactions: { columns: { id: true, userId: true, type: true } },
+            comments: {
+              where: isNull(comments.deletedAt),
+              orderBy: [asc(comments.createdAt)],
+              limit: 20,
+              with: {
+                author: { columns: { id: true, name: true, username: true, image: true } },
+                reactions: { columns: { id: true, userId: true, type: true } },
+              },
+            },
+          },
+        });
+
+        // Re-apply score order (findMany does not guarantee input order)
+        const idOrder = new Map(topIds.map((id, i) => [id, i]));
+        hotPosts.sort((a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0));
+
+        return { items: hotPosts, nextCursor: undefined };
+      }
+
+      // ── Chronological (sort=new) ──────────────────────────────────────────────
       const feedPosts = await db.query.posts.findMany({
         where: and(
           isNull(posts.deletedAt),
