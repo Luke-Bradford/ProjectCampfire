@@ -449,7 +449,7 @@ export const feedRouter = createTRPCRouter({
       // Fire-and-forget: a notification failure must not roll back the comment insert.
       // commenterName is denormalised at creation time — reflects the name at the time of the comment.
       if (post.authorId !== ctx.user.id) {
-        db.insert(notifications).values({
+        void db.insert(notifications).values({
           id: createId(),
           userId: post.authorId,
           type: "post_comment",
@@ -458,7 +458,7 @@ export const feedRouter = createTRPCRouter({
         void enqueuePush(post.authorId, {
           title: "New comment",
           body: `${ctx.user.name ?? "Someone"} commented on your post.`,
-          url: "/feed",
+          url: `/feed/${input.postId}`,
         }).catch((err: unknown) => log.error("enqueuePush(postComment) failed", { err: String(err) }));
       }
       return { id };
@@ -604,7 +604,7 @@ export const feedRouter = createTRPCRouter({
           columns: { authorId: true },
         });
         if (post && post.authorId !== ctx.user.id) {
-          db.insert(notifications).values({
+          void db.insert(notifications).values({
             id: createId(),
             userId: post.authorId,
             type: "post_like",
@@ -613,29 +613,87 @@ export const feedRouter = createTRPCRouter({
           void enqueuePush(post.authorId, {
             title: "New like",
             body: `${ctx.user.name ?? "Someone"} liked your post.`,
-            url: "/feed",
+            url: `/feed/${input.postId}`,
           }).catch((err: unknown) => log.error("enqueuePush(postLike) failed", { err: String(err) }));
         }
       } else if (input.commentId) {
         const comment = await db.query.comments.findFirst({
           where: eq(comments.id, input.commentId),
-          columns: { authorId: true },
+          columns: { authorId: true, postId: true },
         });
         if (comment && comment.authorId !== ctx.user.id) {
-          db.insert(notifications).values({
+          void db.insert(notifications).values({
             id: createId(),
             userId: comment.authorId,
             type: "comment_like",
-            data: { likerId: ctx.user.id, likerName: ctx.user.name, commentId: input.commentId },
+            data: { likerId: ctx.user.id, likerName: ctx.user.name, commentId: input.commentId, postId: comment.postId },
           }).catch((err: unknown) => log.error("notification insert(commentLike) failed", { err: String(err) }));
           void enqueuePush(comment.authorId, {
             title: "New like",
             body: `${ctx.user.name ?? "Someone"} liked your comment.`,
-            url: "/feed",
+            url: `/feed/${comment.postId}`,
           }).catch((err: unknown) => log.error("enqueuePush(commentLike) failed", { err: String(err) }));
         }
       }
 
       return { liked: true };
+    }),
+
+  // Fetch a single post by id for the permalink page (/feed/[postId]).
+  // Caller must be able to see the post: either it is on a group they belong to,
+  // or the author is a friend (same visibility rules as the feed list).
+  // Returns null when the post does not exist or the caller lacks access.
+  getPost: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const post = await db.query.posts.findFirst({
+        where: and(eq(posts.id, input.id), isNull(posts.deletedAt)),
+        with: {
+          author: { columns: { id: true, name: true, username: true, image: true } },
+          group: { columns: { id: true, name: true } },
+          event: { columns: { id: true, title: true } },
+          reactions: { columns: { id: true, userId: true, type: true } },
+          comments: {
+            where: isNull(comments.deletedAt),
+            orderBy: [asc(comments.createdAt)],
+            with: {
+              author: { columns: { id: true, name: true, username: true, image: true } },
+              reactions: { columns: { id: true, userId: true, type: true } },
+            },
+          },
+        },
+      });
+      if (!post) return null;
+
+      // Visibility check: same rules as the feed list.
+      // 1. Author's own post — always visible.
+      if (post.author.id === ctx.user.id) return post;
+
+      // 2. Group post — caller must be a member of that group.
+      if (post.group) {
+        const membership = await db.query.groupMemberships.findFirst({
+          where: and(
+            eq(groupMemberships.groupId, post.group.id),
+            eq(groupMemberships.userId, ctx.user.id)
+          ),
+          columns: { groupId: true },
+        });
+        if (membership) return post;
+        return null;
+      }
+
+      // 3. Non-group post — caller must be friends with the author.
+      const friendship = await db.query.friendships.findFirst({
+        where: and(
+          or(
+            and(eq(friendships.requesterId, ctx.user.id), eq(friendships.addresseeId, post.author.id)),
+            and(eq(friendships.requesterId, post.author.id), eq(friendships.addresseeId, ctx.user.id))
+          ),
+          eq(friendships.status, "accepted")
+        ),
+        columns: { requesterId: true },
+      });
+      if (friendship) return post;
+      return null;
     }),
 });

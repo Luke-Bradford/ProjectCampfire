@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,20 @@ function FriendRequestActions({
       </Button>
     </div>
   );
+}
+
+/** Returns a client-side link for a notification, or null if not applicable. */
+function notifLink(type: string, data: NotifData): string | null {
+  switch (type) {
+    case "post_comment":
+    case "post_like":
+    case "comment_like":
+      return data.postId ? `/feed/${data.postId}` : "/feed";
+    case "group_invite_received":
+      return "/groups";
+    default:
+      return null;
+  }
 }
 
 function notifMessage(type: string, data: NotifData): string {
@@ -125,6 +140,8 @@ export default function NotificationsPage() {
             const data = n.data as NotifData;
             // Show Accept/Decline only while unread — once acted on, onDone marks it read
             const isPendingRequest = n.type === "friend_request_received" && !n.readAt;
+            const link = notifLink(n.type, data);
+            const message = notifMessage(n.type, data);
             return (
               <li
                 key={n.id}
@@ -132,7 +149,11 @@ export default function NotificationsPage() {
               >
                 <div className="space-y-0.5">
                   <p className={`text-sm ${!n.readAt ? "font-medium" : ""}`}>
-                    {notifMessage(n.type, data)}
+                    {link ? (
+                      <Link href={link} className="hover:underline">
+                        {message}
+                      </Link>
+                    ) : message}
                   </p>
                   <p
                     className="text-xs text-muted-foreground"
