@@ -27,6 +27,9 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Stable ref so event-listener effects don't re-register on every render
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   // Focus the search input when the picker opens
   useEffect(() => {
@@ -37,21 +40,28 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        onClose();
+        onCloseRef.current();
       }
     }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [onClose]);
+  }, []);
 
   // Close on Escape
   useEffect(() => {
     function handler(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
     }
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, []);
+
+  // Clear debounce timer on unmount to avoid state updates on an unmounted component
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
   const search = useCallback(async (q: string) => {
     setLoading(true);
@@ -125,8 +135,8 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
                 <Image
                   src={gif.previewUrl}
                   alt={gif.title}
-                  width={gif.width || 160}
-                  height={gif.height || 120}
+                  width={gif.width ?? 160}
+                  height={gif.height ?? 120}
                   className="w-full rounded object-cover hover:opacity-90 transition-opacity"
                   unoptimized
                 />

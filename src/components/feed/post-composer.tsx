@@ -47,7 +47,7 @@ export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string;
   const hasErrors = images.some((img) => img.error !== null);
   const allUploaded = images.every((img) => img.key !== null);
   const canPost =
-    !!body.trim() &&
+    (!!body.trim() || !!selectedGif) &&
     !isUploading &&
     !create.isPending &&
     !hasErrors &&
@@ -56,7 +56,9 @@ export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string;
   function handleGifSelect(gif: GifResult) {
     setSelectedGif(gif);
     setGifPickerOpen(false);
-    // Clear any uploaded images — GIF and images are mutually exclusive
+    // Clear any uploaded images — GIF and images are mutually exclusive.
+    // Images that already finished uploading (key !== null) leave orphaned MinIO objects.
+    // These are cleaned up by the MinIO lifecycle policy (same as abandoned uploads).
     images.forEach((img) => { img.abort.abort(); URL.revokeObjectURL(img.preview); });
     setImages([]);
   }

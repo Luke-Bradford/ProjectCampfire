@@ -36,7 +36,7 @@ export async function GET(req: Request) {
   url.searchParams.set("contentfilter", "medium");
   if (q) url.searchParams.set("q", q);
 
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
   if (!res.ok) {
     return NextResponse.json({ error: "Tenor API error" }, { status: 502 });
   }
@@ -52,6 +52,10 @@ export async function GET(req: Request) {
     }>;
   };
 
+  const isTenorUrl = (u: string) => {
+    try { return new URL(u).hostname === "media.tenor.com"; } catch { return false; }
+  };
+
   const results = (json.results ?? []).map((r) => ({
     id: r.id,
     title: r.title,
@@ -59,7 +63,7 @@ export async function GET(req: Request) {
     previewUrl: r.media_formats?.tinygif?.url ?? r.media_formats?.gif?.url ?? "",
     width: r.media_formats?.gif?.dims[0] ?? 0,
     height: r.media_formats?.gif?.dims[1] ?? 0,
-  })).filter((r) => r.url);
+  })).filter((r) => r.url && isTenorUrl(r.url) && isTenorUrl(r.previewUrl));
 
   return NextResponse.json({ results });
 }
