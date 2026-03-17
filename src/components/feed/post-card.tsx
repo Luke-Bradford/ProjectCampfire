@@ -223,9 +223,14 @@ function CommentRow({
 function CopyLinkButton({ postId }: { postId: string }) {
   const [copied, setCopied] = useState(false);
   function handleCopy() {
-    void navigator.clipboard.writeText(`${window.location.origin}/feed/${postId}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    navigator.clipboard.writeText(`${window.location.origin}/feed/${postId}`)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {
+        // Clipboard access denied (non-secure context or permissions) — show nothing
+      });
   }
   return (
     <button
