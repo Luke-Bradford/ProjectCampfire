@@ -82,13 +82,15 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
         return;
       }
       const json = await res.json() as { results?: GifResult[] };
-      setResults(json.results ?? []);
+      setResults(Array.isArray(json.results) ? json.results : []);
+      setLoading(false);
     } catch (err) {
-      // Ignore aborted fetches — triggered by a newer query or unmount
+      // Ignore aborted fetches — triggered by a newer query or unmount.
+      // Do NOT call setLoading(false) here: the new query that triggered the abort
+      // has already set loading=true and is still in flight.
       if (err instanceof Error && err.name === "AbortError") return;
       // Network error — show empty state
       setResults([]);
-    } finally {
       setLoading(false);
     }
   }, []);

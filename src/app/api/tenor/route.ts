@@ -56,14 +56,14 @@ export async function GET(req: Request) {
     try { return new URL(u).hostname === "media.tenor.com"; } catch { return false; }
   };
 
-  const results = (json.results ?? []).map((r) => ({
+  const results = (Array.isArray(json.results) ? json.results : []).map((r) => ({
     id: r.id,
     title: r.title,
     url: r.media_formats?.gif?.url ?? "",
     previewUrl: r.media_formats?.tinygif?.url ?? r.media_formats?.gif?.url ?? "",
     width: r.media_formats?.gif?.dims[0] ?? 0,
     height: r.media_formats?.gif?.dims[1] ?? 0,
-  })).filter((r) => r.url && isTenorUrl(r.url) && isTenorUrl(r.previewUrl));
+  })).filter((r) => r.url && isTenorUrl(r.url) && isTenorUrl(r.previewUrl) && r.width > 0 && r.height > 0);
 
   return NextResponse.json({ results });
 }
