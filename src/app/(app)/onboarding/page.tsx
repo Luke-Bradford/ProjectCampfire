@@ -257,6 +257,7 @@ function StepInvite({ onDone }: { onDone: () => void }) {
   const [sentTo, setSentTo] = useState<Set<string>>(new Set());
   // Track each in-flight request by ID so multiple adds can be pending simultaneously
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const [errorIds, setErrorIds] = useState<Map<string, string>>(new Map());
 
   const { data: tokenData } = api.user.getInviteToken.useQuery();
   const inviteUrl =
@@ -281,8 +282,15 @@ function StepInvite({ onDone }: { onDone: () => void }) {
     onSuccess: (_, vars) => {
       setSentTo((prev) => new Set(prev).add(vars.addresseeId));
       removePending(vars.addresseeId);
+      setErrorIds((prev) => { const m = new Map(prev); m.delete(vars.addresseeId); return m; });
     },
-    onError: (_, vars) => removePending(vars.addresseeId),
+    onError: (err, vars) => {
+      removePending(vars.addresseeId);
+      const msg = err.data?.code === "BAD_REQUEST" || err.data?.code === "CONFLICT"
+        ? err.message
+        : "Something went wrong. Try again.";
+      setErrorIds((prev) => new Map(prev).set(vars.addresseeId, msg));
+    },
   });
 
   function handleCopy() {
@@ -342,28 +350,31 @@ function StepInvite({ onDone }: { onDone: () => void }) {
                 <p className="px-2 py-1 text-xs text-muted-foreground">No results found.</p>
               )}
               {searchResults.data?.map((u) => (
-                <div
-                  key={u.id}
-                  className="flex items-center justify-between gap-2 rounded px-2 py-1.5"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{u.name}</p>
-                    {u.username && (
-                      <p className="truncate text-xs text-muted-foreground">@{u.username}</p>
-                    )}
+                <div key={u.id} className="rounded px-2 py-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{u.name}</p>
+                      {u.username && (
+                        <p className="truncate text-xs text-muted-foreground">@{u.username}</p>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant={sentTo.has(u.id) ? "secondary" : errorIds.has(u.id) ? "outline" : "default"}
+                      disabled={sentTo.has(u.id) || pendingIds.has(u.id)}
+                      onClick={() => {
+                        setPendingIds((prev) => new Set(prev).add(u.id));
+                        setErrorIds((prev) => { const m = new Map(prev); m.delete(u.id); return m; });
+                        sendRequest.mutate({ addresseeId: u.id });
+                      }}
+                      className="shrink-0"
+                    >
+                      {sentTo.has(u.id) ? "Sent" : pendingIds.has(u.id) ? "Sending…" : "Add"}
+                    </Button>
                   </div>
-                  <Button
-                    size="sm"
-                    variant={sentTo.has(u.id) ? "secondary" : "default"}
-                    disabled={sentTo.has(u.id) || pendingIds.has(u.id)}
-                    onClick={() => {
-                      setPendingIds((prev) => new Set(prev).add(u.id));
-                      sendRequest.mutate({ addresseeId: u.id });
-                    }}
-                    className="shrink-0"
-                  >
-                    {sentTo.has(u.id) ? "Sent" : pendingIds.has(u.id) ? "Sending…" : "Add"}
-                  </Button>
+                  {errorIds.has(u.id) && (
+                    <p className="mt-1 text-xs text-destructive">{errorIds.get(u.id)}</p>
+                  )}
                 </div>
               ))}
             </div>
