@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, asc, count, countDistinct, desc, eq, gt, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, count, countDistinct, eq, gt, ilike, inArray, or, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -237,7 +237,7 @@ export const gamesRouter = createTRPCRouter({
         cursor: z.string().optional(), // last gameId from previous page
         limit: z.number().int().min(1).max(100).default(50),
         showHidden: z.boolean().default(false),
-        sort: z.enum(["alphabetical", "most_played", "recently_played", "recently_added"]).default("alphabetical"),
+        sort: z.enum(["alphabetical", "most_played", "recently_played"]).default("alphabetical"),
       })
     )
     .query(async ({ ctx, input }) => {
@@ -293,9 +293,6 @@ export const gamesRouter = createTRPCRouter({
           break;
         case "recently_played":
           orderByClause = [sql`${gameOwnerships.lastPlayedAt} DESC NULLS LAST`, asc(gameOwnerships.gameId)];
-          break;
-        case "recently_added":
-          orderByClause = [desc(gameOwnerships.createdAt), asc(gameOwnerships.gameId)];
           break;
         default: // alphabetical
           orderByClause = [asc(gameOwnerships.gameId)];
@@ -354,7 +351,7 @@ export const gamesRouter = createTRPCRouter({
       // stable regardless of sort order — it identifies the last-seen item positionally.
       //
       // Known trade-off: a background Steam re-sync between page 1 and page 2 can shift
-      // sort positions for most_played/recently_played/recently_added, which may cause a
+      // sort positions for most_played/recently_played, which may cause a
       // game to appear on both pages or be skipped entirely. This is acceptable at MVP
       // scale (libraries are small, re-syncs are infrequent, and full-page refreshes are
       // the primary access pattern). A stable per-request snapshot would require storing
