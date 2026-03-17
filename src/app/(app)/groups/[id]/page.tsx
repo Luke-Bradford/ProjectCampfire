@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { MoreHorizontal } from "lucide-react";
+import { StatusDot } from "@/components/ui/status-dot";
 import { GroupOverlapView } from "@/components/availability/group-overlap-view";
 import { RecurringTemplatesSection } from "@/components/groups/recurring-templates-section";
 
@@ -301,10 +302,13 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           {group.memberships.map((m) => (
             <li key={m.userId} className="flex items-center justify-between rounded-lg border p-3">
               <div className="flex items-center gap-3">
-                <Avatar className="h-9 w-9">
-                  <AvatarImage src={m.user.image ?? undefined} />
-                  <AvatarFallback>{initials(m.user.name)}</AvatarFallback>
-                </Avatar>
+                <div className="relative shrink-0">
+                  <Avatar className="h-9 w-9">
+                    <AvatarImage src={m.user.image ?? undefined} />
+                    <AvatarFallback>{initials(m.user.name)}</AvatarFallback>
+                  </Avatar>
+                  <StatusDot status={m.user.status} className="absolute -bottom-0.5 -right-0.5" />
+                </div>
                 <div>
                   <p className="text-sm font-medium">{m.user.name}</p>
                   {m.user.username && (

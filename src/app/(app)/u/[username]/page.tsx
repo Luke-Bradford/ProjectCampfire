@@ -4,6 +4,7 @@ import { Gamepad2 } from "lucide-react";
 import { trpc } from "@/trpc/server";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AddFriendButton } from "./add-friend-button";
+import { StatusDot } from "@/components/ui/status-dot";
 import { ProfileGroups } from "./profile-groups";
 import { ProfilePosts } from "./profile-posts";
 import { GamingActivityCard } from "@/components/profile/gaming-activity-card";
@@ -56,6 +57,9 @@ export default async function UserProfilePage({
           <h1 className="text-2xl font-bold">{profile.name}</h1>
           {profile.username && (
             <p className="text-muted-foreground">@{profile.username}</p>
+          )}
+          {"status" in profile && !isPrivate && (
+            <StatusDot status={profile.status} showLabel />
           )}
           {isPrivate && (
             <p className="text-sm text-muted-foreground">This profile is private.</p>

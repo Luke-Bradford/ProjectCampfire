@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FriendsListSkeleton } from "@/components/ui/skeletons";
+import { StatusDot } from "@/components/ui/status-dot";
 import { env } from "@/env";
 
 function initials(name: string) {
@@ -223,10 +224,13 @@ export default function FriendsPage() {
                 href={u.username ? `/u/${u.username}` : "#"}
                 className="flex items-center gap-3 hover:opacity-80 transition-opacity"
               >
-                <Avatar className="h-10 w-10 shrink-0">
-                  <AvatarImage src={u.image ?? undefined} />
-                  <AvatarFallback className="text-sm font-semibold">{initials(u.name)}</AvatarFallback>
-                </Avatar>
+                <div className="relative shrink-0">
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={u.image ?? undefined} />
+                    <AvatarFallback className="text-sm font-semibold">{initials(u.name)}</AvatarFallback>
+                  </Avatar>
+                  <StatusDot status={u.status} className="absolute -bottom-0.5 -right-0.5" />
+                </div>
                 <div>
                   <p className="font-medium leading-tight">{u.name}</p>
                   {u.username && (
