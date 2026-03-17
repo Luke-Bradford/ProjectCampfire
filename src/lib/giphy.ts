@@ -8,4 +8,4 @@
  * /media/ prefix + any path ending in .gif rather than constraining segment count.
  */
 export const GIPHY_URL_RE =
-  /^https:\/\/media\d*\.giphy\.com\/media\/.+\.gif$/;
+  /^https:\/\/media\d*\.giphy\.com\/media\/(?:[^/]+\/)+[^/]+\.gif$/;
