@@ -475,6 +475,79 @@ function EventDiscussion({ eventId, currentUserId, isGroupAdmin }: { eventId: st
   );
 }
 
+// ── iCalendar export ──────────────────────────────────────────────────────────
+
+function formatIcsDate(d: Date): string {
+  // Format: YYYYMMDDTHHmmssZ (UTC)
+  return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+/** RFC 5545 §3.3.11 TEXT escaping: backslash, semicolon, comma, newline. */
+function escapeIcsText(s: string): string {
+  return s
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\n/g, "\\n");
+}
+
+/**
+ * RFC 5545 §3.1 line-folding: content lines must be ≤75 octets.
+ * Long lines are folded by inserting CRLF + one space.
+ */
+function foldLine(line: string): string {
+  if (line.length <= 75) return line;
+  let result = "";
+  let remaining = line;
+  while (remaining.length > 75) {
+    result += remaining.slice(0, 75) + "\r\n ";
+    remaining = remaining.slice(75);
+  }
+  return result + remaining;
+}
+
+function downloadIcs(event: {
+  id: string;
+  title: string;
+  description?: string | null;
+  confirmedStartsAt?: Date | string | null;
+  confirmedEndsAt?: Date | string | null;
+}) {
+  if (!event.confirmedStartsAt) return;
+  const start = new Date(event.confirmedStartsAt);
+  // If no end time, default to 2 hours after start
+  const end = event.confirmedEndsAt
+    ? new Date(event.confirmedEndsAt)
+    : new Date(start.getTime() + 2 * 60 * 60 * 1000);
+
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//ProjectCampfire//EN",
+    "BEGIN:VEVENT",
+    // Use event.id as UID for stable deduplication — reimporting the same event won't duplicate it.
+    `UID:${event.id}@projectcampfire`,
+    `DTSTAMP:${formatIcsDate(new Date())}`,
+    `DTSTART:${formatIcsDate(start)}`,
+    `DTEND:${formatIcsDate(end)}`,
+    `SUMMARY:${escapeIcsText(event.title)}`,
+    ...(event.description ? [`DESCRIPTION:${escapeIcsText(event.description)}`] : []),
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ];
+
+  const content = lines.map(foldLine).join("\r\n");
+  const blob = new Blob([content], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const safeName = event.title.replace(/[^a-z0-9]/gi, "-").toLowerCase().replace(/^-+|-+$/g, "") || "event";
+  a.download = `${safeName}.ics`;
+  a.click();
+  // Defer revoke so the browser's async download handler has time to read the blob.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 // ── Event detail page ─────────────────────────────────────────────────────────
 
 export default function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -601,10 +674,18 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
           </Badge>
         </div>
         {event.confirmedStartsAt && (
-          <p className="text-sm text-muted-foreground mt-2">
-            {format(new Date(event.confirmedStartsAt), "EEEE d MMMM, HH:mm")}
-            {event.confirmedEndsAt && ` – ${format(new Date(event.confirmedEndsAt), "HH:mm")}`}
-          </p>
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
+            <p className="text-sm text-muted-foreground">
+              {format(new Date(event.confirmedStartsAt), "EEEE d MMMM, HH:mm")}
+              {event.confirmedEndsAt && ` – ${format(new Date(event.confirmedEndsAt), "HH:mm")}`}
+            </p>
+            <button
+              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+              onClick={() => downloadIcs(event)}
+            >
+              Add to Calendar
+            </button>
+          </div>
         )}
         <p className="text-xs text-muted-foreground mt-1">
           Created by {event.createdBy.name}
