@@ -24,25 +24,28 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex min-h-screen">
-      {/* Left panel — identity + nav (desktop only) */}
-      <LeftPanel
-        name={session.user.name}
-        image={session.user.image}
-      />
+    <div className="min-h-screen">
+      {/* Three-column shell — centred max-width container so columns cluster together */}
+      <div className="flex min-h-screen w-full max-w-5xl mx-auto">
+        {/* Left panel — profile + nav islands (desktop only) */}
+        <LeftPanel
+          name={session.user.name}
+          image={session.user.image}
+        />
 
-      {/* Centre — mobile header + page content */}
-      <div className="flex flex-1 flex-col min-w-0">
-        {/* Mobile-only top bar with profile drawer */}
-        <MobileHeader name={session.user.name} image={session.user.image} />
+        {/* Centre — mobile header + page content */}
+        <div className="flex flex-1 flex-col min-w-0">
+          {/* Mobile-only top bar with profile drawer */}
+          <MobileHeader name={session.user.name} image={session.user.image} />
 
-        <main className="flex-1 w-full max-w-4xl mx-auto px-4 pt-6 pb-20 md:pb-6 md:px-8">
-          {children}
-        </main>
+          <main className="flex-1 px-4 pt-6 pb-20 md:pb-6 md:px-5">
+            {children}
+          </main>
+        </div>
+
+        {/* Right panel — upcoming events island (large desktop only) */}
+        <RightPanel />
       </div>
-
-      {/* Right panel — upcoming events (large desktop only) */}
-      <RightPanel />
 
       <MobileNav />
     </div>

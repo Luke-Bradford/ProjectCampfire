@@ -28,6 +28,8 @@ const RSVP_LABELS: Record<string, string> = {
 export function UpcomingEventsPanel() {
   const { data: upcoming, isLoading } = api.events.upcoming.useQuery({ limit: 3 });
 
+  if (!isLoading && (!upcoming || upcoming.length === 0)) return null;
+
   return (
     <aside className="flex flex-col gap-3">
       <div className="rounded-xl border bg-card p-4">
@@ -47,14 +49,6 @@ export function UpcomingEventsPanel() {
           </div>
         )}
 
-        {!isLoading && (!upcoming || upcoming.length === 0) && (
-          <p className="text-xs text-muted-foreground">
-            No upcoming events.{" "}
-            <Link href="/events" className="underline hover:text-foreground">
-              Plan one
-            </Link>
-          </p>
-        )}
 
         {upcoming && upcoming.length > 0 && (
           <div className="flex flex-col divide-y">
