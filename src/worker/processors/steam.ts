@@ -195,7 +195,8 @@ async function refreshNowPlaying(): Promise<void> {
   const BATCH = 100;
   for (let i = 0; i < users.length; i += BATCH) {
     const batch = users.slice(i, i + BATCH);
-    const steamIds = batch.map((u) => u.steamId!).join(",");
+    const steamIds = batch.filter((u) => u.steamId != null).map((u) => u.steamId).join(",");
+    if (!steamIds) continue;
 
     const url = new URL("https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/");
     url.searchParams.set("key", env.STEAM_API_KEY);
@@ -216,24 +217,38 @@ async function refreshNowPlaying(): Promise<void> {
     }
 
     // Build updates for each user in this batch
-    const updates = batch.map((u) => {
-      const summary = players.find((p) => p.steamid === u.steamId);
-      // gameid present and non-zero → in game
-      const inGame = summary && summary.gameid && summary.gameid !== "0";
-      return {
-        userId: u.id,
-        currentGameId: inGame ? summary.gameid! : null,
-        currentGameName: inGame ? (summary.gameextrainfo ?? null) : null,
-      };
-    });
+    const updates = batch
+      .filter((u): u is typeof u & { steamId: string } => u.steamId != null)
+      .map((u) => {
+        const summary = players.find((p) => p.steamid === u.steamId);
+        // gameid present and non-zero → in game
+        const inGame = summary && summary.gameid && summary.gameid !== "0";
+        return {
+          userId: u.id,
+          currentGameId: inGame ? summary.gameid! : null,
+          // Fall back to gameid string if gameextrainfo is absent — ensures badge renders
+          currentGameName: inGame ? (summary.gameextrainfo ?? summary.gameid ?? null) : null,
+        };
+      });
 
-    // Write each user's current game (or null if not playing) to the DB
-    for (const upd of updates) {
-      await db
-        .update(user)
-        .set({ currentGameId: upd.currentGameId, currentGameName: upd.currentGameName })
-        .where(eq(user.id, upd.userId));
-    }
+    if (updates.length === 0) continue;
+
+    // Batch all updates in a single statement using CASE expressions.
+    // This replaces N individual UPDATEs with one round-trip per 100-user batch.
+    const userIds = updates.map((u) => u.userId);
+    await db
+      .update(user)
+      .set({
+        currentGameId: sql`CASE ${sql.join(
+          updates.map((u) => sql`WHEN ${user.id} = ${u.userId} THEN ${u.currentGameId}`),
+          sql` `
+        )} END`,
+        currentGameName: sql`CASE ${sql.join(
+          updates.map((u) => sql`WHEN ${user.id} = ${u.userId} THEN ${u.currentGameName}`),
+          sql` `
+        )} END`,
+      })
+      .where(inArray(user.id, userIds));
   }
 
   log.info("now-playing refresh complete", { users: users.length });
