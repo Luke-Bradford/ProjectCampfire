@@ -418,7 +418,7 @@ export const feedRouter = createTRPCRouter({
         .optional(),
       // gifUrl: a Giphy CDN URL selected via the GIF picker.
       // Stored directly in imageUrls — no processing needed.
-      gifUrl: z.string().url().regex(/^https:\/\/media\d*\.giphy\.com\//).optional(),
+      gifUrl: z.string().url().regex(GIPHY_URL_RE).optional(),
     })
     .refine(
       (v) => v.body.trim().length > 0 || !!v.gifUrl || !!v.imageKeys?.length,
