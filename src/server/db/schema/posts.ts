@@ -16,6 +16,9 @@ export const notificationTypeEnum = pgEnum("notification_type", [
   "friend_request_received",
   "friend_request_accepted",
   "group_invite_received",
+  "post_comment",
+  "post_like",
+  "comment_like",
 ]);
 
 export type EmbedMetadata = {
