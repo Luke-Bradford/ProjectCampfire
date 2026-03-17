@@ -286,7 +286,10 @@ function StepInvite({ onDone }: { onDone: () => void }) {
     },
     onError: (err, vars) => {
       removePending(vars.addresseeId);
-      setErrorIds((prev) => new Map(prev).set(vars.addresseeId, err.message));
+      const msg = err.data?.code === "BAD_REQUEST" || err.data?.code === "CONFLICT"
+        ? err.message
+        : "Something went wrong. Try again.";
+      setErrorIds((prev) => new Map(prev).set(vars.addresseeId, msg));
     },
   });
 

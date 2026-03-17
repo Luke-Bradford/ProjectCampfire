@@ -96,7 +96,10 @@ function SteamSuggestions() {
     },
     onError: (err, vars) => {
       setPendingIds((prev) => { const s = new Set(prev); s.delete(vars.addresseeId); return s; });
-      setErrorIds((prev) => new Map(prev).set(vars.addresseeId, err.message));
+      const msg = err.data?.code === "BAD_REQUEST" || err.data?.code === "CONFLICT"
+        ? err.message
+        : "Something went wrong. Try again.";
+      setErrorIds((prev) => new Map(prev).set(vars.addresseeId, msg));
     },
   });
 
