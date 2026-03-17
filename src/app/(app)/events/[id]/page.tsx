@@ -482,7 +482,32 @@ function formatIcsDate(d: Date): string {
   return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 }
 
+/** RFC 5545 §3.3.11 TEXT escaping: backslash, semicolon, comma, newline. */
+function escapeIcsText(s: string): string {
+  return s
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\n/g, "\\n");
+}
+
+/**
+ * RFC 5545 §3.1 line-folding: content lines must be ≤75 octets.
+ * Long lines are folded by inserting CRLF + one space.
+ */
+function foldLine(line: string): string {
+  if (line.length <= 75) return line;
+  let result = "";
+  let remaining = line;
+  while (remaining.length > 75) {
+    result += remaining.slice(0, 75) + "\r\n ";
+    remaining = remaining.slice(75);
+  }
+  return result + remaining;
+}
+
 function downloadIcs(event: {
+  id: string;
   title: string;
   description?: string | null;
   confirmedStartsAt?: Date | string | null;
@@ -500,23 +525,26 @@ function downloadIcs(event: {
     "VERSION:2.0",
     "PRODID:-//ProjectCampfire//EN",
     "BEGIN:VEVENT",
-    `UID:${Date.now()}@projectcampfire`,
+    // Use event.id as UID for stable deduplication — reimporting the same event won't duplicate it.
+    `UID:${event.id}@projectcampfire`,
     `DTSTAMP:${formatIcsDate(new Date())}`,
     `DTSTART:${formatIcsDate(start)}`,
     `DTEND:${formatIcsDate(end)}`,
-    `SUMMARY:${event.title.replace(/,/g, "\\,")}`,
-    ...(event.description ? [`DESCRIPTION:${event.description.replace(/\n/g, "\\n").replace(/,/g, "\\,")}`] : []),
+    `SUMMARY:${escapeIcsText(event.title)}`,
+    ...(event.description ? [`DESCRIPTION:${escapeIcsText(event.description)}`] : []),
     "END:VEVENT",
     "END:VCALENDAR",
   ];
 
-  const blob = new Blob([lines.join("\r\n")], { type: "text/calendar;charset=utf-8" });
+  const content = lines.map(foldLine).join("\r\n");
+  const blob = new Blob([content], { type: "text/calendar;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = `${event.title.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.ics`;
   a.click();
-  URL.revokeObjectURL(url);
+  // Defer revoke so the browser's async download handler has time to read the blob.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // ── Event detail page ─────────────────────────────────────────────────────────
