@@ -121,7 +121,8 @@ function GroupEvents({ groupId, groupName }: { groupId: string; groupName: strin
           {eventList.map((ev) => {
             const date = ev.confirmedStartsAt ? new Date(ev.confirmedStartsAt) : null;
             const dateInfo = date ? formatEventDate(date) : null;
-            const myRsvp = ev.rsvps.find((r) => r.status === "yes");
+            // rsvps is pre-filtered server-side to the current user's own RSVP only.
+            const myRsvp = ev.rsvps[0]?.status ?? null;
 
             return (
               <li key={ev.id}>
@@ -165,12 +166,14 @@ function GroupEvents({ groupId, groupName }: { groupId: string; groupName: strin
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xs text-muted-foreground">
-                        {ev.rsvps.length} RSVP{ev.rsvps.length === 1 ? "" : "s"}
-                      </span>
-                      {myRsvp && (
+                      {myRsvp === "yes" && (
                         <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
                           Going
+                        </span>
+                      )}
+                      {myRsvp === "maybe" && (
+                        <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                          Maybe
                         </span>
                       )}
                     </div>
