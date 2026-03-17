@@ -6,6 +6,7 @@ import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { GifPicker, type GifResult } from "./gif-picker";
+import { cn } from "@/lib/utils";
 
 const MAX_CHARS = 1000;
 const MAX_IMAGES = 4;
@@ -239,7 +240,7 @@ export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string;
             <div className="relative">
               <button
                 type="button"
-                className={`text-xs hover:text-foreground ${selectedGif ? "text-foreground font-medium" : "text-muted-foreground"}`}
+                className={cn("text-xs hover:text-foreground", selectedGif ? "text-foreground font-medium" : "text-muted-foreground")}
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => setGifPickerOpen((o) => !o)}
               >

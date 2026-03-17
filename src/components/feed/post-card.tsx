@@ -731,7 +731,7 @@ export function PostCard({
                   <div className="relative">
                     <button
                       type="button"
-                      className={`text-xs hover:text-foreground ${commentGif ? "text-foreground font-medium" : "text-muted-foreground"}`}
+                      className={cn("text-xs hover:text-foreground", commentGif ? "text-foreground font-medium" : "text-muted-foreground")}
                       onMouseDown={(e) => e.stopPropagation()}
                       onClick={() => setCommentGifPickerOpen((o) => !o)}
                     >
