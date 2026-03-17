@@ -19,12 +19,12 @@ export function RightPanel() {
   );
 
   if (hidden) return null;
-  // Keep the column while loading to avoid layout shift; hide once confirmed empty.
-  if (!isLoading && (!upcoming || upcoming.length === 0)) return null;
+  // Only render once we know there are events — avoids flicker on page load.
+  if (isLoading || !upcoming || upcoming.length === 0) return null;
 
   return (
     <aside className="hidden xl:block w-60 shrink-0 sticky top-0 h-screen overflow-y-auto py-4 px-3">
-      <UpcomingEventsPanel upcoming={upcoming} isLoading={isLoading} />
+      <UpcomingEventsPanel upcoming={upcoming} />
     </aside>
   );
 }
