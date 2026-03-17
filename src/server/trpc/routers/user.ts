@@ -47,6 +47,8 @@ export const userRouter = createTRPCRouter({
         steamProfileUrl: true,
         steamLibrarySyncedAt: true,
         steamLibraryPublic: true,
+        recentlyPlayedJson: true,
+        recentlyPlayedSyncedAt: true,
         status: true,
       },
     });
