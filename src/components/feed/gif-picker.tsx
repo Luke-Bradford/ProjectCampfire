@@ -27,6 +27,9 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Aborts the in-flight Tenor fetch when a new query starts or the picker unmounts.
+  // Prevents stale responses from overwriting newer results (and state updates after unmount).
+  const fetchAbortRef = useRef<AbortController | null>(null);
   // Stable ref so event-listener effects don't re-register on every render
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -56,25 +59,33 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
     return () => document.removeEventListener("keydown", handler);
   }, []);
 
-  // Clear debounce timer on unmount to avoid state updates on an unmounted component
+  // On unmount: cancel any pending debounce and abort any in-flight fetch
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      fetchAbortRef.current?.abort();
     };
   }, []);
 
   const search = useCallback(async (q: string) => {
+    // Cancel any in-flight request before starting a new one
+    fetchAbortRef.current?.abort();
+    const controller = new AbortController();
+    fetchAbortRef.current = controller;
+
     setLoading(true);
     try {
       const url = `/api/tenor${q ? `?q=${encodeURIComponent(q)}` : ""}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: controller.signal });
       if (res.status === 404) {
         setUnavailable(true);
         return;
       }
       const json = await res.json() as { results?: GifResult[] };
       setResults(json.results ?? []);
-    } catch {
+    } catch (err) {
+      // Ignore aborted fetches — triggered by a newer query or unmount
+      if (err instanceof Error && err.name === "AbortError") return;
       // Network error — show empty state
       setResults([]);
     } finally {
