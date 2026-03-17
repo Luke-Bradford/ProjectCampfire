@@ -453,12 +453,13 @@ function EditEventDialog({
   event,
   onUpdated,
 }: {
-  event: { id: string; title: string; description?: string | null };
+  event: { id: string; title: string; description?: string | null; location?: string | null };
   onUpdated: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState(event.title);
   const [description, setDescription] = useState(event.description ?? "");
+  const [location, setLocation] = useState(event.location ?? "");
   const [error, setError] = useState("");
 
   // Reset form when dialog opens so edits reflect latest values
@@ -466,6 +467,7 @@ function EditEventDialog({
     if (v) {
       setTitle(event.title);
       setDescription(event.description ?? "");
+      setLocation(event.location ?? "");
       setError("");
     }
     setOpen(v);
@@ -493,6 +495,7 @@ function EditEventDialog({
               id: event.id,
               title: title.trim(),
               description: description.trim() || null,
+              location: location.trim() || null,
             });
           }}
           className="space-y-4"
@@ -514,6 +517,15 @@ function EditEventDialog({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-event-location">Location (optional)</Label>
+            <Input
+              id="edit-event-location"
+              placeholder="e.g. Discord #gaming, 123 Main St"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
             />
           </div>
           <div className="flex justify-end gap-2">
@@ -592,6 +604,7 @@ function downloadIcs(event: {
   id: string;
   title: string;
   description?: string | null;
+  location?: string | null;
   confirmedStartsAt?: Date | string | null;
   confirmedEndsAt?: Date | string | null;
 }) {
@@ -614,6 +627,7 @@ function downloadIcs(event: {
     `DTEND:${formatIcsDate(end)}`,
     `SUMMARY:${escapeIcsText(event.title)}`,
     ...(event.description ? [`DESCRIPTION:${escapeIcsText(event.description)}`] : []),
+    ...(event.location ? [`LOCATION:${escapeIcsText(event.location)}`] : []),
     "END:VEVENT",
     "END:VCALENDAR",
   ];
@@ -776,6 +790,11 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
               Add to Calendar
             </button>
           </div>
+        )}
+        {event.location && (
+          <p className="text-sm text-muted-foreground mt-1">
+            📍 {event.location}
+          </p>
         )}
         <p className="text-xs text-muted-foreground mt-1">
           Created by {event.createdBy.name}

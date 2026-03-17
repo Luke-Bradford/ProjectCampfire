@@ -47,6 +47,8 @@ export const eventsRouter = createTRPCRouter({
         // Optional game attachment (CAMP-193).
         gameId: z.string().optional(),
         gameOptional: z.boolean().default(false),
+        // Optional location (CAMP-171).
+        location: z.string().trim().max(500).optional(),
       }).refine(
         (d) => !d.confirmedStartsAt || !d.confirmedEndsAt || d.confirmedStartsAt < d.confirmedEndsAt,
         { message: "confirmedStartsAt must be before confirmedEndsAt" }
@@ -80,6 +82,7 @@ export const eventsRouter = createTRPCRouter({
         status: "draft",
         gameId: input.gameId ?? null,
         gameOptional: input.gameOptional,
+        location: input.location ?? null,
         confirmedStartsAt: input.confirmedStartsAt ? new Date(input.confirmedStartsAt) : null,
         confirmedEndsAt: input.confirmedEndsAt ? new Date(input.confirmedEndsAt) : null,
       });
@@ -333,8 +336,9 @@ export const eventsRouter = createTRPCRouter({
         id: z.string().min(1),
         title: z.string().trim().min(1).max(200).optional(),
         description: z.string().trim().max(2000).nullable().optional(),
+        location: z.string().trim().max(500).nullable().optional(),
       }).refine(
-        (d) => d.title !== undefined || d.description !== undefined,
+        (d) => d.title !== undefined || d.description !== undefined || d.location !== undefined,
         { message: "At least one field must be provided." }
       )
     )
@@ -348,6 +352,7 @@ export const eventsRouter = createTRPCRouter({
         .set({
           ...(input.title !== undefined && { title: input.title }),
           ...(input.description !== undefined && { description: input.description }),
+          ...(input.location !== undefined && { location: input.location }),
           updatedAt: new Date(),
         })
         .where(eq(events.id, input.id));
