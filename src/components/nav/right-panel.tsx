@@ -18,13 +18,14 @@ export function RightPanel() {
     { enabled: !hidden }
   );
 
-  if (hidden) return null;
-  // Only render once we know there are events — avoids flicker on page load.
-  if (isLoading || !upcoming || upcoming.length === 0) return null;
-
+  // Always render the aside so its w-60 width is always reserved — prevents the
+  // centre column from shifting when events load in or when navigating between
+  // pages where the panel is hidden.
   return (
     <aside className="hidden xl:block w-60 shrink-0 sticky top-0 h-screen overflow-y-auto py-4 px-3">
-      <UpcomingEventsPanel upcoming={upcoming} />
+      {!hidden && !isLoading && upcoming && upcoming.length > 0 && (
+        <UpcomingEventsPanel upcoming={upcoming} />
+      )}
     </aside>
   );
 }
