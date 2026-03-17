@@ -85,15 +85,18 @@ function SteamSuggestions() {
   const utils = api.useUtils();
   const [sentTo, setSentTo] = useState<Set<string>>(new Set());
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const [errorIds, setErrorIds] = useState<Map<string, string>>(new Map());
 
   const sendRequest = api.friends.sendRequest.useMutation({
     onSuccess: (_, vars) => {
       setSentTo((prev) => new Set(prev).add(vars.addresseeId));
       setPendingIds((prev) => { const s = new Set(prev); s.delete(vars.addresseeId); return s; });
+      setErrorIds((prev) => { const m = new Map(prev); m.delete(vars.addresseeId); return m; });
       void utils.friends.list.invalidate();
     },
-    onError: (_, vars) => {
+    onError: (err, vars) => {
       setPendingIds((prev) => { const s = new Set(prev); s.delete(vars.addresseeId); return s; });
+      setErrorIds((prev) => new Map(prev).set(vars.addresseeId, err.message));
     },
   });
 
@@ -120,33 +123,39 @@ function SteamSuggestions() {
       ) : (
         <ul className="space-y-2">
           {(suggestions ?? []).map((u) => (
-            <li key={u.id} className="flex items-center justify-between rounded-xl border bg-card shadow-sm px-4 py-3">
-              <Link
-                href={u.username ? `/u/${u.username}` : "#"}
-                className="flex items-center gap-3 hover:opacity-80 transition-opacity"
-              >
-                <Avatar className="h-10 w-10 shrink-0">
-                  <AvatarImage src={u.image ?? undefined} />
-                  <AvatarFallback className="text-sm font-semibold">{initials(u.name)}</AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="font-medium leading-tight">{u.name}</p>
-                  {u.username && (
-                    <p className="text-xs text-muted-foreground">@{u.username}</p>
-                  )}
-                </div>
-              </Link>
-              <Button
-                size="sm"
-                variant={sentTo.has(u.id) ? "secondary" : "default"}
-                disabled={sentTo.has(u.id) || pendingIds.has(u.id)}
-                onClick={() => {
-                  setPendingIds((prev) => new Set(prev).add(u.id));
-                  sendRequest.mutate({ addresseeId: u.id });
-                }}
-              >
-                {sentTo.has(u.id) ? "Sent" : pendingIds.has(u.id) ? "Sending…" : "Add friend"}
-              </Button>
+            <li key={u.id} className="rounded-xl border bg-card shadow-sm px-4 py-3">
+              <div className="flex items-center justify-between">
+                <Link
+                  href={u.username ? `/u/${u.username}` : "#"}
+                  className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                >
+                  <Avatar className="h-10 w-10 shrink-0">
+                    <AvatarImage src={u.image ?? undefined} />
+                    <AvatarFallback className="text-sm font-semibold">{initials(u.name)}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-medium leading-tight">{u.name}</p>
+                    {u.username && (
+                      <p className="text-xs text-muted-foreground">@{u.username}</p>
+                    )}
+                  </div>
+                </Link>
+                <Button
+                  size="sm"
+                  variant={sentTo.has(u.id) ? "secondary" : errorIds.has(u.id) ? "outline" : "default"}
+                  disabled={sentTo.has(u.id) || pendingIds.has(u.id)}
+                  onClick={() => {
+                    setPendingIds((prev) => new Set(prev).add(u.id));
+                    setErrorIds((prev) => { const m = new Map(prev); m.delete(u.id); return m; });
+                    sendRequest.mutate({ addresseeId: u.id });
+                  }}
+                >
+                  {sentTo.has(u.id) ? "Sent" : pendingIds.has(u.id) ? "Sending…" : "Add friend"}
+                </Button>
+              </div>
+              {errorIds.has(u.id) && (
+                <p className="mt-1.5 text-xs text-destructive">{errorIds.get(u.id)}</p>
+              )}
             </li>
           ))}
         </ul>

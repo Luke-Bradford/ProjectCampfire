@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, countDistinct, eq, gt, ilike, inArray, isNull, ne, or } from "drizzle-orm";
+import { and, countDistinct, eq, gt, ilike, inArray, isNull, ne, notExists, or, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { randomBytes } from "crypto";
@@ -569,36 +569,31 @@ export const friendsRouter = createTRPCRouter({
 
     if (steamFriendIds.length === 0) return [];
 
-    // Find Campfire users who have any of these Steam IDs.
-    // Fetch 60 (slight over-fetch) to allow for post-exclusion trimming to 50.
-    const matches = await db
+    // Find Campfire users who have any of these Steam IDs, atomically excluding
+    // any user who already has a friendship row in either direction. Using NOT EXISTS
+    // rather than two sequential queries eliminates the race window where a friendship
+    // created between the two queries could cause a user to appear in suggestions.
+    const meId = ctx.user.id;
+    return db
       .select({ id: user.id, name: user.name, username: user.username, image: user.image })
       .from(user)
       .where(
         and(
-          ne(user.id, ctx.user.id),
+          ne(user.id, meId),
           inArray(user.steamId, steamFriendIds),
+          notExists(
+            db
+              .select({ _: sql`1` })
+              .from(friendships)
+              .where(
+                or(
+                  and(eq(friendships.requesterId, meId), eq(friendships.addresseeId, user.id)),
+                  and(eq(friendships.requesterId, user.id), eq(friendships.addresseeId, meId)),
+                )
+              )
+          ),
         )
       )
-      .limit(60);
-
-    if (matches.length === 0) return [];
-
-    // Exclude users with an existing friendship row in either direction
-    const matchIds = matches.map((u) => u.id);
-    const existing = await db.query.friendships.findMany({
-      where: or(
-        and(eq(friendships.requesterId, ctx.user.id), inArray(friendships.addresseeId, matchIds)),
-        and(inArray(friendships.requesterId, matchIds), eq(friendships.addresseeId, ctx.user.id)),
-      ),
-      columns: { requesterId: true, addresseeId: true, status: true },
-    });
-    const excludeIds = new Set(
-      existing.map((f) => (f.requesterId === ctx.user.id ? f.addresseeId : f.requesterId))
-    );
-
-    return matches
-      .filter((u) => !excludeIds.has(u.id))
-      .slice(0, 50);
+      .limit(50);
   }),
 });
