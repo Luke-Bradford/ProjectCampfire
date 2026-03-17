@@ -37,15 +37,16 @@ export async function processPushJob(job: Job<PushJobPayload>) {
       );
 
       const failed = results.filter((r) => r.status === "rejected");
+      const succeeded = results.length - failed.length;
       if (failed.length > 0) {
-        log.error("push: some sends failed", { userId: data.userId, failCount: failed.length });
         // Re-throw if ALL sends failed so BullMQ retries the whole job
         if (failed.length === results.length) {
           throw new Error(`All ${failed.length} push send(s) failed for user ${data.userId}`);
         }
+        log.error("push: partial failure", { userId: data.userId, succeeded, failed: failed.length });
+      } else {
+        log.info("push: sent", { userId: data.userId, subCount: subs.length });
       }
-
-      log.info("push: sent", { userId: data.userId, subCount: subs.length });
       break;
     }
 

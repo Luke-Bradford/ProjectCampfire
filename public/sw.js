@@ -32,18 +32,21 @@ self.addEventListener("notificationclick", (event) => {
     clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((windowClients) => {
-        // Prefer a window already on the target URL — focus without navigating
+        // Prefer a window already on the target path — focus without navigating
         for (const client of windowClients) {
-          if (new URL(client.url).pathname === new URL(url, self.location.origin).pathname && "focus" in client) {
+          if (
+            new URL(client.url).pathname === new URL(url, self.location.origin).pathname &&
+            "focus" in client
+          ) {
             return client.focus();
           }
         }
         // No matching window — focus any open window and navigate it
         for (const client of windowClients) {
           if ("focus" in client) {
-            client.focus();
-            if ("navigate" in client) client.navigate(url);
-            return;
+            return client.focus().then(() => {
+              if ("navigate" in client) return client.navigate(url);
+            });
           }
         }
         // No window open at all — open a new one
