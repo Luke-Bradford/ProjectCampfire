@@ -68,10 +68,13 @@ export async function snapshotSteamSpyData(gameId: string, steamAppId: string): 
 
   // Atomic jsonb merge — preserves existing keys (e.g. IGDB data) without a read-then-write race.
   // COALESCE handles the case where metadataJson is currently NULL.
+  // sql.param() sends the JSON as a bound parameter rather than interpolating it
+  // into the SQL text, guarding against unexpected characters in API responses.
+  const steamspyJsonParam = sql.param(JSON.stringify({ steamspy: steamspyData }));
   await db
     .update(games)
     .set({
-      metadataJson: sql`COALESCE(${games.metadataJson}, '{}'::jsonb) || ${JSON.stringify({ steamspy: steamspyData })}::jsonb`,
+      metadataJson: sql`COALESCE(${games.metadataJson}, '{}'::jsonb) || ${steamspyJsonParam}::jsonb`,
     })
     .where(eq(games.id, gameId));
 }
