@@ -80,6 +80,10 @@ export const user = pgTable("user", {
   recentlyPlayedSyncedAt: timestamp("recently_played_synced_at"),
   // Presence
   status: userStatusEnum("status").notNull().default("online"),
+  // Steam "Now Playing" — refreshed every 5 min by the sweep_now_playing repeatable job.
+  // currentGameId is the Steam appId (integer); 0 / null means not playing.
+  currentGameId: text("current_game_id"),
+  currentGameName: text("current_game_name"),
 });
 
 // better-auth session table

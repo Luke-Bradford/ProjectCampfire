@@ -8,7 +8,11 @@ export type SyncSteamLibraryPayload = {
   userId: string;
 };
 
-export type SteamJobPayload = SyncSteamLibraryPayload;
+export type RefreshNowPlayingPayload = {
+  type: "refresh_now_playing";
+};
+
+export type SteamJobPayload = SyncSteamLibraryPayload | RefreshNowPlayingPayload;
 
 // ── Queue (lazy singleton) ────────────────────────────────────────────────────
 
@@ -43,5 +47,17 @@ export function enqueueSteamLibrarySync(userId: string) {
   return getSteamQueue().add(
     "sync_steam_library",
     { type: "sync_steam_library", userId },
+  );
+}
+
+/**
+ * Register the repeatable "now playing" refresh job (every 5 minutes).
+ * Called once at worker startup via registerRepeatableJob.
+ */
+export function enqueueRefreshNowPlaying() {
+  return getSteamQueue().add(
+    "refresh_now_playing",
+    { type: "refresh_now_playing" },
+    { repeat: { every: 5 * 60 * 1000 }, jobId: "refresh_now_playing" },
   );
 }

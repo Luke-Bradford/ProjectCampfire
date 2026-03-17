@@ -1,5 +1,5 @@
 import type { Job } from "bullmq";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, inArray, isNotNull, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { db } from "@/server/db";
 import { user, games, gameOwnerships } from "@/server/db/schema";
@@ -19,6 +19,10 @@ export async function processSteamJob(job: Job<SteamJobPayload>): Promise<void> 
       await syncSteamLibrary(data.userId);
       break;
     }
+    case "refresh_now_playing": {
+      await refreshNowPlaying();
+      break;
+    }
     default: {
       log.warn("unknown job type", { type: (data as { type: string }).type });
     }
@@ -26,6 +30,18 @@ export async function processSteamJob(job: Job<SteamJobPayload>): Promise<void> 
 }
 
 // ── Steam API types ───────────────────────────────────────────────────────────
+
+type SteamPlayerSummary = {
+  steamid: string;
+  gameid?: string;  // present when player is in-game; "0" or absent when not
+  gameextrainfo?: string; // game name when in-game
+};
+
+type SteamGetPlayerSummariesResponse = {
+  response?: {
+    players?: SteamPlayerSummary[];
+  };
+};
 
 type SteamOwnedGame = {
   appid: number;
@@ -150,6 +166,77 @@ async function syncRecentlyPlayed(userId: string, steamId: string): Promise<void
     .where(eq(user.id, userId));
 
   log.info("recently played synced", { userId, count: entries.length });
+}
+
+/**
+ * Refresh the "Now Playing" status for all Steam-linked users who have
+ * steamLibraryPublic = true. Batches up to 100 Steam IDs per API call.
+ *
+ * Stores currentGameId + currentGameName on the user row.
+ * Clears both fields when the player is no longer in a game.
+ */
+async function refreshNowPlaying(): Promise<void> {
+  if (!env.STEAM_API_KEY) {
+    log.warn("STEAM_API_KEY not configured — skipping now-playing refresh");
+    return;
+  }
+
+  // Load all Steam-linked users who have opted in to library sharing
+  const users = await db.query.user.findMany({
+    where: and(isNotNull(user.steamId), eq(user.steamLibraryPublic, true)),
+    columns: { id: true, steamId: true },
+  });
+
+  if (users.length === 0) return;
+
+  log.info("refreshing now-playing", { count: users.length });
+
+  // Steam allows up to 100 steamIds per GetPlayerSummaries call
+  const BATCH = 100;
+  for (let i = 0; i < users.length; i += BATCH) {
+    const batch = users.slice(i, i + BATCH);
+    const steamIds = batch.map((u) => u.steamId!).join(",");
+
+    const url = new URL("https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/");
+    url.searchParams.set("key", env.STEAM_API_KEY);
+    url.searchParams.set("steamids", steamIds);
+
+    let players: SteamPlayerSummary[];
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        log.warn("GetPlayerSummaries failed", { status: res.status, batchStart: i });
+        continue;
+      }
+      const json = (await res.json()) as SteamGetPlayerSummariesResponse;
+      players = json.response?.players ?? [];
+    } catch (err) {
+      log.warn("GetPlayerSummaries fetch error", { err: String(err), batchStart: i });
+      continue;
+    }
+
+    // Build updates for each user in this batch
+    const updates = batch.map((u) => {
+      const summary = players.find((p) => p.steamid === u.steamId);
+      // gameid present and non-zero → in game
+      const inGame = summary && summary.gameid && summary.gameid !== "0";
+      return {
+        userId: u.id,
+        currentGameId: inGame ? summary.gameid! : null,
+        currentGameName: inGame ? (summary.gameextrainfo ?? null) : null,
+      };
+    });
+
+    // Write each user's current game (or null if not playing) to the DB
+    for (const upd of updates) {
+      await db
+        .update(user)
+        .set({ currentGameId: upd.currentGameId, currentGameName: upd.currentGameName })
+        .where(eq(user.id, upd.userId));
+    }
+  }
+
+  log.info("now-playing refresh complete", { users: users.length });
 }
 
 /**

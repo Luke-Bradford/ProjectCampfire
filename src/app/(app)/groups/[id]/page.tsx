@@ -314,6 +314,9 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                   {m.user.username && (
                     <p className="text-xs text-muted-foreground">@{m.user.username}</p>
                   )}
+                  {m.user.currentGameName && (
+                    <p className="text-xs text-primary mt-0.5">🎮 {m.user.currentGameName}</p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2">
