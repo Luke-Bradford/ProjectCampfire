@@ -236,14 +236,19 @@ export const userRouter = createTRPCRouter({
   // Lightweight counts for the feed profile sidebar
   profileStats: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.user.id;
-    const [friendCount, groupCount, gameCount] = await Promise.all([
+    const [friendCount, groupCount, gameCount, pendingRequestCount] = await Promise.all([
       db.$count(friendships, and(
         eq(friendships.status, "accepted"),
         sql`(${friendships.requesterId} = ${userId} OR ${friendships.addresseeId} = ${userId})`
       )),
       db.$count(groupMemberships, eq(groupMemberships.userId, userId)),
       db.$count(gameOwnerships, and(eq(gameOwnerships.userId, userId), eq(gameOwnerships.hidden, false))),
+      // Incoming pending friend requests — shown as a badge on the Friends nav link.
+      db.$count(friendships, and(
+        eq(friendships.addresseeId, userId),
+        eq(friendships.status, "pending")
+      )),
     ]);
-    return { friendCount, groupCount, gameCount };
+    return { friendCount, groupCount, gameCount, pendingRequestCount };
   }),
 });

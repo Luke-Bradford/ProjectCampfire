@@ -189,7 +189,7 @@ export function ProfileCard({
         <div className="flex flex-col gap-1">
           {stats ? (
             <>
-              <StatRow href="/friends" label="Friends" count={stats.friendCount} active={isActive("/friends")} onClick={onNavigate} />
+              <StatRow href="/friends" label="Friends" count={stats.friendCount} active={isActive("/friends")} pendingCount={stats.pendingRequestCount} onClick={onNavigate} />
               <StatRow href="/groups"  label="Groups"  count={stats.groupCount}  active={isActive("/groups")}  onClick={onNavigate} />
               <StatRow href="/games"   label="Games"   count={stats.gameCount}   active={isActive("/games")}   onClick={onNavigate} />
             </>
@@ -259,12 +259,14 @@ function StatRow({
   label,
   count,
   active,
+  pendingCount,
   onClick,
 }: {
   href: string;
   label: string;
   count: number;
   active: boolean;
+  pendingCount?: number;
   onClick?: () => void;
 }) {
   return (
@@ -278,7 +280,12 @@ function StatRow({
       }`}
     >
       <span className={active ? "font-semibold" : "font-medium"}>{label}</span>
-      <span className="flex items-center gap-1 tabular-nums">
+      <span className="flex items-center gap-1.5 tabular-nums">
+        {pendingCount ? (
+          <span className="inline-flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold h-3.5 min-w-3.5 px-0.5">
+            {pendingCount > 9 ? "9+" : pendingCount}
+          </span>
+        ) : null}
         {count}
         <span className={`transition-opacity text-[10px] ${active ? "opacity-60" : "opacity-0 group-hover:opacity-60"}`}>→</span>
       </span>
