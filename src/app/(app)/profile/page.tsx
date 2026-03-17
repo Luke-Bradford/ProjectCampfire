@@ -11,7 +11,6 @@ import { Users, Layers, Gamepad2, Calendar, ExternalLink, Settings, ChevronRight
 import { PostsTab } from "@/components/feed/posts-tab";
 import { GamingActivityCard } from "@/components/profile/gaming-activity-card";
 
-
 function initials(name: string) {
   return name
     .split(" ")

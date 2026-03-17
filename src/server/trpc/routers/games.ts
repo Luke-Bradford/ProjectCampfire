@@ -477,7 +477,7 @@ export const gamesRouter = createTRPCRouter({
   // Accepts a userId; gates on steamLibraryPublic server-side.
   // Uses publicProcedure — callers don't need to be authenticated.
   publicGamingStats: publicProcedure
-    .input(z.object({ userId: z.string() }))
+    .input(z.object({ userId: z.string().min(1) }))
     .query(async ({ input }) => {
       const profileUser = await db.query.user.findFirst({
         where: eq(user.id, input.userId),
