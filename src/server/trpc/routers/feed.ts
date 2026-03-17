@@ -10,6 +10,7 @@ import { enqueueOgFetch } from "@/server/jobs/og-fetch-jobs";
 import { enqueueProcessCommentImage } from "@/server/jobs/image-jobs";
 import { enqueuePush } from "@/server/jobs/push-jobs";
 import { logger } from "@/lib/logger";
+import { GIPHY_URL_RE } from "@/lib/giphy";
 
 const log = logger.child("feed");
 
@@ -287,10 +288,10 @@ export const feedRouter = createTRPCRouter({
           .array(z.string().regex(/^posts\/[A-Za-z0-9]+\/[A-Za-z0-9]{10,}\/[a-z0-9]+-raw$/))
           .max(4)
           .optional(),
-        // gifUrl: a Tenor CDN URL selected via the GIF picker.
+        // gifUrl: a Giphy CDN URL selected via the GIF picker.
         // Stored directly in imageUrls (no MinIO processing needed — it's an external URL).
         // Mutually exclusive with imageKeys: one post has either uploaded images or one GIF.
-        gifUrl: z.string().url().regex(/^https:\/\/media\.tenor\.com\//).optional(),
+        gifUrl: z.string().url().regex(GIPHY_URL_RE).optional(),
       }).refine(
         (v) => v.body.trim().length > 0 || !!v.gifUrl || !!v.imageKeys?.length,
         { message: "Post must have body text, a GIF, or at least one image." }
@@ -415,9 +416,9 @@ export const feedRouter = createTRPCRouter({
         .array(z.string().regex(/^posts\/[A-Za-z0-9]+\/[A-Za-z0-9]{10,}\/[a-z0-9]+-raw$/))
         .max(1)
         .optional(),
-      // gifUrl: a Tenor CDN URL selected via the GIF picker.
+      // gifUrl: a Giphy CDN URL selected via the GIF picker.
       // Stored directly in imageUrls — no processing needed.
-      gifUrl: z.string().url().regex(/^https:\/\/media\.tenor\.com\//).optional(),
+      gifUrl: z.string().url().regex(GIPHY_URL_RE).optional(),
     })
     .refine(
       (v) => v.body.trim().length > 0 || !!v.gifUrl || !!v.imageKeys?.length,

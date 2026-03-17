@@ -30,7 +30,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Aborts the in-flight Tenor fetch when a new query starts or the picker unmounts.
+  // Aborts the in-flight fetch when a new query starts or the picker unmounts.
   // Prevents stale responses from overwriting newer results (and state updates after unmount).
   const fetchAbortRef = useRef<AbortController | null>(null);
   // Stable ref so event-listener effects don't re-register on every render
@@ -96,7 +96,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
 
     setLoading(true);
     try {
-      const url = `/api/tenor${q ? `?q=${encodeURIComponent(q)}` : ""}`;
+      const url = `/api/gif${q ? `?q=${encodeURIComponent(q)}` : ""}`;
       const res = await fetch(url, { signal: controller.signal });
       if (res.status === 404) {
         setUnavailable(true);
@@ -183,9 +183,9 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
         )}
       </div>
 
-      {/* Tenor attribution — required by Tenor API terms */}
+      {/* Giphy attribution — required by Giphy API terms */}
       <div className="border-t px-3 py-1.5 text-right">
-        <span className="text-[10px] text-muted-foreground">Powered by Tenor</span>
+        <span className="text-[10px] text-muted-foreground">Powered by GIPHY</span>
       </div>
     </div>
   );
