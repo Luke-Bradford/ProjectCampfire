@@ -4,13 +4,16 @@ import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { events, eventRsvps, groupMemberships, groups, games } from "@/server/db/schema";
+import { events, eventRsvps, groupMemberships, groups, games, notifications } from "@/server/db/schema";
 import {
   enqueueEventConfirmed,
   enqueueEventCancelled,
   enqueueEventRsvpReminder,
 } from "@/server/jobs/email-jobs";
 import { enqueuePush } from "@/server/jobs/push-jobs";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("events");
 
 const EVENT_STATUSES = ["draft", "open", "confirmed", "cancelled"] as const;
 
@@ -185,12 +188,28 @@ export const eventsRouter = createTRPCRouter({
             confirmedEndsAt: confirmedEndsAt?.toISOString() ?? null,
             recipientUserIds: attendeeIds,
           });
-          for (const uid of attendeeIds) {
-            void enqueuePush(uid, {
-              title: `Event confirmed: ${event.title}`,
-              body: `"${event.title}" in ${groupName} has been confirmed.`,
-              url: `/events/${input.id}`,
-            }).catch(() => undefined);
+          // In-app + push notifications for attendees, excluding the creator (who triggered the action).
+          // This is intentional: the creator already knows the event is confirmed.
+          // Email notifications (above) also go to the full attendeeIds list; that is an existing
+          // behaviour and unchanged here.
+          const notifData = { eventId: input.id, eventTitle: event.title, groupName };
+          const otherAttendees = attendeeIds.filter((id) => id !== ctx.user.id);
+          if (otherAttendees.length > 0) {
+            void db.insert(notifications)
+              .values(otherAttendees.map((uid) => ({
+                id: createId(),
+                userId: uid,
+                type: "event_confirmed" as const,
+                data: notifData,
+              })))
+              .catch((err: unknown) => log.error("notification insert(event_confirmed) failed", { err: String(err) }));
+            for (const uid of otherAttendees) {
+              void enqueuePush(uid, {
+                title: `Event confirmed: ${event.title}`,
+                body: `"${event.title}" in ${groupName} has been confirmed.`,
+                url: `/events/${input.id}`,
+              }).catch(() => undefined);
+            }
           }
 
           // Schedule an RSVP reminder 24 h before the event for members who haven't RSVPd
@@ -231,12 +250,24 @@ export const eventsRouter = createTRPCRouter({
             groupName,
             recipientUserIds: attendeeIds,
           });
-          for (const uid of attendeeIds) {
-            void enqueuePush(uid, {
-              title: `Event cancelled: ${event.title}`,
-              body: `"${event.title}" in ${groupName} has been cancelled.`,
-              url: `/events/${input.id}`,
-            }).catch(() => undefined);
+          const notifDataCancel = { eventId: input.id, eventTitle: event.title, groupName };
+          const otherAttendeesCancel = attendeeIds.filter((id) => id !== ctx.user.id);
+          if (otherAttendeesCancel.length > 0) {
+            void db.insert(notifications)
+              .values(otherAttendeesCancel.map((uid) => ({
+                id: createId(),
+                userId: uid,
+                type: "event_cancelled" as const,
+                data: notifDataCancel,
+              })))
+              .catch((err: unknown) => log.error("notification insert(event_cancelled) failed", { err: String(err) }));
+            for (const uid of otherAttendeesCancel) {
+              void enqueuePush(uid, {
+                title: `Event cancelled: ${event.title}`,
+                body: `"${event.title}" in ${groupName} has been cancelled.`,
+                url: `/events/${input.id}`,
+              }).catch(() => undefined);
+            }
           }
         }
       }
