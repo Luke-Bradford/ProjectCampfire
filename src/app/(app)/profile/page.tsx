@@ -367,7 +367,7 @@ export default function MyProfilePage() {
                         />
                         <span className="flex-1 text-sm truncate">{g.name}</span>
                         <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-                          {formatPlaytime(g.playtime2weeks)} this period
+                          {formatPlaytime(g.playtime2weeks ?? 0)} this period
                         </span>
                       </div>
                     ))}

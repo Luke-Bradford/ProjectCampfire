@@ -441,8 +441,22 @@ export const gamesRouter = createTRPCRouter({
 
     const totalMinutes = Number(totalRow[0]?.total ?? 0);
 
-    const recentlyPlayed = (me.recentlyPlayedJson as RecentlyPlayedEntry[] | null) ?? [];
-    const last2WeeksMinutes = recentlyPlayed.reduce((sum, g) => sum + (g.playtime2weeks ?? 0), 0);
+    // Validate recentlyPlayedJson entries — the field is populated by an external
+    // worker and the stored JSON may be missing fields if the schema ever evolves.
+    // Filter to entries that have the minimum required shape before returning.
+    const rawPlayed = (me.recentlyPlayedJson as RecentlyPlayedEntry[] | null) ?? [];
+    const recentlyPlayed = rawPlayed
+      .filter(
+        (g): g is RecentlyPlayedEntry =>
+          typeof g === "object" &&
+          g !== null &&
+          typeof g.appId === "number" &&
+          typeof g.name === "string" &&
+          typeof g.playtime2weeks === "number"
+      )
+      .slice(0, 3);
+
+    const last2WeeksMinutes = recentlyPlayed.reduce((sum, g) => sum + g.playtime2weeks, 0);
 
     return {
       steamLinked,
@@ -455,7 +469,7 @@ export const gamesRouter = createTRPCRouter({
         coverUrl: r.coverUrl,
         playtimeMinutes: r.playtimeMinutes ?? 0,
       })),
-      recentlyPlayed: recentlyPlayed.slice(0, 3),
+      recentlyPlayed,
     };
   }),
 
