@@ -1,5 +1,5 @@
 import type { Job } from "bullmq";
-import { inArray, eq, and, or, gte, isNull, not } from "drizzle-orm";
+import { inArray, eq, and, or, gte, isNull, not, desc } from "drizzle-orm";
 import { db } from "@/server/db";
 import { user, posts, friendships, groupMemberships } from "@/server/db/schema";
 import type { NotificationPrefs } from "@/server/db/schema";
@@ -300,14 +300,11 @@ async function sweepFeedDigests(frequency: "daily" | "weekly"): Promise<void> {
     return;
   }
 
-  await Promise.all(
-    targets.map((u) =>
-      emailQueue.add(
-        "send_feed_digest",
-        { type: "send_feed_digest", userId: u.id, frequency },
-        { jobId: `feed_digest:${frequency}:${u.id}` }
-      )
-    )
+  await emailQueue.addBulk(
+    targets.map((u) => ({
+      name: "send_feed_digest",
+      data: { type: "send_feed_digest" as const, userId: u.id, frequency },
+    }))
   );
 
   log.info("sweep_feed_digests: enqueued", { frequency, count: targets.length });
@@ -388,7 +385,7 @@ async function sendFeedDigest(userId: string, frequency: "daily" | "weekly"): Pr
         not(eq(posts.authorId, userId)), // exclude own posts
       )
     )
-    .orderBy(posts.createdAt)
+    .orderBy(desc(posts.createdAt))
     .limit(20);
 
   if (recentPosts.length === 0) return; // nothing new, skip

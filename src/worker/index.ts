@@ -167,7 +167,7 @@ log.info("Campfire workers started");
     // Daily feed digest sweep — enqueues per-user send_feed_digest jobs for daily subscribers.
     registerRepeatableJob("sweep_feed_digests:daily", () =>
       emailQueue.add(
-        "sweep_feed_digests",
+        "sweep_feed_digests:daily",
         { type: "sweep_feed_digests", frequency: "daily" },
         { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: "sweep_feed_digests:daily" },
       )
@@ -175,7 +175,7 @@ log.info("Campfire workers started");
     // Weekly feed digest sweep — enqueues per-user send_feed_digest jobs for weekly subscribers.
     registerRepeatableJob("sweep_feed_digests:weekly", () =>
       emailQueue.add(
-        "sweep_feed_digests",
+        "sweep_feed_digests:weekly",
         { type: "sweep_feed_digests", frequency: "weekly" },
         { repeat: { every: 7 * 24 * 60 * 60 * 1000 }, jobId: "sweep_feed_digests:weekly" },
       )
