@@ -179,16 +179,24 @@ function ProfileSection() {
         utils.user.me.invalidate()
           .then(() => utils.user.me.fetch())
           .then((fresh) => {
-            if (fresh?.image !== oldImage || attempts >= 20) {
+            if (fresh?.image !== oldImage) {
+              // New image is live — done.
               clearInterval(avatarPollRef.current!);
               avatarPollRef.current = null;
               setAvatarUploading(false);
+            } else if (attempts >= 20) {
+              // Timed out — worker may have failed silently.
+              clearInterval(avatarPollRef.current!);
+              avatarPollRef.current = null;
+              setAvatarUploading(false);
+              setAvatarError("Photo upload timed out. Please try again.");
             }
           })
           .catch(() => {
             clearInterval(avatarPollRef.current!);
             avatarPollRef.current = null;
             setAvatarUploading(false);
+            setAvatarError("Upload failed. Please try again.");
           });
       }, 1500);
     } catch {
@@ -214,7 +222,7 @@ function ProfileSection() {
               <AvatarImage src={me?.image ?? undefined} />
               <AvatarFallback className="text-lg font-semibold">{avatarFallback}</AvatarFallback>
             </Avatar>
-            <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className={`absolute inset-0 rounded-full bg-black/50 flex items-center justify-center transition-opacity ${avatarUploading ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
               {avatarUploading
                 ? <span className="text-white text-[10px] font-medium">...</span>
                 : <Camera size={16} className="text-white" />}

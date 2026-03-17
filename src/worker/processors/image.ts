@@ -112,13 +112,17 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
 
       const outKey = processedKey(data.key);
       await uploadProcessed(outKey, processed);
-      // Delete the raw upload now that processed copy is stored.
-      await minio.removeObject(env.MINIO_BUCKET, data.key);
 
+      // DB write first — if this fails the raw file is still in MinIO and the
+      // job will retry. Deleting the raw before the DB write would leave the user
+      // with no recoverable path if the DB update fails.
       await db
         .update(user)
         .set({ image: storageUrl(outKey) })
         .where(eq(user.id, data.userId));
+
+      // Raw upload no longer needed — delete after the DB write is confirmed.
+      await minio.removeObject(env.MINIO_BUCKET, data.key);
 
       // Delete the previous avatar from MinIO (best-effort — non-fatal).
       if (existing?.image) {
