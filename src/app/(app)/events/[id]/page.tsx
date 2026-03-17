@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -446,6 +447,87 @@ function CreatePollDialog({ eventId, groupId, onCreated, forceOpen, onForceOpenC
 }
 
 
+// ── Edit event dialog (organiser only) ───────────────────────────────────────
+
+function EditEventDialog({
+  event,
+  onUpdated,
+}: {
+  event: { id: string; title: string; description?: string | null };
+  onUpdated: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState(event.title);
+  const [description, setDescription] = useState(event.description ?? "");
+  const [error, setError] = useState("");
+
+  // Reset form when dialog opens so edits reflect latest values
+  function handleOpenChange(v: boolean) {
+    if (v) {
+      setTitle(event.title);
+      setDescription(event.description ?? "");
+      setError("");
+    }
+    setOpen(v);
+  }
+
+  const update = api.events.update.useMutation({
+    onSuccess: () => { setOpen(false); onUpdated(); },
+    onError: (e) => setError(e.message),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <button className="text-xs text-muted-foreground hover:text-foreground">
+          Edit
+        </button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Edit event</DialogTitle></DialogHeader>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            setError("");
+            update.mutate({
+              id: event.id,
+              title: title.trim(),
+              description: description.trim() || null,
+            });
+          }}
+          className="space-y-4"
+        >
+          {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+          <div className="space-y-2">
+            <Label htmlFor="edit-event-title">Title</Label>
+            <Input
+              id="edit-event-title"
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-event-desc">Description (optional)</Label>
+            <Textarea
+              id="edit-event-desc"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="submit" disabled={!title.trim() || update.isPending}>
+              {update.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Event detail page ─────────────────────────────────────────────────────────
 
 // ── Event discussion ──────────────────────────────────────────────────────────
@@ -666,7 +748,15 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
         </button>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">{event.title}</h1>
+            <div className="flex items-baseline gap-2">
+              <h1 className="text-2xl font-bold">{event.title}</h1>
+              {isEventCreator && event.status !== "cancelled" && (
+                <EditEventDialog
+                  event={event}
+                  onUpdated={() => void utils.events.get.invalidate({ id })}
+                />
+              )}
+            </div>
             {event.description && <p className="text-muted-foreground mt-1">{event.description}</p>}
           </div>
           <Badge variant={event.status === "cancelled" ? "destructive" : event.status === "confirmed" ? "default" : "secondary"}>
