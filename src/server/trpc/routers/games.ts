@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { and, asc, count, countDistinct, eq, gt, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, count, countDistinct, desc, eq, gt, ilike, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { games, gameOwnerships, groupMemberships, pollOptions, polls } from "@/server/db/schema";
+import { games, gameOwnerships, groupMemberships, pollOptions, polls, user } from "@/server/db/schema";
+import type { RecentlyPlayedEntry } from "@/server/db/schema";
 import { assertRateLimit } from "@/server/ratelimit";
 import {
   igdbEnabled,
@@ -392,6 +393,71 @@ export const gamesRouter = createTRPCRouter({
           )
         );
     }),
+
+  // Gaming stats for the current user's profile (CAMP-175).
+  // Returns total playtime, last-2-weeks activity, most played, and recently played.
+  // Only meaningful when Steam is linked and library is public.
+  gamingStats: protectedProcedure.query(async ({ ctx }) => {
+    // Fetch Steam fields from user table
+    const me = await db.query.user.findFirst({
+      where: eq(user.id, ctx.user.id),
+      columns: {
+        steamId: true,
+        steamLibraryPublic: true,
+        recentlyPlayedJson: true,
+      },
+    });
+
+    const steamLinked = !!me?.steamId;
+    const libraryPublic = me?.steamLibraryPublic ?? false;
+
+    if (!steamLinked || !libraryPublic) {
+      return { steamLinked, libraryPublic, totalMinutes: 0, last2WeeksMinutes: 0, mostPlayed: [], recentlyPlayed: [] };
+    }
+
+    // Sum total playtime and get top 3 most played (with game info)
+    const mostPlayedRows = await db
+      .select({
+        gameId: gameOwnerships.gameId,
+        playtimeMinutes: gameOwnerships.playtimeMinutes,
+        title: games.title,
+        coverUrl: games.coverUrl,
+      })
+      .from(gameOwnerships)
+      .innerJoin(games, eq(gameOwnerships.gameId, games.id))
+      .where(
+        and(
+          eq(gameOwnerships.userId, ctx.user.id),
+          isNotNull(gameOwnerships.playtimeMinutes)
+        )
+      )
+      .orderBy(desc(gameOwnerships.playtimeMinutes))
+      .limit(3);
+
+    const totalRow = await db
+      .select({ total: sql<number>`coalesce(sum(${gameOwnerships.playtimeMinutes}), 0)` })
+      .from(gameOwnerships)
+      .where(eq(gameOwnerships.userId, ctx.user.id));
+
+    const totalMinutes = Number(totalRow[0]?.total ?? 0);
+
+    const recentlyPlayed = (me.recentlyPlayedJson as RecentlyPlayedEntry[] | null) ?? [];
+    const last2WeeksMinutes = recentlyPlayed.reduce((sum, g) => sum + (g.playtime2weeks ?? 0), 0);
+
+    return {
+      steamLinked,
+      libraryPublic,
+      totalMinutes,
+      last2WeeksMinutes,
+      mostPlayed: mostPlayedRows.map((r) => ({
+        gameId: r.gameId,
+        title: r.title,
+        coverUrl: r.coverUrl,
+        playtimeMinutes: r.playtimeMinutes ?? 0,
+      })),
+      recentlyPlayed: recentlyPlayed.slice(0, 3),
+    };
+  }),
 
   // Batch ownership overlap for multiple games within a group (CAMP-104).
   // Returns a map of gameId → list of { user, platform } for group members who own it.
