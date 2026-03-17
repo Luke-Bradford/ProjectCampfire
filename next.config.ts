@@ -47,6 +47,10 @@ function minioRemotePatterns(): RemotePattern[] {
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // web-push uses Node.js native crypto/net APIs that cannot be bundled by
+  // Turbopack or webpack. Mark it as external so Next.js resolves it at runtime
+  // from node_modules instead of attempting to bundle it.
+  serverExternalPackages: ["web-push"],
   experimental: {
     staleTimes: {
       dynamic: 30, // cache navigated pages for 30s client-side
