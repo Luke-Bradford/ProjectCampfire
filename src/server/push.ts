@@ -55,7 +55,7 @@ export async function sendPush(
   }
 
   if (!_webpush) {
-    log.warn("sendPush called but web-push not loaded — skipping");
+    log.warn("sendPush called but web-push not initialised — VAPID env vars may be missing");
     return { ok: false, expired: false };
   }
   try {
