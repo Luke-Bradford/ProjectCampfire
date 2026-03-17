@@ -350,9 +350,16 @@ export const gamesRouter = createTRPCRouter({
       }
 
       // Apply cursor and limit to the deduplicated list.
-      // Pagination works correctly here because all rows are fetched in one query and
-      // sliced in JS — the cursor finds its position in the stable sorted array, so
-      // there are no cross-page duplicates or gaps regardless of sort order.
+      // All rows are fetched in one query and sliced in JS. The cursor (gameId) is
+      // stable regardless of sort order — it identifies the last-seen item positionally.
+      //
+      // Known trade-off: a background Steam re-sync between page 1 and page 2 can shift
+      // sort positions for most_played/recently_played/recently_added, which may cause a
+      // game to appear on both pages or be skipped entirely. This is acceptable at MVP
+      // scale (libraries are small, re-syncs are infrequent, and full-page refreshes are
+      // the primary access pattern). A stable per-request snapshot would require storing
+      // the sorted list server-side — not warranted at this stage.
+      //
       // For alphabetical, re-sort by title after grouping (title requires the join).
       const allGames = input.sort === "alphabetical"
         ? [...gameMap.values()].sort((a, b) => a.title.localeCompare(b.title))

@@ -246,8 +246,11 @@ async function upsertBatch(userId: string, steamGames: SteamOwnedGame[]): Promis
       .onConflictDoUpdate({
         target: [gameOwnerships.userId, gameOwnerships.gameId, gameOwnerships.platform],
         set: {
-          playtimeMinutes: sql`excluded.playtime_minutes`,
-          lastPlayedAt: sql`excluded.last_played_at`,
+          // COALESCE keeps existing non-null data when Steam omits a field (undefined → null).
+          // Steam occasionally omits playtime_forever entirely for free-to-play or
+          // delisted titles; without COALESCE a re-sync would regress stored playtime to null.
+          playtimeMinutes: sql`COALESCE(excluded.playtime_minutes, ${gameOwnerships.playtimeMinutes})`,
+          lastPlayedAt: sql`COALESCE(excluded.last_played_at, ${gameOwnerships.lastPlayedAt})`,
         },
       });
   }
