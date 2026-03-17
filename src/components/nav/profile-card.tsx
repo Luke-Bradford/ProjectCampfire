@@ -89,7 +89,9 @@ export function ProfileCard({
     router.refresh();
   }
 
-  const profileHref = username ? `/u/${username}` : "/profile";
+  // Own profile page — always /profile (authenticated, tabbed view with gaming stats etc.)
+  // /u/:username is the public view, linked from feed posts and friend cards.
+  const profileHref = "/profile";
 
   // An href is "active" if the current pathname starts with it.
   // Feed is exact-match only to avoid it lighting up on every page.
