@@ -33,6 +33,8 @@ export type NotificationPrefs = {
   emailPollClosed?: boolean;        // default off
   // Groups
   emailGroupInvite?: boolean;       // default on
+  // Feed digest — "daily" | "weekly" | "off"
+  emailFeedDigest?: "daily" | "weekly" | "off"; // default "off"
 };
 
 // better-auth user table extended with our profile fields.

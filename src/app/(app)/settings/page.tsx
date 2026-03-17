@@ -308,6 +308,7 @@ const PREF_DEFAULTS: Required<NotificationPrefs> = {
   emailPollOpened: true,
   emailPollClosed: false,
   emailGroupInvite: true,
+  emailFeedDigest: "off",
 };
 
 function mergePrefs(saved: NotificationPrefs | undefined): Required<NotificationPrefs> {
@@ -335,7 +336,7 @@ function NotificationsSection() {
     onSuccess: () => { setPrefsSaved(true); setTimeout(() => setPrefsSaved(false), 2500); },
   });
 
-  function setPref(key: keyof NotificationPrefs, value: boolean) {
+  function setPref(key: keyof NotificationPrefs, value: boolean | "daily" | "weekly" | "off") {
     setPrefs((p) => ({ ...p, [key]: value }));
     updatePrefs.mutate({ [key]: value });
   }
@@ -375,6 +376,29 @@ function NotificationsSection() {
         <div className="divide-y">
           <ToggleRow label="Group invite"   description="When someone invites you to a group."           checked={prefs.emailGroupInvite}  onChange={(v) => setPref("emailGroupInvite", v)}  disabled={updatePrefs.isPending} />
           <ToggleRow label="Friend request" description="When someone sends you a friend request."       checked={prefs.emailFriendRequest} onChange={(v) => setPref("emailFriendRequest", v)} disabled={updatePrefs.isPending} />
+        </div>
+
+        <NotifSubHeading label="Email — Feed digest" />
+        <div className="py-3">
+          <p className="text-sm font-medium mb-1">Digest frequency</p>
+          <p className="text-xs text-muted-foreground mb-3">A summary of posts from your friends and groups.</p>
+          <div className="flex gap-2">
+            {(["off", "daily", "weekly"] as const).map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                disabled={updatePrefs.isPending}
+                onClick={() => setPref("emailFeedDigest", opt)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  prefs.emailFeedDigest === opt
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "text-muted-foreground border-border hover:bg-accent"
+                }`}
+              >
+                {opt === "off" ? "Off" : opt.charAt(0).toUpperCase() + opt.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
