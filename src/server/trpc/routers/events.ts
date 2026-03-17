@@ -10,6 +10,7 @@ import {
   enqueueEventCancelled,
   enqueueEventRsvpReminder,
 } from "@/server/jobs/email-jobs";
+import { enqueuePush } from "@/server/jobs/push-jobs";
 
 const EVENT_STATUSES = ["draft", "open", "confirmed", "cancelled"] as const;
 
@@ -184,6 +185,13 @@ export const eventsRouter = createTRPCRouter({
             confirmedEndsAt: confirmedEndsAt?.toISOString() ?? null,
             recipientUserIds: attendeeIds,
           });
+          for (const uid of attendeeIds) {
+            void enqueuePush(uid, {
+              title: `Event confirmed: ${event.title}`,
+              body: `"${event.title}" in ${groupName} has been confirmed.`,
+              url: `/events/${input.id}`,
+            }).catch(() => undefined);
+          }
 
           // Schedule an RSVP reminder 24 h before the event for members who haven't RSVPd
           const allMembers = await db.query.groupMemberships.findMany({
@@ -223,6 +231,13 @@ export const eventsRouter = createTRPCRouter({
             groupName,
             recipientUserIds: attendeeIds,
           });
+          for (const uid of attendeeIds) {
+            void enqueuePush(uid, {
+              title: `Event cancelled: ${event.title}`,
+              body: `"${event.title}" in ${groupName} has been cancelled.`,
+              url: `/events/${input.id}`,
+            }).catch(() => undefined);
+          }
         }
       }
 

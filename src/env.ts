@@ -38,9 +38,17 @@ export const env = createEnv({
     STEAM_API_KEY: z.string().optional(),
     // Minimum log level. One of: error | warn | info | debug. Defaults to "info".
     LOG_LEVEL: z.enum(["error", "warn", "info", "debug"]).default("info"),
+    // Web Push (VAPID) — optional. When set, browser push notifications are enabled.
+    // Generate keys with: npx web-push generate-vapid-keys
+    VAPID_PUBLIC_KEY: z.string().optional(),
+    VAPID_PRIVATE_KEY: z.string().optional(),
+    // Typically "mailto:<email>" or the app URL. Required when VAPID keys are set.
+    VAPID_SUBJECT: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url(),
+    // Must match VAPID_PUBLIC_KEY — exposed to the client for push subscription registration.
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().optional(),
     // Set to "true" when the corresponding server-side OAuth credentials are configured.
     // Controls whether the social login buttons are rendered on the client.
     NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED: z.literal("true").optional(),
@@ -66,6 +74,10 @@ export const env = createEnv({
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED: process.env.NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED,
     NEXT_PUBLIC_DISCORD_OAUTH_ENABLED: process.env.NEXT_PUBLIC_DISCORD_OAUTH_ENABLED,
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+    VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY,
+    VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
+    VAPID_SUBJECT: process.env.VAPID_SUBJECT,
     IGDB_CLIENT_ID: process.env.IGDB_CLIENT_ID,
     IGDB_CLIENT_SECRET: process.env.IGDB_CLIENT_SECRET,
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,

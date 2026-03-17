@@ -7,6 +7,7 @@ import { createTRPCRouter, protectedProcedure, publicProcedure } from "@/server/
 import { db } from "@/server/db";
 import { user, friendships, friendInvites, notifications, groupMemberships, groups, gameOwnerships } from "@/server/db/schema";
 import { enqueueFriendRequest, enqueueFriendRequestAccepted } from "@/server/jobs/email-jobs";
+import { enqueuePush } from "@/server/jobs/push-jobs";
 import { assertRateLimit } from "@/server/ratelimit";
 import { env } from "@/env";
 import { logger } from "@/lib/logger";
@@ -72,6 +73,11 @@ export const friendsRouter = createTRPCRouter({
       });
       void enqueueFriendRequest({ requesterName: ctx.user.name ?? "Someone", recipientUserId: input.addresseeId })
         .catch((err: unknown) => log.error("enqueueFriendRequest failed", { err: String(err) }));
+      void enqueuePush(input.addresseeId, {
+        title: "New friend request",
+        body: `${ctx.user.name ?? "Someone"} sent you a friend request.`,
+        url: "/friends",
+      }).catch((err: unknown) => log.error("enqueuePush(friendRequest) failed", { err: String(err) }));
     }),
 
   // Accept or decline a pending request (CAMP-025)
@@ -107,6 +113,11 @@ export const friendsRouter = createTRPCRouter({
         });
         void enqueueFriendRequestAccepted({ acceptorName: ctx.user.name ?? "Someone", recipientUserId: input.requesterId })
           .catch((err: unknown) => log.error("enqueueFriendRequestAccepted failed", { err: String(err) }));
+        void enqueuePush(input.requesterId, {
+          title: "Friend request accepted",
+          body: `${ctx.user.name ?? "Someone"} accepted your friend request.`,
+          url: "/friends",
+        }).catch((err: unknown) => log.error("enqueuePush(friendRequestAccepted) failed", { err: String(err) }));
       } else {
         await db
           .delete(friendships)
@@ -330,6 +341,11 @@ export const friendsRouter = createTRPCRouter({
       });
       void enqueueFriendRequest({ requesterName: ctx.user.name ?? "Someone", recipientUserId: found.id })
         .catch((err: unknown) => log.error("enqueueFriendRequest failed", { err: String(err) }));
+      void enqueuePush(found.id, {
+        title: "New friend request",
+        body: `${ctx.user.name ?? "Someone"} sent you a friend request.`,
+        url: "/friends",
+      }).catch((err: unknown) => log.error("enqueuePush(friendRequest) failed", { err: String(err) }));
     }),
 
   // Return a user's public game library — visible only when their profile is open (CAMP-115).
@@ -497,6 +513,11 @@ export const friendsRouter = createTRPCRouter({
       });
       void enqueueFriendRequest({ requesterName: ctx.user.name ?? "Someone", recipientUserId: invite.inviterId })
         .catch((err: unknown) => log.error("enqueueFriendRequest failed", { err: String(err) }));
+      void enqueuePush(invite.inviterId, {
+        title: "New friend request",
+        body: `${ctx.user.name ?? "Someone"} sent you a friend request.`,
+        url: "/friends",
+      }).catch((err: unknown) => log.error("enqueuePush(friendRequest) failed", { err: String(err) }));
     }),
 
   // Find Campfire users who are also on the caller's Steam friends list (CAMP-030/112).
