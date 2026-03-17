@@ -46,6 +46,12 @@ function notifMessage(type: string, data: NotifData): string {
       return `${data.acceptorName ?? "Someone"} accepted your friend request.`;
     case "group_invite_received":
       return `You were invited to join ${data.groupName ?? "a group"}.`;
+    case "post_comment":
+      return `${data.commenterName ?? "Someone"} commented on your post.`;
+    case "post_like":
+      return `${data.likerName ?? "Someone"} liked your post.`;
+    case "comment_like":
+      return `${data.likerName ?? "Someone"} liked your comment.`;
     default:
       return "You have a new notification.";
   }

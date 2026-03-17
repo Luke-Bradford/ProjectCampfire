@@ -4,10 +4,11 @@ import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { posts, comments, reactions, friendships, groupMemberships, events, groups } from "@/server/db/schema";
+import { posts, comments, reactions, notifications, friendships, groupMemberships, events, groups } from "@/server/db/schema";
 import { assertRateLimit } from "@/server/ratelimit";
 import { enqueueOgFetch } from "@/server/jobs/og-fetch-jobs";
 import { enqueueProcessCommentImage } from "@/server/jobs/image-jobs";
+import { enqueuePush } from "@/server/jobs/push-jobs";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("feed");
@@ -419,7 +420,7 @@ export const feedRouter = createTRPCRouter({
       // Verify the post exists and is not soft-deleted.
       const post = await db.query.posts.findFirst({
         where: and(eq(posts.id, input.postId), isNull(posts.deletedAt)),
-        columns: { id: true },
+        columns: { id: true, authorId: true },
       });
       if (!post) throw new TRPCError({ code: "NOT_FOUND", message: "Post not found." });
 
@@ -443,6 +444,22 @@ export const feedRouter = createTRPCRouter({
         await Promise.all(
           input.imageKeys.map((key, index) => enqueueProcessCommentImage(id, key, index))
         );
+      }
+      // Notify the post author if they are not the commenter (CAMP-163).
+      // Fire-and-forget: a notification failure must not roll back the comment insert.
+      // commenterName is denormalised at creation time — reflects the name at the time of the comment.
+      if (post.authorId !== ctx.user.id) {
+        db.insert(notifications).values({
+          id: createId(),
+          userId: post.authorId,
+          type: "post_comment",
+          data: { commenterId: ctx.user.id, commenterName: ctx.user.name, postId: input.postId, commentId: id },
+        }).catch((err: unknown) => log.error("notification insert(postComment) failed", { err: String(err) }));
+        void enqueuePush(post.authorId, {
+          title: "New comment",
+          body: `${ctx.user.name ?? "Someone"} commented on your post.`,
+          url: "/feed",
+        }).catch((err: unknown) => log.error("enqueuePush(postComment) failed", { err: String(err) }));
       }
       return { id };
     }),
@@ -577,6 +594,48 @@ export const feedRouter = createTRPCRouter({
         commentId: input.commentId ?? null,
         type: "like",
       });
+
+      // Notify the target's author on a new like — not on unlike, not self-like (CAMP-163).
+      // Fire-and-forget: notification failures must not roll back the like insert.
+      // likerName is denormalised at creation time — reflects the name at the time of the like.
+      if (input.postId) {
+        const post = await db.query.posts.findFirst({
+          where: eq(posts.id, input.postId),
+          columns: { authorId: true },
+        });
+        if (post && post.authorId !== ctx.user.id) {
+          db.insert(notifications).values({
+            id: createId(),
+            userId: post.authorId,
+            type: "post_like",
+            data: { likerId: ctx.user.id, likerName: ctx.user.name, postId: input.postId },
+          }).catch((err: unknown) => log.error("notification insert(postLike) failed", { err: String(err) }));
+          void enqueuePush(post.authorId, {
+            title: "New like",
+            body: `${ctx.user.name ?? "Someone"} liked your post.`,
+            url: "/feed",
+          }).catch((err: unknown) => log.error("enqueuePush(postLike) failed", { err: String(err) }));
+        }
+      } else if (input.commentId) {
+        const comment = await db.query.comments.findFirst({
+          where: eq(comments.id, input.commentId),
+          columns: { authorId: true },
+        });
+        if (comment && comment.authorId !== ctx.user.id) {
+          db.insert(notifications).values({
+            id: createId(),
+            userId: comment.authorId,
+            type: "comment_like",
+            data: { likerId: ctx.user.id, likerName: ctx.user.name, commentId: input.commentId },
+          }).catch((err: unknown) => log.error("notification insert(commentLike) failed", { err: String(err) }));
+          void enqueuePush(comment.authorId, {
+            title: "New like",
+            body: `${ctx.user.name ?? "Someone"} liked your comment.`,
+            url: "/feed",
+          }).catch((err: unknown) => log.error("enqueuePush(commentLike) failed", { err: String(err) }));
+        }
+      }
+
       return { liked: true };
     }),
 });
