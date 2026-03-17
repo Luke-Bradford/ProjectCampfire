@@ -10,7 +10,23 @@ import { logger } from "@/lib/logger";
 
 const log = logger.child("image");
 
-const AVATAR_SIZE = 256; // px, square
+const AVATAR_SIZE = 400; // px, square
+
+/**
+ * Extracts the MinIO object key from a full storage URL.
+ * Returns null for external URLs (e.g. Steam CDN, OAuth avatars).
+ */
+function extractMinioKey(imageUrl: string): string | null {
+  try {
+    const base = env.MINIO_PUBLIC_URL
+      ? `${env.MINIO_PUBLIC_URL}/`
+      : `${env.MINIO_USE_SSL ? "https" : "http"}://${env.MINIO_ENDPOINT}:${env.MINIO_PORT}/${env.MINIO_BUCKET}/`;
+    if (!imageUrl.startsWith(base)) return null;
+    return imageUrl.slice(base.length);
+  } catch {
+    return null;
+  }
+}
 const POST_IMAGE_MAX = 1280; // px, longest edge
 const MAX_POST_IMAGES = 4; // must match Zod .max() in feed.create
 const MAX_COMMENT_IMAGES = 1; // must match Zod .max() in feed.comment
@@ -75,6 +91,12 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
 
   switch (data.type) {
     case "process_avatar": {
+      // Fetch old image URL before overwriting so we can delete the old object.
+      const existing = await db.query.user.findFirst({
+        where: eq(user.id, data.userId),
+        columns: { image: true },
+      });
+
       const raw = await downloadFromMinio(data.key);
       const processed = await sharp(raw)
         .resize(AVATAR_SIZE, AVATAR_SIZE, { fit: "cover", position: "centre" })
@@ -83,11 +105,23 @@ export async function processImageJob(job: Job<ImageJobPayload>) {
 
       const outKey = processedKey(data.key);
       await uploadProcessed(outKey, processed);
+      // Delete the raw upload now that processed copy is stored.
+      await minio.removeObject(env.MINIO_BUCKET, data.key);
 
       await db
         .update(user)
         .set({ image: storageUrl(outKey) })
         .where(eq(user.id, data.userId));
+
+      // Delete the previous avatar from MinIO (best-effort — non-fatal).
+      if (existing?.image) {
+        const oldKey = extractMinioKey(existing.image);
+        if (oldKey && oldKey !== outKey) {
+          await minio.removeObject(env.MINIO_BUCKET, oldKey).catch((err: unknown) =>
+            log.warn("failed to delete old avatar", { oldKey, err: String(err) })
+          );
+        }
+      }
 
       log.info("avatar processed", { userId: data.userId, outKey });
       break;
