@@ -1,4 +1,3 @@
-import "server-only";
 import webpush from "web-push";
 import { env } from "@/env";
 import { logger } from "@/lib/logger";
