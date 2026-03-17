@@ -541,7 +541,8 @@ function downloadIcs(event: {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${event.title.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.ics`;
+  const safeName = event.title.replace(/[^a-z0-9]/gi, "-").toLowerCase().replace(/^-+|-+$/g, "") || "event";
+  a.download = `${safeName}.ics`;
   a.click();
   // Defer revoke so the browser's async download handler has time to read the blob.
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
