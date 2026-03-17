@@ -21,8 +21,8 @@ const LIMIT = 20;
  * GIPHY_URL_RE regex to keep the two sites consistent.
  */
 
-// Exported so the tRPC feed router can import it instead of duplicating the pattern.
-export const GIPHY_URL_RE = /^https:\/\/media\d*\.giphy\.com\/media\/[^/]+\/[^/]+\.gif$/;
+import { GIPHY_URL_RE } from "@/lib/giphy";
+export { GIPHY_URL_RE };
 
 type GiphyImage = { url: string; width: string; height: string } | undefined;
 

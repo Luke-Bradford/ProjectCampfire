@@ -10,7 +10,7 @@ import { enqueueOgFetch } from "@/server/jobs/og-fetch-jobs";
 import { enqueueProcessCommentImage } from "@/server/jobs/image-jobs";
 import { enqueuePush } from "@/server/jobs/push-jobs";
 import { logger } from "@/lib/logger";
-import { GIPHY_URL_RE } from "@/app/api/gif/route";
+import { GIPHY_URL_RE } from "@/lib/giphy";
 
 const log = logger.child("feed");
 
