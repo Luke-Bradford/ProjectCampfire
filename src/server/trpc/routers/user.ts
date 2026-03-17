@@ -23,6 +23,7 @@ const notificationPrefsSchema = z.object({
   emailPollOpened: z.boolean().optional(),
   emailPollClosed: z.boolean().optional(),
   emailGroupInvite: z.boolean().optional(),
+  emailFeedDigest: z.enum(["daily", "weekly", "off"]).optional(),
 }) satisfies z.ZodType<NotificationPrefs>;
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/;

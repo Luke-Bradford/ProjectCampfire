@@ -11,7 +11,9 @@ export type EmailJobType =
   | "poll_closed"
   | "group_invite"
   | "friend_request"
-  | "friend_request_accepted";
+  | "friend_request_accepted"
+  | "send_feed_digest"
+  | "sweep_feed_digests";
 
 export type EventConfirmedPayload = {
   type: "event_confirmed";
@@ -80,6 +82,19 @@ export type FriendRequestAcceptedPayload = {
   recipientUserId: string;
 };
 
+export type SendFeedDigestPayload = {
+  type: "send_feed_digest";
+  userId: string;
+  /** "daily" or "weekly" — determines the lookback window */
+  frequency: "daily" | "weekly";
+};
+
+export type SweepFeedDigestsPayload = {
+  type: "sweep_feed_digests";
+  /** "daily" or "weekly" */
+  frequency: "daily" | "weekly";
+};
+
 export type EmailJobPayload =
   | EventConfirmedPayload
   | EventCancelledPayload
@@ -88,7 +103,9 @@ export type EmailJobPayload =
   | PollClosedPayload
   | GroupInvitePayload
   | FriendRequestPayload
-  | FriendRequestAcceptedPayload;
+  | FriendRequestAcceptedPayload
+  | SendFeedDigestPayload
+  | SweepFeedDigestsPayload;
 
 // ── Queue (shared singleton) ──────────────────────────────────────────────────
 

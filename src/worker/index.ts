@@ -1,4 +1,4 @@
-import { Worker, Queue } from "bullmq";
+import { Worker } from "bullmq";
 import { bullmqConnection } from "@/server/redis";
 import { processEmailJob } from "./processors/email";
 import { processAccountJob } from "./processors/account";
@@ -11,6 +11,7 @@ import { getAccountQueue } from "@/server/jobs/account-jobs";
 import { imageQueue } from "@/server/jobs/image-jobs";
 import { getPollQueue } from "@/server/jobs/poll-jobs";
 import { getRecurringQueue } from "@/server/jobs/recurring-jobs";
+import { emailQueue } from "@/server/jobs/email-jobs";
 import type { EmailJobPayload } from "@/server/jobs/email-jobs";
 import type { AccountJobPayload } from "@/server/jobs/account-jobs";
 import type { ImageJobPayload } from "@/server/jobs/image-jobs";
@@ -22,12 +23,8 @@ import { logger } from "@/lib/logger";
 
 const log = logger.child("worker");
 
-// Queue definitions — imported by other modules to enqueue jobs.
-// accountQueue lives in server/jobs/account-jobs.ts (import from there directly).
-// imageQueue lives in server/jobs/image-jobs.ts (import from there directly).
-// ogFetchQueue lives in server/jobs/og-fetch-jobs.ts (import from there directly).
-export const emailQueue = new Queue<EmailJobPayload>("email", { connection: bullmqConnection });
-export { imageQueue };
+// Queue re-exports — consumers should import directly from server/jobs/*.
+export { emailQueue, imageQueue };
 
 /**
  * Register a repeatable BullMQ job with exponential backoff retry.
@@ -165,6 +162,22 @@ log.info("Campfire workers started");
         "generate_recurring_events",
         { type: "generate_recurring_events" },
         { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: "generate_recurring_events" },
+      )
+    ),
+    // Daily feed digest sweep — enqueues per-user send_feed_digest jobs for daily subscribers.
+    registerRepeatableJob("sweep_feed_digests:daily", () =>
+      emailQueue.add(
+        "sweep_feed_digests",
+        { type: "sweep_feed_digests", frequency: "daily" },
+        { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: "sweep_feed_digests:daily" },
+      )
+    ),
+    // Weekly feed digest sweep — enqueues per-user send_feed_digest jobs for weekly subscribers.
+    registerRepeatableJob("sweep_feed_digests:weekly", () =>
+      emailQueue.add(
+        "sweep_feed_digests",
+        { type: "sweep_feed_digests", frequency: "weekly" },
+        { repeat: { every: 7 * 24 * 60 * 60 * 1000 }, jobId: "sweep_feed_digests:weekly" },
       )
     ),
   ]);

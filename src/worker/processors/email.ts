@@ -1,10 +1,11 @@
 import type { Job } from "bullmq";
-import { inArray, eq } from "drizzle-orm";
+import { inArray, eq, and, or, gte, isNull, not } from "drizzle-orm";
 import { db } from "@/server/db";
-import { user } from "@/server/db/schema";
+import { user, posts, friendships, groupMemberships } from "@/server/db/schema";
 import type { NotificationPrefs } from "@/server/db/schema";
 import { sendEmail } from "@/server/email";
 import type { EmailJobPayload } from "@/server/jobs/email-jobs";
+import { emailQueue } from "@/server/jobs/email-jobs";
 import { createRsvpToken } from "@/server/rsvp-token";
 import { env } from "@/env";
 import { logger } from "@/lib/logger";
@@ -28,11 +29,12 @@ const DEFAULTS: Required<Prefs> = {
   emailPollOpened: true,
   emailPollClosed: false,
   emailGroupInvite: true,
+  emailFeedDigest: "off",
 };
 
-function pref(prefs: Prefs | null | undefined, key: keyof Required<Prefs>): boolean {
+function pref(prefs: Prefs | null | undefined, key: Exclude<keyof Required<Prefs>, "emailFeedDigest">): boolean {
   if (prefs && key in prefs) return prefs[key] as boolean;
-  return DEFAULTS[key];
+  return DEFAULTS[key] as boolean;
 }
 
 // ── HTML escaping ─────────────────────────────────────────────────────────────
@@ -255,9 +257,183 @@ export async function processEmailJob(job: Job<EmailJobPayload>) {
       break;
     }
 
+    case "sweep_feed_digests": {
+      await sweepFeedDigests(data.frequency);
+      break;
+    }
+
+    case "send_feed_digest": {
+      await sendFeedDigest(data.userId, data.frequency);
+      break;
+    }
+
     default: {
       const _exhaustive: never = data;
       log.warn("unknown job type", { type: (_exhaustive as { type: string }).type });
     }
   }
+}
+
+// ── Feed digest helpers ───────────────────────────────────────────────────────
+
+/**
+ * Scans all users who have emailFeedDigest === frequency and enqueues
+ * individual send_feed_digest jobs for each.
+ * Runs as a daily (for "daily" freq) or weekly (for "weekly" freq) sweep.
+ */
+async function sweepFeedDigests(frequency: "daily" | "weekly"): Promise<void> {
+  // Fetch users with the matching digest preference.
+  // emailFeedDigest is stored in notificationPrefs jsonb.
+  // We cast to text and filter in JS — user table is bounded by registered users.
+  const users = await db
+    .select({ id: user.id, notificationPrefs: user.notificationPrefs })
+    .from(user)
+    .where(isNull(user.deletedAt));
+
+  const targets = users.filter((u) => {
+    const prefs = u.notificationPrefs as NotificationPrefs | null | undefined;
+    return (prefs?.emailFeedDigest ?? "off") === frequency;
+  });
+
+  if (targets.length === 0) {
+    log.info("sweep_feed_digests: no subscribers", { frequency });
+    return;
+  }
+
+  await Promise.all(
+    targets.map((u) =>
+      emailQueue.add(
+        "send_feed_digest",
+        { type: "send_feed_digest", userId: u.id, frequency },
+        { jobId: `feed_digest:${frequency}:${u.id}` }
+      )
+    )
+  );
+
+  log.info("sweep_feed_digests: enqueued", { frequency, count: targets.length });
+}
+
+type DigestPost = {
+  id: string;
+  body: string | null;
+  authorName: string;
+  createdAt: Date;
+  commentCount: number;
+};
+
+/**
+ * Builds and sends a feed digest email to one user.
+ * Skips silently if the user has since opted out or if there are no new posts.
+ */
+async function sendFeedDigest(userId: string, frequency: "daily" | "weekly"): Promise<void> {
+  const recipient = await db.query.user.findFirst({
+    where: eq(user.id, userId),
+    columns: { id: true, name: true, email: true, notificationPrefs: true, deletedAt: true },
+  });
+
+  if (!recipient || recipient.deletedAt) return;
+
+  const prefs = recipient.notificationPrefs as NotificationPrefs | null | undefined;
+  if ((prefs?.emailFeedDigest ?? "off") !== frequency) return; // opted out since job was enqueued
+
+  const lookbackMs = frequency === "daily" ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+  const since = new Date(Date.now() - lookbackMs);
+
+  // Friends + group memberships
+  const [friendRows, memberRows] = await Promise.all([
+    db
+      .select({ requesterId: friendships.requesterId, addresseeId: friendships.addresseeId })
+      .from(friendships)
+      .where(
+        and(
+          or(eq(friendships.requesterId, userId), eq(friendships.addresseeId, userId)),
+          eq(friendships.status, "accepted")
+        )
+      ),
+    db
+      .select({ groupId: groupMemberships.groupId })
+      .from(groupMemberships)
+      .where(eq(groupMemberships.userId, userId)),
+  ]);
+
+  const friendIds = friendRows.map((r) =>
+    r.requesterId === userId ? r.addresseeId : r.requesterId
+  );
+  const myGroupIds = memberRows.map((r) => r.groupId);
+
+  if (friendIds.length === 0 && myGroupIds.length === 0) return; // no social graph yet
+
+  // Fetch recent posts visible to this user (same visibility rules as the feed).
+  // Cap at 20 posts per digest to keep emails readable.
+  const visibilityFilter = or(
+    friendIds.length > 0 ? and(inArray(posts.authorId, friendIds), isNull(posts.groupId)) : undefined,
+    myGroupIds.length > 0 ? and(inArray(posts.groupId, myGroupIds)) : undefined
+  );
+
+  if (!visibilityFilter) return;
+
+  const recentPosts = await db
+    .select({
+      id: posts.id,
+      body: posts.body,
+      authorId: posts.authorId,
+      createdAt: posts.createdAt,
+    })
+    .from(posts)
+    .where(
+      and(
+        visibilityFilter,
+        gte(posts.createdAt, since),
+        isNull(posts.deletedAt),
+        not(eq(posts.authorId, userId)), // exclude own posts
+      )
+    )
+    .orderBy(posts.createdAt)
+    .limit(20);
+
+  if (recentPosts.length === 0) return; // nothing new, skip
+
+  // Fetch author names for the post batch
+  const authorIds = [...new Set(recentPosts.map((p) => p.authorId))];
+  const authors = await db
+    .select({ id: user.id, name: user.name })
+    .from(user)
+    .where(inArray(user.id, authorIds));
+  const authorMap = new Map(authors.map((a) => [a.id, a.name]));
+
+  const digestPosts: DigestPost[] = recentPosts.map((p) => ({
+    id: p.id,
+    body: p.body,
+    authorName: authorMap.get(p.authorId) ?? "Someone",
+    createdAt: p.createdAt,
+    commentCount: 0, // not fetching counts for simplicity — kept minimal per MVP
+  }));
+
+  const periodLabel = frequency === "daily" ? "today" : "this week";
+  const subject = `Your Campfire digest — ${digestPosts.length} new post${digestPosts.length === 1 ? "" : "s"} ${periodLabel}`;
+
+  const postItemsText = digestPosts
+    .map((p) => `• ${strip(p.authorName)}: ${strip(p.body ?? "(image or link)")}`)
+    .join("\n");
+
+  const postItemsHtml = digestPosts
+    .map(
+      (p) =>
+        `<li style="margin-bottom:12px"><strong>${esc(p.authorName)}</strong><br/><span style="color:#444">${esc(p.body ?? "(image or link)")}</span><br/><a href="${appUrl()}/feed" style="font-size:12px;color:#888">View post →</a></li>`
+    )
+    .join("\n");
+
+  await sendEmail({
+    to: recipient.email,
+    subject: safeSubject(subject),
+    text: `Hi ${strip(recipient.name)},\n\nHere's what happened on Campfire ${periodLabel}:\n\n${postItemsText}\n\nView your feed: ${appUrl()}/feed`,
+    html: htmlEmail(
+      `Your Campfire digest`,
+      `<p>Hi ${esc(recipient.name)},</p><p>Here's what happened ${periodLabel}:</p><ul style="padding-left:0;list-style:none;margin:16px 0">${postItemsHtml}</ul>`,
+      `${appUrl()}/feed`,
+      "Open feed"
+    ),
+  });
+
+  log.info("feed digest sent", { userId, frequency, postCount: digestPosts.length });
 }
