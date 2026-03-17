@@ -647,6 +647,7 @@ export function PostCard({
                 gifUrl: commentGif?.url,
               });
               setCommentGif(null);
+              setCommentGifPickerOpen(false);
               removeCommentImage();
             }}
             className="space-y-2"
@@ -731,6 +732,7 @@ export function PostCard({
                     <button
                       type="button"
                       className={`text-xs hover:text-foreground ${commentGif ? "text-foreground font-medium" : "text-muted-foreground"}`}
+                      onMouseDown={(e) => e.stopPropagation()}
                       onClick={() => setCommentGifPickerOpen((o) => !o)}
                     >
                       GIF

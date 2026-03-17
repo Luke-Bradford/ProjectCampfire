@@ -240,6 +240,7 @@ export function PostComposer({ groupId, eventId, onPosted }: { groupId?: string;
               <button
                 type="button"
                 className={`text-xs hover:text-foreground ${selectedGif ? "text-foreground font-medium" : "text-muted-foreground"}`}
+                onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => setGifPickerOpen((o) => !o)}
               >
                 GIF

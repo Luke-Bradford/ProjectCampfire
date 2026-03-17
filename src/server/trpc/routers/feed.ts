@@ -407,7 +407,7 @@ export const feedRouter = createTRPCRouter({
   comment: protectedProcedure
     .input(z.object({
       postId: z.string(),
-      body: z.string().max(1000),
+      body: z.string().trim().max(1000),
       // imageKeys: raw MinIO keys returned by /api/upload/post-image (same route).
       // Max 1 image per comment. Pattern: posts/{userId}/{uploadId}/{cuid}-raw
       // Ownership verified by prefix check (same as post images).

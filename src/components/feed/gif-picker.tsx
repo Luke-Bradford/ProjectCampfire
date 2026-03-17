@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
+import { cn } from "@/lib/utils";
 
 type GifResult = {
   id: string;
@@ -57,20 +58,17 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
     inputRef.current?.focus();
   }, []);
 
-  // Close on outside click.
-  // Registered after a tick so the mousedown that opened the picker
-  // doesn't immediately trigger the handler and close it again.
+  // Close on outside click (synchronous mousedown).
+  // The toggle button that opens the picker must call e.stopPropagation() on
+  // its own mousedown so it doesn't immediately trigger this handler.
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         onCloseRef.current();
       }
     }
-    const t = setTimeout(() => document.addEventListener("mousedown", handler), 0);
-    return () => {
-      clearTimeout(t);
-      document.removeEventListener("mousedown", handler);
-    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
   // Close on Escape
@@ -135,7 +133,10 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
   return (
     <div
       ref={containerRef}
-      className={`absolute z-50 left-0 w-80 rounded-xl border bg-popover shadow-lg overflow-hidden ${openUpward ? "bottom-full mb-1" : "top-full mt-1"}`}
+      className={cn(
+        "absolute z-50 left-0 w-80 rounded-xl border bg-popover shadow-lg overflow-hidden",
+        openUpward ? "bottom-full mb-1" : "top-full mt-1"
+      )}
     >
       {/* Search */}
       <div className="p-2 border-b">
