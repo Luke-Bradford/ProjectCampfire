@@ -701,11 +701,9 @@ export const feedRouter = createTRPCRouter({
       //   - group posts: visible if caller is a member of that group
       const nonGroupClause = (isSelf || isFriend) ? isNull(posts.groupId) : undefined;
       const groupClause = myGroupIds.length > 0 ? inArray(posts.groupId, myGroupIds) : undefined;
-      const visibilityOr = nonGroupClause || groupClause
-        ? or(nonGroupClause, groupClause)
-        : undefined;
-
-      if (!visibilityOr) return { items: [], nextCursor: undefined };
+      const visibilityClauses = [nonGroupClause, groupClause].filter((c) => c !== undefined);
+      if (visibilityClauses.length === 0) return { items: [], nextCursor: undefined };
+      const visibilityOr = or(...visibilityClauses);
 
       // Parse compound cursor
       let cursorDate: Date | undefined;
