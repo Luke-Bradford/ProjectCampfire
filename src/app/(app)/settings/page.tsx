@@ -294,6 +294,118 @@ function InviteSection() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Push notification opt-in
+// ─────────────────────────────────────────────────────────────────────────────
+
+function PushOptIn() {
+  const utils = api.useUtils();
+  const { data: vapidData } = api.notifications.vapidPublicKey.useQuery();
+  const { data: subData } = api.notifications.hasPushSubscription.useQuery();
+  const subscribe = api.notifications.subscribePush.useMutation({
+    onSuccess: () => void utils.notifications.hasPushSubscription.invalidate(),
+  });
+  const unsubscribe = api.notifications.unsubscribePush.useMutation({
+    onSuccess: () => void utils.notifications.hasPushSubscription.invalidate(),
+  });
+
+  const [status, setStatus] = useState<"idle" | "requesting" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+  // swSupported is resolved after mount to avoid SSR/hydration mismatch
+  const [swSupported, setSwSupported] = useState(false);
+  useEffect(() => {
+    setSwSupported("serviceWorker" in navigator);
+  }, []);
+
+  const vapidKey = vapidData?.key ?? null;
+  const isSubscribed = subData?.subscribed ?? false;
+
+  // Push not available: VAPID not configured or browser lacks service worker support
+  if (!vapidKey || !swSupported) return null;
+
+  async function handleEnable() {
+    if (!vapidKey) return;
+    setStatus("requesting");
+    setErrorMsg("");
+    try {
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setStatus("idle");
+        setErrorMsg("Permission denied. Allow notifications in your browser settings.");
+        return;
+      }
+      // Convert base64 VAPID key to Uint8Array
+      const key = vapidKey.replace(/-/g, "+").replace(/_/g, "/");
+      const raw = Uint8Array.from(atob(key), (c) => c.charCodeAt(0));
+      const pushSub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: raw,
+      });
+      const json = pushSub.toJSON();
+      if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
+        throw new Error("Browser returned an incomplete push subscription. Try again.");
+      }
+      await subscribe.mutateAsync({
+        endpoint: json.endpoint,
+        p256dh: json.keys.p256dh,
+        auth: json.keys.auth,
+      });
+      setStatus("idle");
+    } catch (err) {
+      setStatus("error");
+      setErrorMsg(err instanceof Error ? err.message : "Failed to enable push notifications.");
+    }
+  }
+
+  async function handleDisable() {
+    setStatus("requesting");
+    setErrorMsg("");
+    try {
+      const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+      if (reg) {
+        const pushSub = await reg.pushManager.getSubscription();
+        if (pushSub) {
+          await unsubscribe.mutateAsync({ endpoint: pushSub.endpoint });
+          await pushSub.unsubscribe();
+        }
+      }
+      setStatus("idle");
+    } catch (err) {
+      setStatus("error");
+      setErrorMsg(err instanceof Error ? err.message : "Failed to disable push notifications.");
+    }
+  }
+
+  const busy = status === "requesting" || subscribe.isPending || unsubscribe.isPending;
+
+  return (
+    <div className="rounded-xl border bg-card p-5 space-y-3">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium">Browser push notifications</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Get notified even when Campfire isn&apos;t open.
+          </p>
+        </div>
+        {isSubscribed ? (
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void handleDisable()}>
+            {busy ? "Working…" : "Disable"}
+          </Button>
+        ) : (
+          <Button size="sm" disabled={busy} onClick={() => void handleEnable()}>
+            {busy ? "Working…" : "Enable"}
+          </Button>
+        )}
+      </div>
+      {isSubscribed && (
+        <p className="text-xs text-green-600">Push notifications are enabled on this device.</p>
+      )}
+      {errorMsg && <p className="text-xs text-destructive">{errorMsg}</p>}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Section: Notifications
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -350,6 +462,8 @@ function NotificationsSection() {
         </div>
         {prefsSaved && <span className="text-xs text-green-600">Saved</span>}
       </div>
+
+      <PushOptIn />
 
       <div className="rounded-xl border bg-card p-5 space-y-1">
         <NotifSubHeading label="In-app alerts" />

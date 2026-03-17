@@ -7,4 +7,5 @@ export * from "./games";
 export * from "./availability";
 export * from "./events";
 export * from "./recurring";
+export * from "./pushSubscriptions";
 export * from "./relations";
