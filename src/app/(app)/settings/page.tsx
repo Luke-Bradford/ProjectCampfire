@@ -16,6 +16,7 @@ import {
   Bell,
   Camera,
   Link2,
+  Loader2,
   Palette,
   Shield,
   Gamepad2,
@@ -217,14 +218,14 @@ function ProfileSection() {
       <div className="rounded-xl border bg-card p-5 space-y-5">
         {/* Avatar upload */}
         <div className="flex items-center gap-4">
-          <label className="relative group cursor-pointer shrink-0">
+          <label className={`relative group shrink-0 ${avatarUploading ? "cursor-wait" : "cursor-pointer"}`}>
             <Avatar className="h-16 w-16">
               <AvatarImage src={me?.image ?? undefined} />
               <AvatarFallback className="text-lg font-semibold">{avatarFallback}</AvatarFallback>
             </Avatar>
             <div className={`absolute inset-0 rounded-full bg-black/50 flex items-center justify-center transition-opacity ${avatarUploading ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
               {avatarUploading
-                ? <span className="text-white text-[10px] font-medium">...</span>
+                ? <Loader2 size={20} className="text-white animate-spin" />
                 : <Camera size={16} className="text-white" />}
             </div>
             <input
@@ -238,7 +239,10 @@ function ProfileSection() {
           <div>
             <p className="text-sm font-medium">{displayName || <span className="text-muted-foreground italic">No name set</span>}</p>
             {me?.username && <p className="text-xs text-muted-foreground">@{me.username}</p>}
-            <p className="text-xs text-muted-foreground mt-1">Click photo to change · max 5 MB</p>
+            {avatarUploading
+              ? <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Uploading photo…</p>
+              : <p className="text-xs text-muted-foreground mt-1">Click photo to change · max 5 MB</p>
+            }
             {avatarError && <p className="text-xs text-destructive mt-1">{avatarError}</p>}
           </div>
         </div>
