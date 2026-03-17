@@ -326,6 +326,35 @@ export const eventsRouter = createTRPCRouter({
       return { eventId: input.eventId, status: input.status };
     }),
 
+  // Edit event title / description (organiser only) (CAMP-170)
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.string().min(1),
+        title: z.string().trim().min(1).max(200).optional(),
+        description: z.string().trim().max(2000).nullable().optional(),
+      }).refine(
+        (d) => d.title !== undefined || d.description !== undefined,
+        { message: "At least one field must be provided." }
+      )
+    )
+    .mutation(async ({ ctx, input }) => {
+      const event = await assertEventMember(input.id, ctx.user.id);
+      if (event.createdBy !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      if (event.status === "cancelled") throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot edit a cancelled event." });
+
+      await db
+        .update(events)
+        .set({
+          ...(input.title !== undefined && { title: input.title }),
+          ...(input.description !== undefined && { description: input.description }),
+          updatedAt: new Date(),
+        })
+        .where(eq(events.id, input.id));
+
+      return { id: input.id };
+    }),
+
   // Attach or update the game on an event (organiser only) (CAMP-193)
   attachGame: protectedProcedure
     .input(
