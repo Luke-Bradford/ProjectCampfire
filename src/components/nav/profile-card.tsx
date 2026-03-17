@@ -100,7 +100,7 @@ export function ProfileCard({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Bounded profile card */}
+      {/* ── Profile island ── */}
       <div className="rounded-xl border bg-card shadow-sm p-4 flex flex-col gap-4">
         {/* Avatar + name row */}
         <div className="flex items-center gap-3">
@@ -156,14 +156,9 @@ export function ProfileCard({
                 type="button"
                 className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full group"
               >
-                <span
-                  className={`h-2 w-2 rounded-full shrink-0 ${statusConfig.colour}`}
-                />
+                <span className={`h-2 w-2 rounded-full shrink-0 ${statusConfig.colour}`} />
                 <span className="font-medium">{statusConfig.label}</span>
-                <ChevronDown
-                  size={12}
-                  className="ml-auto opacity-50 group-hover:opacity-100 transition-opacity"
-                />
+                <ChevronDown size={12} className="ml-auto opacity-50 group-hover:opacity-100 transition-opacity" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-36">
@@ -203,21 +198,13 @@ export function ProfileCard({
         </div>
       </div>
 
-      {/* Primary nav */}
-      <nav className="flex flex-col gap-0.5 px-1">
+      {/* ── Nav island ── */}
+      <div className="rounded-xl border bg-card shadow-sm py-2 px-2 flex flex-col gap-0.5">
         <NavLink href="/feed"         icon={<Newspaper size={13} />}   label="Feed"         active={isActive("/feed")}         onClick={onNavigate} />
         <NavLink href="/events"       icon={<Calendar size={13} />}    label="Events"       active={isActive("/events")}       onClick={onNavigate} />
         <NavLink href="/availability" icon={<Clock size={13} />}       label="Availability" active={isActive("/availability")} onClick={onNavigate} />
         <NavLink href="/people"       icon={<UserSearch size={13} />}  label="Find people"  active={isActive("/people")}       onClick={onNavigate} />
-      </nav>
-
-      {/* Divider */}
-      <div className="px-1">
-        <div className="border-t border-border/50" />
-      </div>
-
-      {/* Utility links */}
-      <div className="flex flex-col gap-0.5 px-1">
+        <div className="border-t border-border/50 my-1" />
         <NavLink
           href="/notifications"
           icon={
@@ -244,11 +231,9 @@ export function ProfileCard({
           <LogOut size={13} className="shrink-0" />
           Sign out
         </button>
-      </div>
-
-      {/* Theme toggle */}
-      <div className="px-1">
-        <ThemeToggle />
+        <div className="border-t border-border/50 mt-1 pt-2">
+          <ThemeToggle />
+        </div>
       </div>
     </div>
   );
