@@ -86,7 +86,10 @@ export const eventsRouter = createTRPCRouter({
       return { id };
     }),
 
-  // List events for a group
+  // List events for a group.
+  // rsvps is filtered to the caller's own RSVP only — prevents the "Going"
+  // badge from showing when any other member has RSVPd yes (not the caller).
+  // Sort: upcoming confirmed events first (soonest first), then TBD/drafts by creation time.
   list: protectedProcedure
     .input(z.object({ groupId: z.string() }))
     .query(async ({ ctx, input }) => {
@@ -95,10 +98,19 @@ export const eventsRouter = createTRPCRouter({
         where: eq(events.groupId, input.groupId),
         with: {
           createdBy: { columns: { id: true, name: true, username: true } },
-          rsvps: { columns: { userId: true, status: true } },
+          rsvps: {
+            where: eq(eventRsvps.userId, ctx.user.id),
+            columns: { userId: true, status: true },
+          },
           polls: { columns: { id: true, type: true, question: true, status: true } },
         },
-        orderBy: (t, { desc }) => [desc(t.createdAt)],
+        orderBy: (t, ops) => [
+          // Confirmed events with a start time sort first (soonest first).
+          // CASE expression pushes unconfirmed/TBD to the bottom.
+          ops.sql`CASE WHEN ${t.status} = 'confirmed' AND ${t.confirmedStartsAt} IS NOT NULL THEN 0 ELSE 1 END`,
+          ops.asc(t.confirmedStartsAt),
+          ops.desc(t.createdAt),
+        ],
       });
     }),
 
