@@ -232,10 +232,11 @@ async function upsertBatch(userId: string, steamGames: SteamOwnedGame[]): Promis
     .map((g) => {
       const gameId = existingByAppId.get(String(g.appid));
       if (!gameId) return null;
-      // rtime_last_played uses the same truthiness check: 0 means "never played",
-      // undefined means "field omitted" — both map to null and COALESCE preserves old data.
+      // rtime_last_played: 0 means "never played", undefined means "field omitted" —
+      // both map to null and COALESCE preserves old data. Uses explicit !== undefined
+      // check (consistent with playtimeMinutes below) to signal intent clearly.
       const lastPlayedAt =
-        g.rtime_last_played && g.rtime_last_played > 0
+        g.rtime_last_played !== undefined && g.rtime_last_played > 0
           ? new Date(g.rtime_last_played * 1000)
           : null;
       return {
