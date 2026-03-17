@@ -99,7 +99,7 @@ export const eventsRouter = createTRPCRouter({
         with: {
           createdBy: { columns: { id: true, name: true, username: true } },
           rsvps: {
-            where: eq(eventRsvps.userId, ctx.user.id),
+            where: (rsvp, { eq: eqOp }) => eqOp(rsvp.userId, ctx.user.id),
             columns: { userId: true, status: true },
           },
           polls: { columns: { id: true, type: true, question: true, status: true } },
@@ -385,7 +385,7 @@ export const eventsRouter = createTRPCRouter({
         with: {
           group: { columns: { id: true, name: true } },
           rsvps: {
-            where: eq(eventRsvps.userId, ctx.user.id),
+            where: (rsvp, { eq: eqOp }) => eqOp(rsvp.userId, ctx.user.id),
             columns: { status: true },
           },
         },
