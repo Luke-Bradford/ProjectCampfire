@@ -50,6 +50,8 @@ export const games = pgTable(
     // Steam Store price snapshot (snapshotted at poll creation time)
     priceDataJson: jsonb("price_data_json").$type<SteamPriceData>(),
     priceSnapshotAt: timestamp("price_snapshot_at"),
+    // Last time the IGDB metadata was refreshed by the re-enrichment job (CAMP-116)
+    igdbEnrichedAt: timestamp("igdb_enriched_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

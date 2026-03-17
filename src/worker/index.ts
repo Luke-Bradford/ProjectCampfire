@@ -8,6 +8,7 @@ import { processPollJob } from "./processors/poll";
 import { processRecurringJob } from "./processors/recurring";
 import { processSteamJob } from "./processors/steam";
 import { processPushJob } from "./processors/push";
+import { processIgdbJob } from "./processors/igdb";
 import { getAccountQueue } from "@/server/jobs/account-jobs";
 import { imageQueue } from "@/server/jobs/image-jobs";
 import { getPollQueue } from "@/server/jobs/poll-jobs";
@@ -21,6 +22,8 @@ import type { PollJobPayload } from "@/server/jobs/poll-jobs";
 import type { RecurringJobPayload } from "@/server/jobs/recurring-jobs";
 import type { SteamJobPayload } from "@/server/jobs/steam-jobs";
 import type { PushJobPayload } from "@/server/jobs/push-jobs";
+import type { IgdbJobPayload } from "@/server/jobs/igdb-jobs";
+import { getIgdbQueue } from "@/server/jobs/igdb-jobs";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("worker");
@@ -131,6 +134,15 @@ new Worker<PushJobPayload>(
   { connection: bullmqConnection }
 );
 
+// IGDB re-enrichment worker (CAMP-116)
+new Worker<IgdbJobPayload>(
+  "igdb",
+  async (job) => {
+    await processIgdbJob(job);
+  },
+  { connection: bullmqConnection }
+);
+
 log.info("Campfire workers started");
 
 // Repeatable jobs — registered with retry so a transient Redis blip at startup
@@ -189,6 +201,14 @@ log.info("Campfire workers started");
         "sweep_feed_digests:weekly",
         { type: "sweep_feed_digests", frequency: "weekly" },
         { repeat: { every: 7 * 24 * 60 * 60 * 1000 }, jobId: "sweep_feed_digests:weekly" },
+      )
+    ),
+    // Daily IGDB re-enrichment sweep — fans out per-game jobs for records older than 90 days (CAMP-116).
+    registerRepeatableJob("sweep_igdb_reenrichment", () =>
+      getIgdbQueue().add(
+        "sweep_igdb_reenrichment",
+        { type: "sweep_igdb_reenrichment" },
+        { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: "sweep_igdb_reenrichment" },
       )
     ),
   ]);
