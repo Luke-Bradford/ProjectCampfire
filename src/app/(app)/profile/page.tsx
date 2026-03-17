@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, Layers, Gamepad2, Calendar, ExternalLink, Settings, ChevronRight } from "lucide-react";
+import { PostsTab } from "@/components/feed/posts-tab";
 
 function initials(name: string) {
   return name
@@ -234,6 +235,7 @@ export default function MyProfilePage() {
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="w-full">
           <TabsTrigger value="overview" className="flex-1">Overview</TabsTrigger>
+          <TabsTrigger value="posts" className="flex-1">Posts</TabsTrigger>
           <TabsTrigger value="games" className="flex-1">Games</TabsTrigger>
           <TabsTrigger value="availability" className="flex-1">Availability</TabsTrigger>
         </TabsList>
@@ -285,6 +287,11 @@ export default function MyProfilePage() {
               )}
             </div>
           )}
+        </TabsContent>
+
+        {/* ── Posts ── */}
+        <TabsContent value="posts" className="mt-4">
+          {me?.id && <PostsTab userId={me.id} currentUserId={me.id} />}
         </TabsContent>
 
         {/* ── Games ── */}
