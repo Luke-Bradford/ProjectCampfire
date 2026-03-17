@@ -216,12 +216,24 @@ async function upsertBatch(userId: string, steamGames: SteamOwnedGame[]): Promis
   }
 
   // Upsert ownership records (pc platform, steam source).
-  // onConflictDoUpdate refreshes playtimeMinutes and lastPlayedAt on re-sync
-  // so existing rows gain accurate data as the user plays more.
+  //
+  // Playtime semantics — high-water-mark: stored playtime is never decreased.
+  //
+  // Both "Steam says 0 minutes" and "Steam omitted the field" normalise to null
+  // (Steam uses playtime_forever=0 for "never launched" AND for games where playtime
+  // tracking is unavailable; there is no way to distinguish these). The COALESCE
+  // on conflict preserves the existing non-null value in both cases. This means:
+  //   - If a user genuinely plays 0 minutes after previously having playtime stored,
+  //     the old value is kept. In practice this cannot happen — Steam playtime is
+  //     cumulative and never decreases.
+  //   - If Steam omits the field on a re-sync (partial response), existing data is kept.
+  // lastPlayedAt follows the same semantics: null from Steam never overwrites a stored date.
   const ownershipRows = steamGames
     .map((g) => {
       const gameId = existingByAppId.get(String(g.appid));
       if (!gameId) return null;
+      // rtime_last_played uses the same truthiness check: 0 means "never played",
+      // undefined means "field omitted" — both map to null and COALESCE preserves old data.
       const lastPlayedAt =
         g.rtime_last_played && g.rtime_last_played > 0
           ? new Date(g.rtime_last_played * 1000)
@@ -231,9 +243,8 @@ async function upsertBatch(userId: string, steamGames: SteamOwnedGame[]): Promis
         gameId,
         platform: "pc" as const,
         source: "steam" as const,
-        // Normalise 0 to null — Steam uses 0 for "never launched" and for
-        // games where playtime tracking is unavailable.
-        playtimeMinutes: g.playtime_forever && g.playtime_forever > 0 ? g.playtime_forever : null,
+        // 0 → null: Steam uses 0 for both "never launched" and "tracking unavailable".
+        playtimeMinutes: g.playtime_forever !== undefined && g.playtime_forever > 0 ? g.playtime_forever : null,
         lastPlayedAt,
       };
     })
@@ -246,9 +257,6 @@ async function upsertBatch(userId: string, steamGames: SteamOwnedGame[]): Promis
       .onConflictDoUpdate({
         target: [gameOwnerships.userId, gameOwnerships.gameId, gameOwnerships.platform],
         set: {
-          // COALESCE keeps existing non-null data when Steam omits a field (undefined → null).
-          // Steam occasionally omits playtime_forever entirely for free-to-play or
-          // delisted titles; without COALESCE a re-sync would regress stored playtime to null.
           playtimeMinutes: sql`COALESCE(excluded.playtime_minutes, ${gameOwnerships.playtimeMinutes})`,
           lastPlayedAt: sql`COALESCE(excluded.last_played_at, ${gameOwnerships.lastPlayedAt})`,
         },
