@@ -76,6 +76,9 @@ export const gameOwnerships = pgTable(
     platform: gamePlatformEnum("platform").notNull(),
     source: ownershipSourceEnum("source").notNull().default("manual"),
     hidden: boolean("hidden").notNull().default(false),
+    // Steam playtime data — null for manually-added games or pre-migration rows.
+    playtimeMinutes: integer("playtime_minutes"),
+    lastPlayedAt: timestamp("last_played_at"),
   },
   (t) => ({
     pk: primaryKey({ columns: [t.userId, t.gameId, t.platform] }),

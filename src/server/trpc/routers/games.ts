@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, asc, count, countDistinct, eq, gt, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, count, countDistinct, desc, eq, gt, ilike, inArray, or, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -237,6 +237,7 @@ export const gamesRouter = createTRPCRouter({
         cursor: z.string().optional(), // last gameId from previous page
         limit: z.number().int().min(1).max(100).default(50),
         showHidden: z.boolean().default(false),
+        sort: z.enum(["alphabetical", "most_played", "recently_played", "recently_added"]).default("alphabetical"),
       })
     )
     .query(async ({ ctx, input }) => {
@@ -281,6 +282,21 @@ export const gamesRouter = createTRPCRouter({
       // TODO(tech-debt): replace with SQL GROUP BY + array_agg for large libraries.
       // Safe at MVP scale: Steam sync caps at ~2000 games per user and the full set
       // fits comfortably in a single round-trip at this size.
+      // Determine sort order for ownership rows.
+      const orderBy = (() => {
+        switch (input.sort) {
+          case "most_played":
+            // Nulls last: games with no playtime data appear at the end.
+            return [sql`${gameOwnerships.playtimeMinutes} DESC NULLS LAST`, asc(gameOwnerships.gameId)];
+          case "recently_played":
+            return [sql`${gameOwnerships.lastPlayedAt} DESC NULLS LAST`, asc(gameOwnerships.gameId)];
+          case "recently_added":
+            return [desc(gameOwnerships.gameId)]; // gameId is a cuid — lexicographically ordered by creation
+          default: // alphabetical — sort by title after grouping
+            return [asc(gameOwnerships.gameId)];
+        }
+      })();
+
       const allRows = await db.query.gameOwnerships.findMany({
         where: ownershipWhere,
         with: {
@@ -295,14 +311,15 @@ export const gamesRouter = createTRPCRouter({
             },
           },
         },
-        orderBy: (t, { asc }) => [asc(t.gameId)],
+        orderBy: () => orderBy,
       });
 
-      // Group by gameId — collect platforms, pick hidden/source from first row.
+      // Group by gameId — collect platforms, pick playtime/hidden/source from first row.
       const gameMap = new Map<string, {
         id: string; title: string; coverUrl: string | null;
         genres: string[]; minPlayers: number | null; maxPlayers: number | null;
         platforms: (typeof PLATFORMS)[number][]; source: string; hidden: boolean;
+        playtimeMinutes: number | null; lastPlayedAt: Date | null;
       }>();
       for (const r of allRows) {
         const existing = gameMap.get(r.gameId);
@@ -314,12 +331,17 @@ export const gamesRouter = createTRPCRouter({
             platforms: [r.platform],
             source: r.source,
             hidden: r.hidden,
+            playtimeMinutes: r.playtimeMinutes ?? null,
+            lastPlayedAt: r.lastPlayedAt ?? null,
           });
         }
       }
 
       // Apply cursor and limit to the deduplicated list.
-      const allGames = [...gameMap.values()];
+      // For alphabetical sort, re-sort by title after grouping.
+      const allGames = input.sort === "alphabetical"
+        ? [...gameMap.values()].sort((a, b) => a.title.localeCompare(b.title))
+        : [...gameMap.values()];
       let startIdx = 0;
       if (input.cursor) {
         const cursorIdx = allGames.findIndex((g) => g.id === input.cursor);

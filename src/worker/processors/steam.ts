@@ -1,5 +1,5 @@
 import type { Job } from "bullmq";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { db } from "@/server/db";
 import { user, games, gameOwnerships } from "@/server/db/schema";
@@ -31,6 +31,7 @@ type SteamOwnedGame = {
   appid: number;
   name?: string;
   playtime_forever?: number;
+  rtime_last_played?: number; // Unix timestamp (seconds); 0 = never played
 };
 
 type SteamGetOwnedGamesResponse = {
@@ -214,17 +215,39 @@ async function upsertBatch(userId: string, steamGames: SteamOwnedGame[]): Promis
     }
   }
 
-  // Upsert ownership records (pc platform, steam source)
+  // Upsert ownership records (pc platform, steam source).
+  // onConflictDoUpdate refreshes playtimeMinutes and lastPlayedAt on re-sync
+  // so existing rows gain accurate data as the user plays more.
   const ownershipRows = steamGames
     .map((g) => {
       const gameId = existingByAppId.get(String(g.appid));
       if (!gameId) return null;
-      return { userId, gameId, platform: "pc" as const, source: "steam" as const };
+      const lastPlayedAt =
+        g.rtime_last_played && g.rtime_last_played > 0
+          ? new Date(g.rtime_last_played * 1000)
+          : null;
+      return {
+        userId,
+        gameId,
+        platform: "pc" as const,
+        source: "steam" as const,
+        playtimeMinutes: g.playtime_forever ?? null,
+        lastPlayedAt,
+      };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
 
   if (ownershipRows.length > 0) {
-    await db.insert(gameOwnerships).values(ownershipRows).onConflictDoNothing();
+    await db
+      .insert(gameOwnerships)
+      .values(ownershipRows)
+      .onConflictDoUpdate({
+        target: [gameOwnerships.userId, gameOwnerships.gameId, gameOwnerships.platform],
+        set: {
+          playtimeMinutes: sql`excluded.playtime_minutes`,
+          lastPlayedAt: sql`excluded.last_played_at`,
+        },
+      });
   }
 
   return ownershipRows.length;
