@@ -14,7 +14,28 @@ const LIMIT = 20;
  * so the GIF picker degrades gracefully (button hidden).
  *
  * Requires an authenticated session.
+ *
+ * URL validation: Giphy CDN URLs follow the pattern
+ *   https://media{N}.giphy.com/media/<id>/<filename>.gif
+ * Both the route handler and the tRPC mutation validators use the same
+ * GIPHY_URL_RE regex to keep the two sites consistent.
  */
+
+// Exported so the tRPC feed router can import it instead of duplicating the pattern.
+export const GIPHY_URL_RE = /^https:\/\/media\d*\.giphy\.com\/media\/[^/]+\/[^/]+\.gif$/;
+
+type GiphyImage = { url: string; width: string; height: string } | undefined;
+
+type GiphyItem = {
+  id: string;
+  title: string;
+  images?: {
+    original?: GiphyImage;
+    fixed_width?: GiphyImage;
+    fixed_width_small?: GiphyImage;
+  };
+};
+
 export async function GET(req: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) {
@@ -41,32 +62,35 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Giphy API error" }, { status: 502 });
   }
 
-  const json = await res.json() as {
-    data?: Array<{
-      id: string;
-      title: string;
-      images?: {
-        original?: { url: string; width: string; height: string };
-        fixed_width_small?: { url: string; width: string; height: string };
+  // Runtime guard: treat the response as unknown and validate field by field.
+  const body = await res.json() as { data?: unknown };
+  const items: GiphyItem[] = Array.isArray(body.data)
+    ? (body.data as GiphyItem[])
+    : [];
+
+  const results = items
+    .map((r) => {
+      const orig = r.images?.original;
+      // Prefer fixed_width_small for preview; fall back to fixed_width (never original — too large).
+      const preview = r.images?.fixed_width_small ?? r.images?.fixed_width;
+      return {
+        id: r.id ?? "",
+        title: r.title ?? "",
+        url: orig?.url ?? "",
+        previewUrl: preview?.url ?? "",
+        width: parseInt(orig?.width ?? "0", 10),
+        height: parseInt(orig?.height ?? "0", 10),
       };
-    }>;
-  };
-
-  const isGiphyUrl = (u: string) => {
-    try {
-      const host = new URL(u).hostname;
-      return host === "media.giphy.com" || host.match(/^media\d+\.giphy\.com$/) !== null;
-    } catch { return false; }
-  };
-
-  const results = (Array.isArray(json.data) ? json.data : []).map((r) => ({
-    id: r.id,
-    title: r.title,
-    url: r.images?.original?.url ?? "",
-    previewUrl: r.images?.fixed_width_small?.url ?? r.images?.original?.url ?? "",
-    width: parseInt(r.images?.original?.width ?? "0", 10),
-    height: parseInt(r.images?.original?.height ?? "0", 10),
-  })).filter((r) => r.url && isGiphyUrl(r.url) && isGiphyUrl(r.previewUrl) && r.width > 0 && r.height > 0);
+    })
+    .filter(
+      (r) =>
+        r.url &&
+        r.previewUrl &&
+        GIPHY_URL_RE.test(r.url) &&
+        GIPHY_URL_RE.test(r.previewUrl) &&
+        r.width > 0 &&
+        r.height > 0
+    );
 
   return NextResponse.json({ results });
 }
