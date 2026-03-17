@@ -1,6 +1,7 @@
 /**
  * Campfire service worker — handles Web Push API notifications.
  * Registered by the client-side push subscription logic.
+ * v1
  */
 
 self.addEventListener("push", (event) => {
@@ -31,15 +32,21 @@ self.addEventListener("notificationclick", (event) => {
     clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((windowClients) => {
-        // If a window is already open, focus it and navigate
+        // Prefer a window already on the target URL — focus without navigating
+        for (const client of windowClients) {
+          if (new URL(client.url).pathname === new URL(url, self.location.origin).pathname && "focus" in client) {
+            return client.focus();
+          }
+        }
+        // No matching window — focus any open window and navigate it
         for (const client of windowClients) {
           if ("focus" in client) {
-            void client.focus();
-            if ("navigate" in client) void client.navigate(url);
+            client.focus();
+            if ("navigate" in client) client.navigate(url);
             return;
           }
         }
-        // Otherwise open a new window
+        // No window open at all — open a new one
         if (clients.openWindow) return clients.openWindow(url);
       })
   );

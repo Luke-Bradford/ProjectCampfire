@@ -97,29 +97,22 @@ export const notificationsRouter = createTRPCRouter({
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Push notifications are not configured on this server." });
       }
 
-      // Upsert: if endpoint already exists for this user, update keys.
-      const existing = await db.query.pushSubscriptions.findFirst({
-        where: and(
-          eq(pushSubscriptions.userId, ctx.user.id),
-          eq(pushSubscriptions.endpoint, input.endpoint)
-        ),
-        columns: { id: true },
-      });
-
-      if (existing) {
-        await db
-          .update(pushSubscriptions)
-          .set({ p256dh: input.p256dh, auth: input.auth })
-          .where(eq(pushSubscriptions.id, existing.id));
-      } else {
-        await db.insert(pushSubscriptions).values({
+      // Upsert using onConflictDoUpdate — avoids the SELECT+INSERT race that
+      // arises when two concurrent calls for the same (userId, endpoint) both
+      // see no existing row and then both attempt INSERT.
+      await db
+        .insert(pushSubscriptions)
+        .values({
           id: createId(),
           userId: ctx.user.id,
           endpoint: input.endpoint,
           p256dh: input.p256dh,
           auth: input.auth,
+        })
+        .onConflictDoUpdate({
+          target: [pushSubscriptions.userId, pushSubscriptions.endpoint],
+          set: { p256dh: input.p256dh, auth: input.auth },
         });
-      }
     }),
 
   /**

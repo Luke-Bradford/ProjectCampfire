@@ -310,13 +310,17 @@ function PushOptIn() {
 
   const [status, setStatus] = useState<"idle" | "requesting" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  // swSupported is resolved after mount to avoid SSR/hydration mismatch
+  const [swSupported, setSwSupported] = useState(false);
+  useEffect(() => {
+    setSwSupported("serviceWorker" in navigator);
+  }, []);
 
   const vapidKey = vapidData?.key ?? null;
   const isSubscribed = subData?.subscribed ?? false;
 
-  // Push not available: VAPID not configured or browser lacks support
-  if (!vapidKey) return null;
-  if (typeof window !== "undefined" && !("serviceWorker" in navigator)) return null;
+  // Push not available: VAPID not configured or browser lacks service worker support
+  if (!vapidKey || !swSupported) return null;
 
   async function handleEnable() {
     if (!vapidKey) return;
@@ -338,10 +342,13 @@ function PushOptIn() {
         applicationServerKey: raw,
       });
       const json = pushSub.toJSON();
+      if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
+        throw new Error("Browser returned an incomplete push subscription. Try again.");
+      }
       await subscribe.mutateAsync({
-        endpoint: json.endpoint!,
-        p256dh: json.keys!.p256dh,
-        auth: json.keys!.auth,
+        endpoint: json.endpoint,
+        p256dh: json.keys.p256dh,
+        auth: json.keys.auth,
       });
       setStatus("idle");
     } catch (err) {
