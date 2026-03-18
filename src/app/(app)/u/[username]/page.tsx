@@ -45,9 +45,9 @@ export default async function UserProfilePage({
     isPrivate
       ? Promise.resolve(null)
       : trpc.games.publicGamingStats({ userId: profile.id }).catch(() => null),
-    isPrivate
-      ? Promise.resolve({ currentGameId: null, currentGameName: null })
-      : trpc.user.nowPlaying({ userId: profile.id }).catch(() => ({ currentGameId: null, currentGameName: null })),
+    // Always fetch — nowPlaying enforces its own authz (friend/shared-group).
+    // Skipping on isPrivate would prevent the owner from seeing their own status.
+    trpc.user.nowPlaying({ userId: profile.id }).catch(() => ({ currentGameId: null, currentGameName: null })),
   ]);
 
   return (

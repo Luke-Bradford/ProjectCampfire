@@ -169,7 +169,7 @@ export const userRouter = createTRPCRouter({
   // Caller must be friends with target OR share a group (enforced below).
   // Returns nulls if: no Steam link, STEAM_API_KEY not set, or not in a game.
   nowPlaying: protectedProcedure
-    .input(z.object({ userId: z.string() }))
+    .input(z.object({ userId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       // Fetch the target user's steamId and check visibility
       const target = await db.query.user.findFirst({
