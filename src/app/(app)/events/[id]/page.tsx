@@ -900,8 +900,8 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
               />
             )}
           <div className="flex items-center gap-3">
-            {/* Box art thumbnail — only shown when there's no hero banner */}
-            {!event.game.steamAppId && event.game.coverUrl && (
+            {/* Box art thumbnail — always shown; hero banner sits above this row */}
+            {event.game.coverUrl && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={event.game.coverUrl} alt="" className="h-12 w-9 rounded object-cover shrink-0" />
             )}
