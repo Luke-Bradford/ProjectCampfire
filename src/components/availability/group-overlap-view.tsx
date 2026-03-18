@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GameSearchInput, type GamePickResult } from "@/components/games/game-search-input";
+import { cn } from "@/lib/utils";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -367,12 +368,14 @@ function DayColumn({
   overlapCounts,
   totalActiveMembers,
   onClickOverlap,
+  isToday = false,
 }: {
   dateStr: string;
   memberData: Array<{ userId: string; band: string; slots: MemberSlots; hidden: boolean }>;
   overlapCounts: Map<number, number>;
   totalActiveMembers: number;
   onClickOverlap: (startIdx: number, endIdx: number) => void;
+  isToday?: boolean;
 }) {
   // Green threshold = all active members, minimum 2.
   // With 1 active member: green never fires (solo "everyone free" isn't useful).
@@ -389,7 +392,10 @@ function DayColumn({
   const yellowRanges = mergeSlots(yellowOnly);
 
   return (
-    <div className="relative flex-1 min-w-0 border-l" style={{ height: SLOTS_PER_DAY * SLOT_HEIGHT_PX }}>
+    <div
+      className={cn("relative flex-1 min-w-0 border-l", isToday && "bg-primary/[0.03]")}
+      style={{ height: SLOTS_PER_DAY * SLOT_HEIGHT_PX }}
+    >
       {/* Hour lines — 24 lines for hours 0–23, plus a closing bottom border */}
       {Array.from({ length: 24 }, (_, h) => (
         <div
@@ -506,6 +512,13 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
     Array.from({ length: 7 }, (_, i) => format(addDays(weekStart, i), "yyyy-MM-dd")),
     [weekStart]
   );
+
+  // Updated every minute so the highlight corrects itself if the tab is left open past midnight
+  const [todayStr, setTodayStr] = useState(() => format(new Date(), "yyyy-MM-dd"));
+  useEffect(() => {
+    const id = setInterval(() => setTodayStr(format(new Date(), "yyyy-MM-dd")), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const from = weekDates[0]!;
   const to = weekDates[6]!;
@@ -681,12 +694,19 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
           {/* Sticky day headers */}
           <div className="sticky top-0 z-20 flex border-b bg-muted/30">
             <div className="w-10 shrink-0" />
-            {weekDates.map((d) => (
-              <div key={d} className="flex-1 min-w-0 border-l px-1 py-1.5 text-center">
-                <p className="text-xs font-medium">{format(parseISO(d), "EEE")}</p>
-                <p className="text-xs text-muted-foreground">{format(parseISO(d), "d")}</p>
-              </div>
-            ))}
+            {weekDates.map((d) => {
+              const isToday = d === todayStr;
+              return (
+                <div key={d} className="flex-1 min-w-0 border-l px-1 py-1.5 text-center">
+                  <p className={cn("text-xs font-medium", isToday ? "text-primary" : "text-muted-foreground")}>
+                    {format(parseISO(d), "EEE")}
+                  </p>
+                  <p className={cn("text-xs", isToday ? "text-primary font-semibold" : "text-muted-foreground")}>
+                    {format(parseISO(d), "d")}
+                  </p>
+                </div>
+              );
+            })}
           </div>
 
           {/* Time grid */}
@@ -705,6 +725,7 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
                 overlapCounts={overlapCountsByDate[dateStr] ?? new Map()}
                 totalActiveMembers={overlapMembers.length}
                 onClickOverlap={(start, end) => handleClickOverlap(dateStr, start, end)}
+                isToday={dateStr === todayStr}
               />
             ))}
           </div>
