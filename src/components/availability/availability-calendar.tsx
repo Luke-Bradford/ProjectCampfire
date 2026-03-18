@@ -13,6 +13,14 @@ import type { TimeSlot } from "@/server/db/schema/availability";
 
 type OverrideType = "available" | "busy";
 
+function currentScrollTime(): string {
+  const now = new Date();
+  const h = now.getHours();
+  // Offset 1 hour back so "now" isn't flush with the top of the viewport
+  const scrollHour = Math.max(0, h - 1);
+  return `${String(scrollHour).padStart(2, "0")}:00:00`;
+}
+
 export function AvailabilityCalendar() {
   const [dateRange, setDateRange] = useState(() => ({
     from: format(startOfMonth(new Date()), "yyyy-MM-dd"),
@@ -116,7 +124,7 @@ export function AvailabilityCalendar() {
           firstDay={1}
           slotMinTime="00:00:00"
           slotMaxTime="24:00:00"
-          scrollTime="19:00:00"
+          scrollTime={currentScrollTime()}
           slotDuration="00:30:00"
           allDaySlot={false}
           selectable={true}
