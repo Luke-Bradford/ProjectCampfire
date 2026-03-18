@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { TRPCError } from "@trpc/server";
-import { Gamepad2 } from "lucide-react";
+import { Gamepad2, Pencil } from "lucide-react";
 import { trpc } from "@/trpc/server";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AddFriendButton } from "./add-friend-button";
@@ -50,6 +51,8 @@ export default async function UserProfilePage({
     trpc.user.nowPlaying({ userId: profile.id }).catch(() => ({ currentGameId: null, currentGameName: null })),
   ]);
 
+  const isOwnProfile = me?.id === profile.id;
+
   return (
     <div className="mx-auto max-w-lg space-y-6">
       <div className="flex items-center gap-5">
@@ -76,9 +79,17 @@ export default async function UserProfilePage({
 
       {!isPrivate && (
         <>
-          {profile.bio && (
+          {profile.bio ? (
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">{profile.bio}</p>
-          )}
+          ) : isOwnProfile ? (
+            <Link
+              href="/settings/profile"
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors group"
+            >
+              <Pencil size={13} className="shrink-0" />
+              <span className="group-hover:underline">Add a bio</span>
+            </Link>
+          ) : null}
 
           {/* Game library */}
           {profileGames.total > 0 && (
@@ -116,7 +127,7 @@ export default async function UserProfilePage({
 
           {gamingStats && <GamingActivityCard stats={gamingStats} />}
           <ProfileGroups userId={profile.id} />
-          {me && <ProfilePosts userId={profile.id} currentUserId={me.id} />}
+          {me && <ProfilePosts userId={profile.id} currentUserId={me.id} isOwnProfile={isOwnProfile} />}
           <AddFriendButton targetId={profile.id} />
         </>
       )}
