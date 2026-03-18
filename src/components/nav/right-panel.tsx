@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { CalendarDays } from "lucide-react";
 import { api } from "@/trpc/react";
 import { UpcomingEventsPanel } from "@/components/feed/upcoming-events-panel";
+import { OnlineFriendsWidget } from "@/components/nav/online-friends-widget";
 
 // Pages where the right panel adds no contextual value.
 const HIDDEN_ON = ["/settings", "/notifications", "/people"];
@@ -15,17 +16,25 @@ export function RightPanel() {
 
   // Single query — result passed as props to UpcomingEventsPanel to avoid
   // duplicate fetches and ensure both components share the same data snapshot.
-  const { data: upcoming, isLoading } = api.events.upcoming.useQuery(
+  const { data: upcoming, isLoading: eventsLoading } = api.events.upcoming.useQuery(
     { limit: 5 },
     { enabled: !hidden }
   );
 
+  // Online friends — polled every 60 s to keep presence reasonably fresh
+  // without hammering the server.
+  const { data: onlineFriends, isLoading: friendsLoading } = api.friends.onlineFriends.useQuery(
+    undefined,
+    { enabled: !hidden, refetchInterval: 60_000 }
+  );
+
   // Always render the aside so its w-60 width is always reserved — prevents the
-  // centre column from shifting when events load in or when navigating between
-  // pages where the panel is hidden.
+  // centre column from shifting when data loads or when navigating between pages
+  // where the panel is hidden.
   return (
-    <aside className="hidden xl:block w-60 shrink-0 sticky top-0 h-screen overflow-y-auto py-4 px-3">
-      {!hidden && !isLoading && upcoming && (
+    <aside className="hidden xl:block w-60 shrink-0 sticky top-0 h-screen overflow-y-auto py-4 px-3 space-y-3">
+      {/* ── Upcoming events ─────────────────────────────────────────────── */}
+      {!hidden && !eventsLoading && upcoming && (
         upcoming.length > 0 ? (
           <UpcomingEventsPanel upcoming={upcoming} />
         ) : (
@@ -45,6 +54,11 @@ export function RightPanel() {
             </Link>
           </div>
         )
+      )}
+
+      {/* ── Online friends ───────────────────────────────────────────────── */}
+      {!hidden && !friendsLoading && onlineFriends && (
+        <OnlineFriendsWidget friends={onlineFriends} />
       )}
     </aside>
   );
