@@ -174,6 +174,35 @@ export const friendsRouter = createTRPCRouter({
     return { friends, incoming, outgoing };
   }),
 
+  // Friends who are currently online or busy — for the right-panel widget.
+  // Returns at most 20; sorted online-first then by name.
+  onlineFriends: protectedProcedure.query(async ({ ctx }) => {
+    const rows = await db.query.friendships.findMany({
+      where: and(
+        or(
+          eq(friendships.requesterId, ctx.user.id),
+          eq(friendships.addresseeId, ctx.user.id)
+        ),
+        eq(friendships.status, "accepted")
+      ),
+      with: {
+        requester: { columns: { id: true, name: true, username: true, image: true, status: true, currentGameName: true } },
+        addressee: { columns: { id: true, name: true, username: true, image: true, status: true, currentGameName: true } },
+      },
+    });
+
+    return rows
+      .map((r) => (r.requesterId === ctx.user.id ? r.addressee : r.requester))
+      .filter((f) => f.status === "online" || f.status === "busy")
+      .sort((a, b) => {
+        // online before busy, then alphabetical
+        if (a.status === "online" && b.status !== "online") return -1;
+        if (b.status === "online" && a.status !== "online") return 1;
+        return a.name.localeCompare(b.name);
+      })
+      .slice(0, 20);
+  }),
+
   // Remove a friend (CAMP-027)
   remove: protectedProcedure
     .input(z.object({ friendId: z.string() }))
