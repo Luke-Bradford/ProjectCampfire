@@ -65,7 +65,7 @@ export function UpcomingEventsPanel({ upcoming }: { upcoming: UpcomingEvent[] })
                     <>
                       <span className="text-xs text-muted-foreground">·</span>
                       <span className="text-xs text-muted-foreground">
-                        {dateLabel ?? "TBD"}
+                        {dateLabel || "TBD"}
                       </span>
                     </>
                   )}
