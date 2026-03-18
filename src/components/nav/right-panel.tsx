@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { CalendarDays } from "lucide-react";
 import { api } from "@/trpc/react";
 import { UpcomingEventsPanel } from "@/components/feed/upcoming-events-panel";
 
@@ -23,8 +25,26 @@ export function RightPanel() {
   // pages where the panel is hidden.
   return (
     <aside className="hidden xl:block w-60 shrink-0 sticky top-0 h-screen overflow-y-auto py-4 px-3">
-      {!hidden && !isLoading && upcoming && upcoming.length > 0 && (
-        <UpcomingEventsPanel upcoming={upcoming} />
+      {!hidden && !isLoading && upcoming && (
+        upcoming.length > 0 ? (
+          <UpcomingEventsPanel upcoming={upcoming} />
+        ) : (
+          <div className="rounded-xl border bg-card p-4">
+            <h2 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <CalendarDays size={14} className="text-muted-foreground" />
+              Upcoming events
+            </h2>
+            <p className="text-xs text-muted-foreground mb-3">
+              No upcoming events yet.
+            </p>
+            <Link
+              href="/events"
+              className="text-xs text-primary hover:underline"
+            >
+              Browse or create an event →
+            </Link>
+          </div>
+        )
       )}
     </aside>
   );
