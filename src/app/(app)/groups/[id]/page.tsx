@@ -28,6 +28,7 @@ import { MoreHorizontal } from "lucide-react";
 import { StatusDot } from "@/components/ui/status-dot";
 import { GroupOverlapView } from "@/components/availability/group-overlap-view";
 import { RecurringTemplatesSection } from "@/components/groups/recurring-templates-section";
+import { GROUP_COLOR_KEYS, GROUP_COLOR_BG, GROUP_COLOR_HEX, resolveGroupColor, type GroupColorKey } from "@/lib/group-colors";
 
 function initials(name: string) {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -64,6 +65,7 @@ type GroupData = {
   id: string;
   name: string;
   description: string | null;
+  color: string | null;
   discordInviteUrl: string | null;
   archivedAt: Date | null;
 };
@@ -80,6 +82,7 @@ function GroupSettings({
   const [name, setName] = useState<string | null>(null);
   const [description, setDescription] = useState<string | null>(null);
   const [discordUrl, setDiscordUrl] = useState<string | null>(null);
+  const [color, setColor] = useState<GroupColorKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
 
@@ -88,6 +91,7 @@ function GroupSettings({
       setName(null);
       setDescription(null);
       setDiscordUrl(null);
+      setColor(null);
       setError(null);
       onSaved();
     },
@@ -100,11 +104,13 @@ function GroupSettings({
   const currentName = name ?? group.name;
   const currentDescription = description ?? (group.description ?? "");
   const currentDiscordUrl = discordUrl ?? (group.discordInviteUrl ?? "");
+  const currentColor = color ?? resolveGroupColor(group.color, group.name);
 
-  const dirtyFields: Partial<{ name: string; description: string; discordInviteUrl: string }> = {};
+  const dirtyFields: Partial<{ name: string; description: string; color: GroupColorKey | null; discordInviteUrl: string }> = {};
   if (currentName !== group.name) dirtyFields.name = currentName.trim();
   if (currentDescription !== (group.description ?? "")) dirtyFields.description = currentDescription;
   if (currentDiscordUrl !== (group.discordInviteUrl ?? "")) dirtyFields.discordInviteUrl = currentDiscordUrl;
+  if (color !== null && color !== group.color) dirtyFields.color = color;
 
   const isDirty = Object.keys(dirtyFields).length > 0;
   const isArchived = !!group.archivedAt;
@@ -130,6 +136,23 @@ function GroupSettings({
             maxLength={500}
             placeholder="Optional"
           />
+        </div>
+        <div className="space-y-1">
+          <label className="text-sm font-medium">Group colour</label>
+          <div className="flex gap-2 flex-wrap">
+            {GROUP_COLOR_KEYS.map((key) => (
+              <button
+                key={key}
+                type="button"
+                title={key.charAt(0).toUpperCase() + key.slice(1)}
+                onClick={() => setColor(key)}
+                className={`h-7 w-7 rounded-full border-2 transition-transform hover:scale-110 ${
+                  currentColor === key ? "border-foreground scale-110" : "border-transparent"
+                }`}
+                style={{ backgroundColor: GROUP_COLOR_HEX[key] }}
+              />
+            ))}
+          </div>
         </div>
         <div className="space-y-1">
           <label className="text-sm font-medium">Discord invite URL</label>
@@ -243,8 +266,12 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const isArchived = !!group.archivedAt;
   const ownerUserId = group.memberships.find((x) => x.role === "owner")?.userId;
 
+  const groupColorKey = resolveGroupColor(group.color, group.name);
+
   return (
     <div className="space-y-8">
+      {/* Colour strip at top of page — matches the group list card */}
+      <div className={`-mx-4 sm:-mx-6 -mt-4 sm:-mt-6 h-1.5 w-[calc(100%+2rem)] sm:w-[calc(100%+3rem)] ${GROUP_COLOR_BG[groupColorKey]}`} />
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
@@ -286,6 +313,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             id: group.id,
             name: group.name,
             description: group.description,
+            color: group.color ?? null,
             discordInviteUrl: group.discordInviteUrl,
             archivedAt: group.archivedAt ?? null,
           }}

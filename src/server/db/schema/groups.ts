@@ -24,6 +24,7 @@ export const groups = pgTable("groups", {
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
   avatarUrl: text("avatar_url"),
+  color: text("color"),
   visibility: groupVisibilityEnum("visibility").notNull().default("standard"),
   discordInviteUrl: text("discord_invite_url"),
   inviteToken: varchar("invite_token", { length: 64 }).unique(),

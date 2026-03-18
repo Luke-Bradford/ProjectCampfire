@@ -1,0 +1,226 @@
+<h2>Proposed UX Improvement Tickets</h2>
+<p class="subtitle">Iterative improvements across 5 areas — click any you'd like to discuss or change</p>
+
+<style>
+  .ticket-area {
+    margin-bottom: 32px;
+  }
+  .area-title {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .ticket {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .ticket:hover {
+    background: rgba(255,255,255,0.07);
+    border-color: rgba(255,255,255,0.15);
+  }
+  .ticket.selected {
+    background: rgba(99,102,241,0.12);
+    border-color: rgba(99,102,241,0.4);
+  }
+  .ticket-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .ticket-id {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.35);
+    white-space: nowrap;
+    margin-top: 2px;
+    font-family: monospace;
+  }
+  .ticket-title {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.9);
+    flex: 1;
+  }
+  .ticket-desc {
+    font-size: 0.82rem;
+    color: rgba(255,255,255,0.55);
+    margin-top: 5px;
+    margin-left: 58px;
+    line-height: 1.6;
+  }
+  .ticket-tags {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    margin-left: 58px;
+  }
+  .tag {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-weight: 500;
+  }
+  .tag-quick { background: rgba(34,197,94,0.15); color: #22c55e; }
+  .tag-medium { background: rgba(245,158,11,0.15); color: #f59e0b; }
+  .tag-large { background: rgba(239,68,68,0.15); color: #ef4444; }
+  .tag-design { background: rgba(139,92,246,0.15); color: #a78bfa; }
+  .tag-data { background: rgba(14,165,233,0.15); color: #38bdf8; }
+</style>
+
+<div class="ticket-area">
+  <div class="area-title">Availability</div>
+
+  <div class="ticket" data-choice="avail-1" onclick="toggleSelect(this)">
+    <div class="ticket-header">
+      <span class="ticket-id">UX-01</span>
+      <span class="ticket-title">Scroll availability grid to current time on load</span>
+    </div>
+    <div class="ticket-desc">When the weekly schedule page loads, auto-scroll to the current hour so the user lands where their day is rather than at midnight. Add a "now" indicator line. Works for both early risers and night owls.</div>
+    <div class="ticket-tags">
+      <span class="tag tag-quick">Quick win</span>
+      <span class="tag tag-design">UI</span>
+    </div>
+  </div>
+
+  <div class="ticket" data-choice="avail-2" onclick="toggleSelect(this)">
+    <div class="ticket-header">
+      <span class="ticket-id">UX-02</span>
+      <span class="ticket-title">Add "Jump to now" button on availability calendar</span>
+    </div>
+    <div class="ticket-desc">A small sticky button that scrolls the grid back to the current time whenever the user has scrolled away. Common pattern in calendar apps.</div>
+    <div class="ticket-tags">
+      <span class="tag tag-quick">Quick win</span>
+      <span class="tag tag-design">UI</span>
+    </div>
+  </div>
+
+</div>
+
+<div class="ticket-area">
+  <div class="area-title">Right Panel / "What's Happening" Sidebar</div>
+
+  <div class="ticket" data-choice="panel-1" onclick="toggleSelect(this)">
+    <div class="ticket-header">
+      <span class="ticket-id">UX-03</span>
+      <span class="ticket-title">Expand right panel into a full "What's Happening" sidebar</span>
+    </div>
+    <div class="ticket-desc">Extend the existing right panel (desktop only) beyond upcoming events to include: active polls needing your vote, recently closed polls, and an online friends widget. Scrollable, grouped by section. Replaces the current bare events list.</div>
+    <div class="ticket-tags">
+      <span class="tag tag-medium">Medium</span>
+      <span class="tag tag-design">UI</span>
+    </div>
+  </div>
+
+  <div class="ticket" data-choice="panel-2" onclick="toggleSelect(this)">
+    <div class="ticket-header">
+      <span class="ticket-id">UX-04</span>
+      <span class="ticket-title">Online friends widget in right panel</span>
+    </div>
+    <div class="ticket-desc">Show friends who are online or recently active. Display their avatar, name, and current game if playing. Clicking navigates to their profile. This is the Discord-style "always know who's around" presence feel.</div>
+    <div class="ticket-tags">
+      <span class="tag tag-medium">Medium</span>
+      <span class="tag tag-design">UI</span>
+      <span class="tag tag-data">Data</span>
+    </div>
+  </div>
+
+</div>
+
+<div class="ticket-area">
+  <div class="area-title">Profile — Gamer Identity</div>
+
+  <div class="ticket" data-choice="profile-1" onclick="toggleSelect(this)">
+    <div class="ticket-header">
+      <span class="ticket-id">UX-05</span>
+      <span class="ticket-title">Redesign profile header as a gamer identity card</span>
+    </div>
+    <div class="ticket-desc">Replace the current plain header (avatar + name + bio) with a richer identity card: large avatar, display name, username, bio, Steam veteran date, stat row (games owned, friends, groups, total playtime), online/now-playing status. Should feel like a gaming card, not a settings form.</div>
+    <div class="ticket-tags">
+      <span class="tag tag-medium">Medium</span>
+      <span class="tag tag-design">UI</span>
+    </div>
+  </div>
+
+  <div class="ticket" data-choice="profile-2" onclick="toggleSelect(this)">
+    <div class="ticket-header">
+      <span class="ticket-id">UX-06</span>
+      <span class="ticket-title">Pinned favourite games on profile</span>
+    </div>
+    <div class="ticket-desc">Let users pin up to 4–6 favourite games to their profile. Shows cover art, total playtime, and achievement count. Visible to friends. Backed by a simple favourites flag on the game ownership record.</div>
+    <div class="ticket-tags">
+      <span class="tag tag-medium">Medium</span>
+      <span class="tag tag-data">Data</span>
+      <span class="tag tag-design">UI</span>
+    </div>
+  </div>
+
+  <div class="ticket" data-choice="profile-3" onclick="toggleSelect(this)">
+    <div class="ticket-header">
+      <span class="ticket-id">UX-07</span>
+      <span class="ticket-title">Surface Steam achievements on profile and game detail</span>
+    </div>
+    <div class="ticket-desc">Fetch and cache achievement counts per game from the Steam API. Show total achievements unlocked on the profile stat row and per-game on the game detail page. No individual achievement listing needed — just counts as a prestige signal.</div>
+    <div class="ticket-tags">
+      <span class="tag tag-large">Larger</span>
+      <span class="tag tag-data">Data</span>
+    </div>
+  </div>
+
+</div>
+
+<div class="ticket-area">
+  <div class="area-title">Groups — Hub Feel</div>
+
+  <div class="ticket" data-choice="group-1" onclick="toggleSelect(this)">
+    <div class="ticket-header">
+      <span class="ticket-id">UX-08</span>
+      <span class="ticket-title">Add group command centre section at top of group page</span>
+    </div>
+    <div class="ticket-desc">Lead the group page with a compact hub: next session (date, RSVP status, who's going), active poll needing your vote, and a members-online strip. Move settings and invite link lower. The group should feel active from the moment you land on it.</div>
+    <div class="ticket-tags">
+      <span class="tag tag-medium">Medium</span>
+      <span class="tag tag-design">UI</span>
+    </div>
+  </div>
+
+  <div class="ticket" data-choice="group-2" onclick="toggleSelect(this)">
+    <div class="ticket-header">
+      <span class="ticket-id">UX-09</span>
+      <span class="ticket-title">Show online members with current game in group member list</span>
+    </div>
+    <div class="ticket-desc">The data is already there (current game name per member) but the member list doesn't make it visually prominent. Surface it: green dot + "Playing X" inline. Makes the group feel alive even when there's no active event.</div>
+    <div class="ticket-tags">
+      <span class="tag tag-quick">Quick win</span>
+      <span class="tag tag-design">UI</span>
+    </div>
+  </div>
+
+</div>
+
+<div class="ticket-area">
+  <div class="area-title">Navigation</div>
+
+  <div class="ticket" data-choice="nav-1" onclick="toggleSelect(this)">
+    <div class="ticket-header">
+      <span class="ticket-id">UX-10</span>
+      <span class="ticket-title">Add Friends to mobile bottom nav</span>
+    </div>
+    <div class="ticket-desc">Friends is currently only accessible via the mobile sidebar menu. Given it's a primary social object, it should be one tap away. Swap or add it to the bottom nav bar — possibly replacing the least-used current item.</div>
+    <div class="ticket-tags">
+      <span class="tag tag-quick">Quick win</span>
+      <span class="tag tag-design">UI</span>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:24px;">Click any tickets you want to discuss or adjust — then let me know in the terminal.</p>

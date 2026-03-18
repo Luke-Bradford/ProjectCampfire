@@ -6,6 +6,7 @@ import { format, isToday, isTomorrow } from "date-fns";
 import { Calendar, Vote } from "lucide-react";
 import { api } from "@/trpc/react";
 import { rsvpStatusEnum } from "@/server/db/schema";
+import { GROUP_COLOR_BG, resolveGroupColor } from "@/lib/group-colors";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -21,22 +22,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-// Deterministic colour strip per group — consistent per name, never random per render.
-const STRIP_COLORS = [
-  "bg-blue-500",
-  "bg-violet-500",
-  "bg-emerald-500",
-  "bg-orange-500",
-  "bg-pink-500",
-  "bg-cyan-500",
-  "bg-amber-500",
-  "bg-rose-500",
-];
-
-function groupColor(name: string): string {
-  const hash = [...name].reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  return STRIP_COLORS[hash % STRIP_COLORS.length]!;
-}
 
 // Offered Going/Skip — the subset of rsvpStatusEnum used on the groups list.
 // Derived at module level from the actual enum so a future rename is a compile error.
@@ -198,8 +183,8 @@ export default function GroupsPage() {
               key={g.id}
               className="rounded-xl border bg-card shadow-sm overflow-hidden"
             >
-              {/* Deterministic colour strip */}
-              <div className={`h-1.5 w-full ${groupColor(g.name)}`} />
+              {/* Group colour strip — persisted colour or deterministic fallback */}
+              <div className={`h-1.5 w-full ${GROUP_COLOR_BG[resolveGroupColor(g.color, g.name)]}`} />
 
               <div className="p-4 space-y-3">
                 {/* Name + role badge */}
