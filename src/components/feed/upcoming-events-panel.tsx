@@ -61,7 +61,7 @@ export function UpcomingEventsPanel({ upcoming }: { upcoming: UpcomingEvent[] })
                   <span className="text-xs text-muted-foreground truncate">
                     {event.group.name}
                   </span>
-                  {(dateLabel ?? (event.status === "open" || event.status === "draft")) && !isImminent && (
+                  {(dateLabel || event.status === "open" || event.status === "draft") && !isImminent && (
                     <>
                       <span className="text-xs text-muted-foreground">·</span>
                       <span className="text-xs text-muted-foreground">

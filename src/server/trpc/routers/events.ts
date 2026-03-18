@@ -421,7 +421,8 @@ export const eventsRouter = createTRPCRouter({
             // Confirmed with a future start time
             and(eq(events.status, "confirmed"), gte(events.confirmedStartsAt, now)),
             // Open or draft — no confirmed time yet, still relevant
-            or(eq(events.status, "open"), eq(events.status, "draft"))
+            eq(events.status, "open"),
+            eq(events.status, "draft")
           )
         ),
         with: {
