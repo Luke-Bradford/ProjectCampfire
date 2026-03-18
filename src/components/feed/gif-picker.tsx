@@ -48,7 +48,8 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
       const parentRect = parent.getBoundingClientRect();
       const spaceAbove = parentRect.top;
       const spaceBelow = window.innerHeight - parentRect.bottom;
-      setOpenUpward(spaceAbove >= 320 || spaceAbove >= spaceBelow);
+      const next = spaceAbove >= 320 || spaceAbove >= spaceBelow;
+      setOpenUpward((prev) => (prev === next ? prev : next));
     }
     recompute();
     window.addEventListener("scroll", recompute, { capture: true, passive: true });
