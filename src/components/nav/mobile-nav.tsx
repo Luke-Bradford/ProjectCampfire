@@ -36,14 +36,13 @@ function IconEvents() {
   );
 }
 
-function IconGames() {
+function IconFriends() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <line x1="6" y1="12" x2="10" y2="12" />
-      <line x1="8" y1="10" x2="8" y2="14" />
-      <circle cx="15" cy="13" r="1" />
-      <circle cx="17" cy="11" r="1" />
-      <path d="M12 17c-2.8 0-5-2.2-5-5V7c0-1.1.9-2 2-2h6c1.1 0 2 .9 2 2v5c0 2.8-2.2 5-5 5z" />
+      <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3z" />
+      <path d="M8 11c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3z" />
+      <path d="M8 13c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+      <path d="M16 13c-.29 0-.62.02-.97.05C16.19 13.72 18 14.77 18 17v2h6v-2c0-2.66-5.33-4-8-4z" />
     </svg>
   );
 }
@@ -61,7 +60,7 @@ const PRIMARY_LINKS = [
   { href: "/feed", label: "Feed", Icon: IconFeed },
   { href: "/groups", label: "Groups", Icon: IconGroups },
   { href: "/events", label: "Events", Icon: IconEvents },
-  { href: "/games", label: "Games", Icon: IconGames },
+  { href: "/friends", label: "Friends", Icon: IconFriends },
   { href: "/notifications", label: "Alerts", Icon: IconNotifications },
 ];
 
