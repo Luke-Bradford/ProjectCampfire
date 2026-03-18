@@ -192,11 +192,27 @@ export function WeeklyGrid({ events, onChange }: Props) {
   useEffect(() => { eventsRef.current    = events;    }, [events]);
   useEffect(() => { editStateRef.current = editState; }, [editState]);
 
-  // Scroll to 8pm on first mount only
+  // Scroll to current time on first mount (offset 1 hour up so "now" isn't at the very top)
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    requestAnimationFrame(() => { el.scrollTop = minToPx(20 * 60); });
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const scrollTarget = Math.max(0, minToPx(nowMin) - minToPx(60));
+    requestAnimationFrame(() => { el.scrollTop = scrollTarget; });
+  }, []);
+
+  // "Now" indicator — current time in minutes, updated every minute
+  const [nowMin, setNowMin] = useState(() => {
+    const d = new Date();
+    return d.getHours() * 60 + d.getMinutes();
+  });
+  useEffect(() => {
+    const id = setInterval(() => {
+      const d = new Date();
+      setNowMin(d.getHours() * 60 + d.getMinutes());
+    }, 60_000);
+    return () => clearInterval(id);
   }, []);
 
   // ── Yellow zone height ───────────────────────────────────────────────────────
@@ -578,6 +594,19 @@ export function WeeklyGrid({ events, onChange }: Props) {
                       style={{ top: i * SLOT_H, height: SLOT_H }}
                     />
                   ))}
+
+                  {/* ── Now indicator ───────────────────────────────────────── */}
+                  {nowMin > 0 && nowMin < 1440 && (
+                    <div
+                      className="absolute inset-x-0 z-10 pointer-events-none"
+                      style={{ top: minToPx(nowMin) }}
+                    >
+                      <div className="h-px bg-red-500/70" />
+                      {col === 0 && (
+                        <div className="absolute -top-2 -left-1 h-2 w-2 rounded-full bg-red-500" />
+                      )}
+                    </div>
+                  )}
 
                   {/* ── Yellow zone ─────────────────────────────────────────── */}
                   {extraSlots > 0 && (
