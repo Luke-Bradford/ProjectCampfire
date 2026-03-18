@@ -8,7 +8,8 @@ import type { RouterOutputs } from "@/trpc/react";
 
 type OnlineFriend = RouterOutputs["friends"]["onlineFriends"][number];
 
-function initials(name: string) {
+function initials(name: string | null) {
+  if (!name) return "?";
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 }
 
@@ -24,12 +25,9 @@ export function OnlineFriendsWidget({ friends }: { friends: OnlineFriend[] }) {
         <p className="text-xs text-muted-foreground">No friends online right now.</p>
       ) : (
         <ul className="flex flex-col gap-2.5">
-          {friends.map((f) => (
-            <li key={f.id}>
-              <Link
-                href={f.username ? `/u/${f.username}` : "#"}
-                className="flex items-center gap-2.5 group"
-              >
+          {friends.map((f) => {
+            const inner = (
+              <>
                 <div className="relative shrink-0">
                   <Avatar className="h-7 w-7">
                     <AvatarImage src={f.image ?? undefined} />
@@ -42,7 +40,7 @@ export function OnlineFriendsWidget({ friends }: { friends: OnlineFriend[] }) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-medium leading-tight truncate group-hover:text-primary transition-colors">
-                    {f.name}
+                    {f.name ?? f.username ?? "Unknown"}
                   </p>
                   {f.currentGameName ? (
                     <p className="text-[10px] text-primary/80 leading-tight truncate">
@@ -54,9 +52,20 @@ export function OnlineFriendsWidget({ friends }: { friends: OnlineFriend[] }) {
                     </p>
                   )}
                 </div>
-              </Link>
-            </li>
-          ))}
+              </>
+            );
+            return (
+              <li key={f.id}>
+                {f.username ? (
+                  <Link href={`/u/${f.username}`} className="flex items-center gap-2.5 group">
+                    {inner}
+                  </Link>
+                ) : (
+                  <div className="flex items-center gap-2.5">{inner}</div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
 

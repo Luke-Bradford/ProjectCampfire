@@ -198,7 +198,7 @@ export const friendsRouter = createTRPCRouter({
         // online before busy, then alphabetical
         if (a.status === "online" && b.status !== "online") return -1;
         if (b.status === "online" && a.status !== "online") return 1;
-        return a.name.localeCompare(b.name);
+        return (a.name ?? "").localeCompare(b.name ?? "");
       })
       .slice(0, 20);
   }),
