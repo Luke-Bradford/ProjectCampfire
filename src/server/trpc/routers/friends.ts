@@ -191,6 +191,8 @@ export const friendsRouter = createTRPCRouter({
       },
     });
 
+    // TODO: push the status filter into the DB query (join on user.status IN ('online','busy'))
+    // once friend lists grow large enough to make the in-process filter a concern.
     return rows
       .map((r) => (r.requesterId === ctx.user.id ? r.addressee : r.requester))
       .filter((f) => f.status === "online" || f.status === "busy")
