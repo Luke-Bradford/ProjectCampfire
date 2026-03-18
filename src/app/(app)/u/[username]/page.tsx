@@ -35,8 +35,9 @@ export default async function UserProfilePage({
 
   const isPrivate = profile.profileVisibility === "private";
 
-  // Fetch game library, current user, and gaming stats in parallel (games/stats only for open profiles)
-  const [me, profileGames, gamingStats] = await Promise.all([
+  // Fetch game library, current user, gaming stats, and now-playing in parallel.
+  // nowPlaying triggers the on-demand Steam refresh (Redis-cached, 60 s TTL).
+  const [me, profileGames, gamingStats, nowPlaying] = await Promise.all([
     trpc.user.me().catch(() => null),
     isPrivate
       ? Promise.resolve({ items: [], total: 0 })
@@ -44,6 +45,9 @@ export default async function UserProfilePage({
     isPrivate
       ? Promise.resolve(null)
       : trpc.games.publicGamingStats({ userId: profile.id }).catch(() => null),
+    isPrivate
+      ? Promise.resolve({ currentGameId: null, currentGameName: null })
+      : trpc.user.nowPlaying({ userId: profile.id }).catch(() => ({ currentGameId: null, currentGameName: null })),
   ]);
 
   return (
@@ -61,8 +65,8 @@ export default async function UserProfilePage({
           {!isPrivate && (
             <StatusDot status={"status" in profile ? profile.status : null} showLabel />
           )}
-          {"currentGameName" in profile && profile.currentGameName && (
-            <p className="text-sm text-primary">🎮 {profile.currentGameName}</p>
+          {nowPlaying.currentGameName && (
+            <p className="text-sm text-primary">🎮 {nowPlaying.currentGameName}</p>
           )}
           {isPrivate && (
             <p className="text-sm text-muted-foreground">This profile is private.</p>
