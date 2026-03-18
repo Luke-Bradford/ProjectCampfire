@@ -34,6 +34,7 @@ import {
 } from "react";
 import type { WeeklySlots, TimeSlot } from "@/server/db/schema/availability";
 import { SlotEditPopover, type SlotEditState } from "./slot-edit-popover";
+import { cn } from "@/lib/utils";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -215,8 +216,10 @@ export function WeeklyGrid({ events, onChange }: Props) {
     return () => clearInterval(id);
   }, []);
 
-  // Today's column index (0=Mon…6=Sun) — used to highlight the current day
-  const todayCol = DOW_TO_COL[new Date().getDay()];
+  // Today's column index (0=Mon…6=Sun). Derived from nowMin so it refreshes
+  // on the same 60s interval — handles the tab-open-past-midnight edge case.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const todayCol = useMemo(() => DOW_TO_COL[new Date().getDay()], [nowMin]);
 
   // ── Yellow zone height ───────────────────────────────────────────────────────
 
@@ -492,12 +495,10 @@ export function WeeklyGrid({ events, onChange }: Props) {
           {COL_LABELS.map((name, i) => (
             <div
               key={name}
-              className={[
+              className={cn(
                 "py-2 text-center text-xs font-semibold border-l",
-                i === todayCol
-                  ? "text-primary"
-                  : "text-muted-foreground",
-              ].join(" ")}
+                i === todayCol ? "text-primary" : "text-muted-foreground",
+              )}
             >
               {name}
             </div>
@@ -590,7 +591,7 @@ export function WeeklyGrid({ events, onChange }: Props) {
               return (
                 <div
                   key={col}
-                  className={["relative border-l", col === todayCol ? "bg-primary/[0.03]" : ""].join(" ")}
+                  className={cn("relative border-l", col === todayCol && "bg-primary/[0.03]")}
                   style={{ height: totalGridH, overflow: "hidden" }}
                 >
                   {/* ── Slot rows (green zone) ──────────────────────────────── */}
