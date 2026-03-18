@@ -18,6 +18,7 @@
 import { config } from "dotenv";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { eq } from "drizzle-orm";
 import { hashPassword } from "better-auth/crypto";
 import * as schema from "./schema";
 import type { WeeklySlots } from "./schema";
@@ -428,6 +429,16 @@ async function main() {
         });
       },
     );
+  }
+
+  // Ensure existing seed users have their avatar image set (handles re-seeds on old data)
+  for (const u of SEED_USERS) {
+    if (!u.image) continue;
+    const existing = await db.query.user.findFirst({ where: (t, { eq: eqOp }) => eqOp(t.id, u.id), columns: { id: true, image: true } });
+    if (existing && !existing.image) {
+      await db.update(user).set({ image: u.image, updatedAt: new Date() }).where(eq(user.id, u.id));
+      log(`update image for ${u.username}`);
+    }
   }
 
   // ── Friendships: all seed users + ghasst as one big friend group ───────────

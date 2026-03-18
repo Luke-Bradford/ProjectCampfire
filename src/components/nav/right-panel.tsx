@@ -14,7 +14,7 @@ export function RightPanel() {
   // Single query — result passed as props to UpcomingEventsPanel to avoid
   // duplicate fetches and ensure both components share the same data snapshot.
   const { data: upcoming, isLoading } = api.events.upcoming.useQuery(
-    { limit: 3 },
+    { limit: 5 },
     { enabled: !hidden }
   );
 
