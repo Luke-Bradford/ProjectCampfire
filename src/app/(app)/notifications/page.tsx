@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -166,7 +166,7 @@ export default function NotificationsPage() {
                     className="text-xs text-muted-foreground"
                     title={new Date(n.createdAt).toLocaleString()}
                   >
-                    {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
+                    {format(new Date(n.createdAt), "d MMM yyyy, HH:mm")}
                   </p>
                 </div>
                 {isPendingRequest && data.requesterId ? (
