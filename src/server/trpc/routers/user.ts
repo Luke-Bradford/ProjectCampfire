@@ -7,6 +7,7 @@ import { db } from "@/server/db";
 import { user, session, account, friendships, groupMemberships, gameOwnerships, userStatusEnum, type NotificationPrefs } from "@/server/db/schema";
 import { enqueueScrubAccount } from "@/server/jobs/account-jobs";
 import { enqueueSteamLibrarySync } from "@/server/jobs/steam-jobs";
+import { getNowPlaying } from "@/server/lib/steam-now-playing";
 import { env } from "@/env";
 import { logger } from "@/lib/logger";
 
@@ -162,6 +163,56 @@ export const userRouter = createTRPCRouter({
     }
     await enqueueSteamLibrarySync(ctx.user.id);
   }),
+
+  // On-demand Steam "Now Playing" lookup for a given user.
+  // Hits Redis cache (60 s TTL) before calling Steam; writes DB on change.
+  // Caller must be friends with target OR share a group (enforced below).
+  // Returns nulls if: no Steam link, STEAM_API_KEY not set, or not in a game.
+  nowPlaying: protectedProcedure
+    .input(z.object({ userId: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      // Fetch the target user's steamId and check visibility
+      const target = await db.query.user.findFirst({
+        where: eq(user.id, input.userId),
+        columns: { steamId: true, steamLibraryPublic: true },
+      });
+
+      if (!target?.steamId || !target.steamLibraryPublic) {
+        return { currentGameId: null, currentGameName: null };
+      }
+
+      // Authorisation: caller must be friends with target OR share a group
+      if (input.userId !== ctx.user.id) {
+        const [friendship, sharedGroup] = await Promise.all([
+          db.query.friendships.findFirst({
+            where: and(
+              eq(friendships.status, "accepted"),
+              // Either direction
+              // prettier-ignore
+              sql`(${friendships.requesterId} = ${ctx.user.id} AND ${friendships.addresseeId} = ${input.userId})
+                OR (${friendships.requesterId} = ${input.userId} AND ${friendships.addresseeId} = ${ctx.user.id})`,
+            ),
+            columns: { requesterId: true },
+          }),
+          db.query.groupMemberships.findFirst({
+            where: and(
+              eq(groupMemberships.userId, ctx.user.id),
+              // Sub-select: target is also a member of one of caller's groups
+              sql`${groupMemberships.groupId} IN (
+                SELECT group_id FROM group_memberships WHERE user_id = ${input.userId}
+              )`,
+            ),
+            columns: { groupId: true },
+          }),
+        ]);
+
+        if (!friendship && !sharedGroup) {
+          return { currentGameId: null, currentGameName: null };
+        }
+      }
+
+      return getNowPlaying(input.userId, target.steamId);
+    }),
 
   // Toggle whether the user's Steam library is visible to group members.
   steamSetLibraryPublic: protectedProcedure
