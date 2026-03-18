@@ -299,7 +299,16 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       <section className="space-y-3">
         <h2 className="font-semibold">Members ({group.memberships.length})</h2>
         <ul className="space-y-2">
-          {group.memberships.map((m) => (
+          {[...group.memberships]
+            .sort((a, b) => {
+              const rank = (m: typeof a) => {
+                if (m.user.currentGameName) return 0;
+                if (m.user.status === "online" || m.user.status === "busy") return 1;
+                return 2;
+              };
+              return rank(a) - rank(b);
+            })
+            .map((m) => (
             <li key={m.userId} className="flex items-center justify-between rounded-lg border p-3">
               <div className="flex items-center gap-3">
                 <div className="relative shrink-0">
@@ -307,16 +316,15 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                     <AvatarImage src={m.user.image ?? undefined} />
                     <AvatarFallback>{initials(m.user.name)}</AvatarFallback>
                   </Avatar>
-                  <StatusDot status={m.user.status} className="absolute -bottom-0.5 -right-0.5" />
+                  <StatusDot status={m.user.status} className="absolute -bottom-0.5 -right-0.5 h-3 w-3" />
                 </div>
                 <div>
                   <p className="text-sm font-medium">{m.user.name}</p>
-                  {m.user.username && (
+                  {m.user.currentGameName ? (
+                    <p className="text-xs font-medium text-green-500 mt-0.5">Playing {m.user.currentGameName}</p>
+                  ) : m.user.username ? (
                     <p className="text-xs text-muted-foreground">@{m.user.username}</p>
-                  )}
-                  {m.user.currentGameName && (
-                    <p className="text-xs text-primary mt-0.5">🎮 {m.user.currentGameName}</p>
-                  )}
+                  ) : null}
                 </div>
               </div>
               <div className="flex items-center gap-2">
