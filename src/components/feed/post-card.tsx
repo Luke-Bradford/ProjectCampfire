@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { GROUP_COLOR_TEXT, resolveGroupColor } from "@/lib/group-colors";
 import { GifPicker, type GifResult } from "./gif-picker";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -57,7 +58,7 @@ type PostData = {
   imageUrls: (string | null)[] | null;
   embedMetadata: EmbedMetadata | null;
   author: PostAuthor;
-  group: { id: string; name: string } | null;
+  group: { id: string; name: string; color: string | null } | null;
   event: { id: string; title: string } | null;
   reactions: { id: string; userId: string; type: string }[];
   comments: CommentData[];
@@ -446,7 +447,12 @@ export function PostCard({
               </Link>
               {post.editedAt && <span className="ml-1">(edited)</span>}
               {post.group && (
-                <> · <span className="font-medium">{post.group.name}</span></>
+                <>
+                  {" · "}
+                  <span className={cn("font-medium", GROUP_COLOR_TEXT[resolveGroupColor(post.group.color, post.group.name)])}>
+                    {post.group.name}
+                  </span>
+                </>
               )}
               {post.event && (
                 <> · <span className="font-medium">{post.event.title}</span></>

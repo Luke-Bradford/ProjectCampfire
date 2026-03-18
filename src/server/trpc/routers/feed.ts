@@ -192,7 +192,7 @@ export const feedRouter = createTRPCRouter({
           where: inArray(posts.id, topIds),
           with: {
             author: { columns: { id: true, name: true, username: true, image: true } },
-            group: { columns: { id: true, name: true } },
+            group: { columns: { id: true, name: true, color: true } },
             event: { columns: { id: true, title: true } },
             reactions: { columns: { id: true, userId: true, type: true } },
             comments: {
@@ -231,7 +231,7 @@ export const feedRouter = createTRPCRouter({
         limit: input.limit + 1,
         with: {
           author: { columns: { id: true, name: true, username: true, image: true } },
-          group: { columns: { id: true, name: true } },
+          group: { columns: { id: true, name: true, color: true } },
           event: { columns: { id: true, title: true } },
           reactions: { columns: { id: true, userId: true, type: true } },
           comments: {
@@ -527,7 +527,7 @@ export const feedRouter = createTRPCRouter({
         orderBy: [desc(posts.pinnedAt), desc(posts.createdAt)],
         with: {
           author: { columns: { id: true, name: true, username: true, image: true } },
-          group: { columns: { id: true, name: true } },
+          group: { columns: { id: true, name: true, color: true } },
           event: { columns: { id: true, title: true } },
           reactions: { columns: { id: true, userId: true, type: true } },
           comments: {
@@ -748,7 +748,7 @@ export const feedRouter = createTRPCRouter({
         limit: input.limit + 1,
         with: {
           author: { columns: { id: true, name: true, username: true, image: true } },
-          group: { columns: { id: true, name: true } },
+          group: { columns: { id: true, name: true, color: true } },
           event: { columns: { id: true, title: true } },
           reactions: { columns: { id: true, userId: true, type: true } },
           comments: {
@@ -781,7 +781,7 @@ export const feedRouter = createTRPCRouter({
         where: and(eq(posts.id, input.id), isNull(posts.deletedAt)),
         with: {
           author: { columns: { id: true, name: true, username: true, image: true } },
-          group: { columns: { id: true, name: true } },
+          group: { columns: { id: true, name: true, color: true } },
           event: { columns: { id: true, title: true } },
           reactions: { columns: { id: true, userId: true, type: true } },
           comments: {

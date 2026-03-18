@@ -177,6 +177,7 @@ export const groupsRouter = createTRPCRouter({
         id: z.string(),
         name: z.string().trim().min(1).max(100).optional(),
         description: z.string().max(500).optional(),
+        color: z.enum(["blue", "violet", "emerald", "orange", "pink", "cyan", "amber", "rose"]).nullable().optional(),
         discordInviteUrl,
       })
     )
@@ -197,7 +198,9 @@ export const groupsRouter = createTRPCRouter({
         .set({
           ...(fields.name !== undefined && { name: fields.name }),
           ...(fields.description !== undefined && { description: fields.description || null }),
+          ...(fields.color !== undefined && { color: fields.color }),
           ...(fields.discordInviteUrl !== undefined && { discordInviteUrl: fields.discordInviteUrl || null }),
+          updatedAt: new Date(),
         })
         .where(eq(groups.id, id));
     }),
