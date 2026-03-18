@@ -82,18 +82,21 @@ function GroupSettings({
   const [name, setName] = useState<string | null>(null);
   const [description, setDescription] = useState<string | null>(null);
   const [discordUrl, setDiscordUrl] = useState<string | null>(null);
-  const [color, setColor] = useState<GroupColorKey | null>(null);
+  // undefined = untouched, null = user chose "auto/reset", GroupColorKey = explicit pick
+  const [color, setColor] = useState<GroupColorKey | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
 
   const update = api.groups.update.useMutation({
     onSuccess: () => {
+      // Call onSaved first so the parent refetches group data before we clear
+      // local state — prevents a brief flash back to the old/fallback colour.
+      onSaved();
       setName(null);
       setDescription(null);
       setDiscordUrl(null);
-      setColor(null);
+      setColor(undefined);
       setError(null);
-      onSaved();
     },
     onError: (err) => setError(err.message),
   });
@@ -104,13 +107,16 @@ function GroupSettings({
   const currentName = name ?? group.name;
   const currentDescription = description ?? (group.description ?? "");
   const currentDiscordUrl = discordUrl ?? (group.discordInviteUrl ?? "");
-  const currentColor = color ?? resolveGroupColor(group.color, group.name);
+  // The colour to highlight in the picker: explicit selection > persisted > deterministic fallback
+  // null selection = "Auto" pill is highlighted; undefined = user hasn't touched the picker yet
+  const activeColorKey = color !== undefined ? color : (group.color as GroupColorKey | null | undefined);
 
   const dirtyFields: Partial<{ name: string; description: string; color: GroupColorKey | null; discordInviteUrl: string }> = {};
   if (currentName !== group.name) dirtyFields.name = currentName.trim();
   if (currentDescription !== (group.description ?? "")) dirtyFields.description = currentDescription;
   if (currentDiscordUrl !== (group.discordInviteUrl ?? "")) dirtyFields.discordInviteUrl = currentDiscordUrl;
-  if (color !== null && color !== group.color) dirtyFields.color = color;
+  // Include colour in dirty fields only when the user has interacted with the picker
+  if (color !== undefined && color !== group.color) dirtyFields.color = color ?? null;
 
   const isDirty = Object.keys(dirtyFields).length > 0;
   const isArchived = !!group.archivedAt;
@@ -139,7 +145,7 @@ function GroupSettings({
         </div>
         <div className="space-y-1">
           <label className="text-sm font-medium">Group colour</label>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
             {GROUP_COLOR_KEYS.map((key) => (
               <button
                 key={key}
@@ -147,11 +153,24 @@ function GroupSettings({
                 title={key.charAt(0).toUpperCase() + key.slice(1)}
                 onClick={() => setColor(key)}
                 className={`h-7 w-7 rounded-full border-2 transition-transform hover:scale-110 ${
-                  currentColor === key ? "border-foreground scale-110" : "border-transparent"
+                  activeColorKey === key ? "border-foreground scale-110" : "border-transparent"
                 }`}
                 style={{ backgroundColor: GROUP_COLOR_HEX[key] }}
               />
             ))}
+            {/* Reset to deterministic fallback */}
+            <button
+              type="button"
+              title="Auto (based on group name)"
+              onClick={() => setColor(null)}
+              className={`h-7 px-2 rounded-full border-2 text-[10px] font-medium transition-transform hover:scale-105 ${
+                activeColorKey === null || activeColorKey === undefined
+                  ? "border-foreground bg-muted"
+                  : "border-transparent bg-muted/60 text-muted-foreground"
+              }`}
+            >
+              Auto
+            </button>
           </div>
         </div>
         <div className="space-y-1">

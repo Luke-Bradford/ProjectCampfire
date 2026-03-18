@@ -43,17 +43,8 @@ export const GROUP_COLOR_SUBTLE: Record<GroupColorKey, string> = {
   rose:    "bg-rose-500/10 text-rose-700 dark:text-rose-300",
 };
 
-/** Small dot / indicator colour */
-export const GROUP_COLOR_DOT: Record<GroupColorKey, string> = {
-  blue:    "bg-blue-500",
-  violet:  "bg-violet-500",
-  emerald: "bg-emerald-500",
-  orange:  "bg-orange-500",
-  pink:    "bg-pink-500",
-  cyan:    "bg-cyan-500",
-  amber:   "bg-amber-500",
-  rose:    "bg-rose-500",
-};
+/** Small dot / indicator colour — same classes as GROUP_COLOR_BG */
+export const GROUP_COLOR_DOT = GROUP_COLOR_BG;
 
 /** Hex values for the swatch picker UI */
 export const GROUP_COLOR_HEX: Record<GroupColorKey, string> = {

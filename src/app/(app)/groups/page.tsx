@@ -21,8 +21,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-
-
 // Offered Going/Skip — the subset of rsvpStatusEnum used on the groups list.
 // Derived at module level from the actual enum so a future rename is a compile error.
 const RSVP_QUICK_OPTIONS = rsvpStatusEnum.enumValues.filter(
