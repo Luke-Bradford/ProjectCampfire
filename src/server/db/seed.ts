@@ -323,47 +323,47 @@ const SEED_GAMES = [
   },
 ];
 
-// Game ownerships: who owns what
-const SEED_OWNERSHIPS: { userId: string; gameId: string; playtimeMinutes: number }[] = [
+// Game ownerships: who owns what. lastPlayedDaysAgo is fixed per entry for determinism.
+const SEED_OWNERSHIPS: { userId: string; gameId: string; playtimeMinutes: number; lastPlayedDaysAgo: number }[] = [
   // Alice — RPG/co-op focus
-  { userId: "seed-user-alice", gameId: "seed-game-baldurs-gate", playtimeMinutes: 8400 },
-  { userId: "seed-user-alice", gameId: "seed-game-among-us", playtimeMinutes: 720 },
-  { userId: "seed-user-alice", gameId: "seed-game-deep-rock", playtimeMinutes: 3200 },
-  { userId: "seed-user-alice", gameId: "seed-game-minecraft", playtimeMinutes: 1800 },
+  { userId: "seed-user-alice", gameId: "seed-game-baldurs-gate", playtimeMinutes: 8400, lastPlayedDaysAgo: 7 },
+  { userId: "seed-user-alice", gameId: "seed-game-among-us", playtimeMinutes: 720, lastPlayedDaysAgo: 30 },
+  { userId: "seed-user-alice", gameId: "seed-game-deep-rock", playtimeMinutes: 3200, lastPlayedDaysAgo: 3 },
+  { userId: "seed-user-alice", gameId: "seed-game-minecraft", playtimeMinutes: 1800, lastPlayedDaysAgo: 14 },
   // Bob — FPS focus
-  { userId: "seed-user-bob", gameId: "seed-game-valorant", playtimeMinutes: 12000 },
-  { userId: "seed-user-bob", gameId: "seed-game-rocket-league", playtimeMinutes: 5400 },
-  { userId: "seed-user-bob", gameId: "seed-game-deep-rock", playtimeMinutes: 2100 },
-  { userId: "seed-user-bob", gameId: "seed-game-among-us", playtimeMinutes: 480 },
+  { userId: "seed-user-bob", gameId: "seed-game-valorant", playtimeMinutes: 12000, lastPlayedDaysAgo: 1 },
+  { userId: "seed-user-bob", gameId: "seed-game-rocket-league", playtimeMinutes: 5400, lastPlayedDaysAgo: 5 },
+  { userId: "seed-user-bob", gameId: "seed-game-deep-rock", playtimeMinutes: 2100, lastPlayedDaysAgo: 7 },
+  { userId: "seed-user-bob", gameId: "seed-game-among-us", playtimeMinutes: 480, lastPlayedDaysAgo: 60 },
   // Carol — variety
-  { userId: "seed-user-carol", gameId: "seed-game-among-us", playtimeMinutes: 1200 },
-  { userId: "seed-user-carol", gameId: "seed-game-minecraft", playtimeMinutes: 6000 },
-  { userId: "seed-user-carol", gameId: "seed-game-baldurs-gate", playtimeMinutes: 2400 },
+  { userId: "seed-user-carol", gameId: "seed-game-among-us", playtimeMinutes: 1200, lastPlayedDaysAgo: 6 },
+  { userId: "seed-user-carol", gameId: "seed-game-minecraft", playtimeMinutes: 6000, lastPlayedDaysAgo: 2 },
+  { userId: "seed-user-carol", gameId: "seed-game-baldurs-gate", playtimeMinutes: 2400, lastPlayedDaysAgo: 10 },
   // Dan — strategy/survival
-  { userId: "seed-user-dan", gameId: "seed-game-civ6", playtimeMinutes: 15000 },
-  { userId: "seed-user-dan", gameId: "seed-game-minecraft", playtimeMinutes: 4200 },
-  { userId: "seed-user-dan", gameId: "seed-game-deep-rock", playtimeMinutes: 1600 },
+  { userId: "seed-user-dan", gameId: "seed-game-civ6", playtimeMinutes: 15000, lastPlayedDaysAgo: 2 },
+  { userId: "seed-user-dan", gameId: "seed-game-minecraft", playtimeMinutes: 4200, lastPlayedDaysAgo: 8 },
+  { userId: "seed-user-dan", gameId: "seed-game-deep-rock", playtimeMinutes: 1600, lastPlayedDaysAgo: 12 },
   // Eve — horror
-  { userId: "seed-user-eve", gameId: "seed-game-phasmophobia", playtimeMinutes: 9600 },
-  { userId: "seed-user-eve", gameId: "seed-game-among-us", playtimeMinutes: 960 },
-  { userId: "seed-user-eve", gameId: "seed-game-deep-rock", playtimeMinutes: 800 },
+  { userId: "seed-user-eve", gameId: "seed-game-phasmophobia", playtimeMinutes: 9600, lastPlayedDaysAgo: 1 },
+  { userId: "seed-user-eve", gameId: "seed-game-among-us", playtimeMinutes: 960, lastPlayedDaysAgo: 6 },
+  { userId: "seed-user-eve", gameId: "seed-game-deep-rock", playtimeMinutes: 800, lastPlayedDaysAgo: 20 },
   // Jake — FPS grinder
-  { userId: "seed-user-jake", gameId: "seed-game-valorant", playtimeMinutes: 24000 },
-  { userId: "seed-user-jake", gameId: "seed-game-rocket-league", playtimeMinutes: 8000 },
-  { userId: "seed-user-jake", gameId: "seed-game-deep-rock", playtimeMinutes: 1200 },
+  { userId: "seed-user-jake", gameId: "seed-game-valorant", playtimeMinutes: 24000, lastPlayedDaysAgo: 0 },
+  { userId: "seed-user-jake", gameId: "seed-game-rocket-league", playtimeMinutes: 8000, lastPlayedDaysAgo: 3 },
+  { userId: "seed-user-jake", gameId: "seed-game-deep-rock", playtimeMinutes: 1200, lastPlayedDaysAgo: 14 },
   // Mia — survival/crafting
-  { userId: "seed-user-mia", gameId: "seed-game-minecraft", playtimeMinutes: 30000 },
-  { userId: "seed-user-mia", gameId: "seed-game-deep-rock", playtimeMinutes: 4800 },
-  { userId: "seed-user-mia", gameId: "seed-game-among-us", playtimeMinutes: 600 },
+  { userId: "seed-user-mia", gameId: "seed-game-minecraft", playtimeMinutes: 30000, lastPlayedDaysAgo: 0 },
+  { userId: "seed-user-mia", gameId: "seed-game-deep-rock", playtimeMinutes: 4800, lastPlayedDaysAgo: 4 },
+  { userId: "seed-user-mia", gameId: "seed-game-among-us", playtimeMinutes: 600, lastPlayedDaysAgo: 21 },
   // Sam — strategy
-  { userId: "seed-user-sam", gameId: "seed-game-civ6", playtimeMinutes: 20000 },
-  { userId: "seed-user-sam", gameId: "seed-game-baldurs-gate", playtimeMinutes: 3600 },
-  { userId: "seed-user-sam", gameId: "seed-game-deep-rock", playtimeMinutes: 900 },
+  { userId: "seed-user-sam", gameId: "seed-game-civ6", playtimeMinutes: 20000, lastPlayedDaysAgo: 1 },
+  { userId: "seed-user-sam", gameId: "seed-game-baldurs-gate", playtimeMinutes: 3600, lastPlayedDaysAgo: 9 },
+  { userId: "seed-user-sam", gameId: "seed-game-deep-rock", playtimeMinutes: 900, lastPlayedDaysAgo: 30 },
   // Ghasst — well-rounded
-  { userId: REAL_USER_ID, gameId: "seed-game-baldurs-gate", playtimeMinutes: 5200 },
-  { userId: REAL_USER_ID, gameId: "seed-game-deep-rock", playtimeMinutes: 3800 },
-  { userId: REAL_USER_ID, gameId: "seed-game-valorant", playtimeMinutes: 7200 },
-  { userId: REAL_USER_ID, gameId: "seed-game-phasmophobia", playtimeMinutes: 2400 },
+  { userId: REAL_USER_ID, gameId: "seed-game-baldurs-gate", playtimeMinutes: 5200, lastPlayedDaysAgo: 7 },
+  { userId: REAL_USER_ID, gameId: "seed-game-deep-rock", playtimeMinutes: 3800, lastPlayedDaysAgo: 2 },
+  { userId: REAL_USER_ID, gameId: "seed-game-valorant", playtimeMinutes: 7200, lastPlayedDaysAgo: 4 },
+  { userId: REAL_USER_ID, gameId: "seed-game-phasmophobia", playtimeMinutes: 2400, lastPlayedDaysAgo: 5 },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -516,7 +516,7 @@ async function main() {
         platform: "pc",
         source: "manual",
         playtimeMinutes: o.playtimeMinutes,
-        lastPlayedAt: daysAgo(Math.floor(Math.random() * 14)),
+        lastPlayedAt: daysAgo(o.lastPlayedDaysAgo),
       }).then(() => undefined),
     );
   }
