@@ -72,7 +72,7 @@ export function UpcomingEventsPanel({ upcoming }: { upcoming: UpcomingEvent[] })
                   {myRsvp && (
                     <>
                       <span className="text-xs text-muted-foreground">·</span>
-                      <span className={`text-xs font-medium ${myRsvp === "yes" ? "text-green-600 dark:text-green-400" : myRsvp === "no" ? "text-muted-foreground" : "text-yellow-600 dark:text-yellow-400"}`}>
+                      <span className={`text-xs font-medium ${myRsvp === "yes" ? "text-green-600 dark:text-green-400" : myRsvp === "no" ? "text-rose-500 dark:text-rose-400" : "text-yellow-600 dark:text-yellow-400"}`}>
                         {RSVP_LABELS[myRsvp]}
                       </span>
                     </>
