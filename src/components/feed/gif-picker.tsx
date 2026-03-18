@@ -39,18 +39,24 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
 
   // Decide whether to open above or below based on available viewport space.
   // The picker is ~320px tall (search + 256px grid + attribution).
+  // Re-evaluated on scroll and resize so the direction stays correct if the
+  // viewport shifts while the picker is open.
   useEffect(() => {
-    if (containerRef.current) {
-      // The picker hasn't fully laid out yet — use the parent element's position
-      // to determine available space above/below the trigger.
-      const parent = containerRef.current.parentElement;
-      if (parent) {
-        const parentRect = parent.getBoundingClientRect();
-        const spaceAbove = parentRect.top;
-        const spaceBelow = window.innerHeight - parentRect.bottom;
-        setOpenUpward(spaceAbove >= 320 || spaceAbove >= spaceBelow);
-      }
+    function recompute() {
+      const parent = containerRef.current?.parentElement;
+      if (!parent) return;
+      const parentRect = parent.getBoundingClientRect();
+      const spaceAbove = parentRect.top;
+      const spaceBelow = window.innerHeight - parentRect.bottom;
+      setOpenUpward(spaceAbove >= 320 || spaceAbove >= spaceBelow);
     }
+    recompute();
+    window.addEventListener("scroll", recompute, { capture: true, passive: true });
+    window.addEventListener("resize", recompute, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", recompute, { capture: true });
+      window.removeEventListener("resize", recompute);
+    };
   }, []);
 
   // Focus the search input when the picker opens
