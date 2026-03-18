@@ -16,7 +16,7 @@
  * improvement would convert slot positions to the viewing user's local timezone.
  */
 
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { format, addDays, parseISO, startOfWeek, endOfWeek } from "date-fns";
 import { api, type RouterOutputs } from "@/trpc/react";
@@ -540,6 +540,16 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
   // Propose dialog state
   const [proposal, setProposal] = useState<{ startsAt: string; endsAt: string } | null>(null);
 
+  // Scroll to current time on mount (offset 1 hour up so "now" isn't flush with top)
+  const gridScrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = gridScrollRef.current;
+    if (!el) return;
+    const now = new Date();
+    const nowPx = (now.getHours() * 60 + now.getMinutes()) / 60 * HOUR_HEIGHT_PX;
+    requestAnimationFrame(() => { el.scrollTop = Math.max(0, nowPx - HOUR_HEIGHT_PX); });
+  }, []);
+
   // Compute per-member slot sets — typed via RouterOutputs, no unsafe casts
   const memberSlotData = useMemo(() => {
     if (!memberAvailability) return [];
@@ -667,7 +677,7 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
       {/* Grid — header is sticky inside the scroll container so both share the
           same width context and scrollbar gutter. */}
       <div className="rounded-lg border overflow-hidden">
-        <div className="overflow-y-auto" style={{ maxHeight: "520px" }}>
+        <div ref={gridScrollRef} className="overflow-y-auto" style={{ maxHeight: "520px" }}>
           {/* Sticky day headers */}
           <div className="sticky top-0 z-20 flex border-b bg-muted/30">
             <div className="w-10 shrink-0" />
