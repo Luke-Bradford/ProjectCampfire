@@ -18,6 +18,7 @@ import {
 import { PostComposer } from "@/components/feed/post-composer";
 import { PostCard } from "@/components/feed/post-card";
 import { GameSearchInput } from "@/components/games/game-search-input";
+import { GameHeroBanner } from "@/components/games/game-hero-banner";
 import { format } from "date-fns";
 
 // ── Types from router inference ───────────────────────────────────────────────
@@ -889,7 +890,17 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
       <div className="space-y-2">
         <p className="text-sm font-medium">Game</p>
         {event.game ? (
+          <>
+            {/* Hero banner — shown when a Steam app ID is available */}
+            {event.game.steamAppId && (
+              <GameHeroBanner
+                steamAppId={event.game.steamAppId}
+                title={event.game.title}
+                coverUrl={event.game.coverUrl ?? null}
+              />
+            )}
           <div className="flex items-center gap-3">
+            {/* Box art thumbnail — always shown; hero banner sits above this row */}
             {event.game.coverUrl && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={event.game.coverUrl} alt="" className="h-12 w-9 rounded object-cover shrink-0" />
@@ -922,6 +933,7 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
               </div>
             )}
           </div>
+          </>
         ) : (
           <div className="flex items-center gap-3">
             <div className="flex-1">

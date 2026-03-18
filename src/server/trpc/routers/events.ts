@@ -125,7 +125,7 @@ export const eventsRouter = createTRPCRouter({
         where: eq(events.id, input.id),
         with: {
           createdBy: { columns: { id: true, name: true, username: true, image: true } },
-          game: { columns: { id: true, title: true, coverUrl: true } },
+          game: { columns: { id: true, title: true, coverUrl: true, steamAppId: true } },
           recurringTemplate: { columns: { id: true, title: true } },
           rsvps: {
             with: { user: { columns: { id: true, name: true, username: true, image: true } } },
