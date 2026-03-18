@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { createId } from "@paralleldrive/cuid2";
 import type { EmbedMetadata } from "@/server/db/schema/posts";
-import { formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import { api } from "@/trpc/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -185,11 +185,8 @@ function CommentRow({
           </>
         )}
         <div className="flex items-center gap-2 px-1">
-          <span
-            className="text-xs text-muted-foreground"
-            title={new Date(comment.createdAt).toLocaleString()}
-          >
-            {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
+          <span className="text-xs text-muted-foreground">
+            {format(new Date(comment.createdAt), "d MMM yyyy, HH:mm")}
           </span>
           {comment.editedAt && (
             <span className="text-xs text-muted-foreground">(edited)</span>
@@ -445,7 +442,7 @@ export function PostCard({
             <p className="text-xs text-muted-foreground">
               {post.author.username ? `@${post.author.username} · ` : ""}
               <Link href={`/feed/${post.id}`} className="hover:underline">
-                {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}
+                {format(new Date(post.createdAt), "d MMM yyyy, HH:mm")}
               </Link>
               {post.editedAt && <span className="ml-1">(edited)</span>}
               {post.group && (

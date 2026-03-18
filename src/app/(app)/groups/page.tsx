@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { formatDistanceToNow, format, isToday, isTomorrow } from "date-fns";
+import { format, isToday, isTomorrow } from "date-fns";
 import { Calendar, Vote } from "lucide-react";
 import { api } from "@/trpc/react";
 import { rsvpStatusEnum } from "@/server/db/schema";
@@ -250,7 +250,7 @@ export default function GroupsPage() {
                     </Link>
                   ) : g.lastActivityAt ? (
                     <p className="text-xs text-muted-foreground">
-                      Last active {formatDistanceToNow(new Date(g.lastActivityAt), { addSuffix: true })}
+                      Last active {format(new Date(g.lastActivityAt), "d MMM yyyy, HH:mm")}
                     </p>
                   ) : null}
                 </div>
