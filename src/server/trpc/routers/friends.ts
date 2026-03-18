@@ -634,7 +634,7 @@ export const friendsRouter = createTRPCRouter({
   // Public stat counts for a profile page — friend count, visible group count, game count.
   // Only returns data for open profiles. Returns zeros for private profiles.
   publicProfileStats: publicProcedure
-    .input(z.object({ userId: z.string() }))
+    .input(z.object({ userId: z.string().min(1).max(255) }))
     .query(async ({ input }) => {
       const profile = await db.query.user.findFirst({
         where: eq(user.id, input.userId),
@@ -648,7 +648,7 @@ export const friendsRouter = createTRPCRouter({
           friendships,
           and(
             eq(friendships.status, "accepted"),
-            sql`(${friendships.requesterId} = ${input.userId} OR ${friendships.addresseeId} = ${input.userId})`
+            or(eq(friendships.requesterId, input.userId), eq(friendships.addresseeId, input.userId))
           )
         ),
         db.$count(

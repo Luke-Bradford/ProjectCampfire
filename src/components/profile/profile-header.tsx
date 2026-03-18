@@ -4,13 +4,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { StatusDot } from "@/components/ui/status-dot";
 
 function initials(name: string) {
-  return name
+  const result = name
     .split(" ")
     .filter(Boolean)
     .map((w) => w[0]!)
     .join("")
     .toUpperCase()
     .slice(0, 2);
+  return result || "?";
 }
 
 type ProfileHeaderProps = {
@@ -18,7 +19,7 @@ type ProfileHeaderProps = {
   username: string | null;
   image: string | null;
   bio: string | null;
-  status: string | null;
+  status: "online" | "busy" | "offline" | null;
   currentGameName: string | null;
   isOwnProfile: boolean;
   isPrivate: boolean;
@@ -74,7 +75,7 @@ export function ProfileHeader({
         {/* Status + now playing */}
         {!isPrivate && (
           <div className="mt-2 flex flex-col gap-1">
-            <StatusDot status={status as "online" | "busy" | "offline" | null} showLabel />
+            <StatusDot status={status} showLabel />
             {currentGameName && (
               <p className="text-sm text-primary font-medium flex items-center gap-1.5">
                 <Gamepad2 size={13} className="shrink-0" />
