@@ -198,7 +198,7 @@ export function WeeklyGrid({ events, onChange }: Props) {
     if (!el) return;
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
-    const scrollTarget = Math.max(0, minToPx(nowMin) - minToPx(60));
+    const scrollTarget = Math.max(0, minToPx(nowMin - 60));
     requestAnimationFrame(() => { el.scrollTop = scrollTarget; });
   }, []);
 
@@ -596,7 +596,7 @@ export function WeeklyGrid({ events, onChange }: Props) {
                   ))}
 
                   {/* ── Now indicator ───────────────────────────────────────── */}
-                  {nowMin > 0 && nowMin < 1440 && (
+                  {nowMin >= 0 && nowMin < 1440 && (
                     <div
                       className="absolute inset-x-0 z-10 pointer-events-none"
                       style={{ top: minToPx(nowMin) }}
