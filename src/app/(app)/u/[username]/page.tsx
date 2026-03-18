@@ -1,23 +1,12 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { TRPCError } from "@trpc/server";
-import { Gamepad2, Pencil } from "lucide-react";
+import { Gamepad2 } from "lucide-react";
 import { trpc } from "@/trpc/server";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AddFriendButton } from "./add-friend-button";
-import { StatusDot } from "@/components/ui/status-dot";
 import { ProfileGroups } from "./profile-groups";
 import { ProfilePosts } from "./profile-posts";
 import { GamingActivityCard } from "@/components/profile/gaming-activity-card";
-
-function initials(name: string) {
-  return name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-}
+import { ProfileHeader } from "@/components/profile/profile-header";
 
 export default async function UserProfilePage({
   params,
@@ -36,9 +25,8 @@ export default async function UserProfilePage({
 
   const isPrivate = profile.profileVisibility === "private";
 
-  // Fetch game library, current user, gaming stats, and now-playing in parallel.
-  // nowPlaying triggers the on-demand Steam refresh (Redis-cached, 60 s TTL).
-  const [me, profileGames, gamingStats, nowPlaying] = await Promise.all([
+  // Fetch game library, current user, gaming stats, now-playing, and profile stat counts in parallel.
+  const [me, profileGames, gamingStats, nowPlaying, publicStats] = await Promise.all([
     trpc.user.me().catch(() => null),
     isPrivate
       ? Promise.resolve({ items: [], total: 0 })
@@ -47,50 +35,30 @@ export default async function UserProfilePage({
       ? Promise.resolve(null)
       : trpc.games.publicGamingStats({ userId: profile.id }).catch(() => null),
     // Always fetch — nowPlaying enforces its own authz (friend/shared-group).
-    // Skipping on isPrivate would prevent the owner from seeing their own status.
     trpc.user.nowPlaying({ userId: profile.id }).catch(() => ({ currentGameId: null, currentGameName: null })),
+    isPrivate
+      ? Promise.resolve(null)
+      : trpc.friends.publicProfileStats({ userId: profile.id }).catch(() => null),
   ]);
 
   const isOwnProfile = me?.id === profile.id;
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
-      <div className="flex items-center gap-5">
-        <Avatar className="h-20 w-20">
-          {profile.image && <AvatarImage src={profile.image} />}
-          <AvatarFallback className="text-xl">{initials(profile.name)}</AvatarFallback>
-        </Avatar>
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold">{profile.name}</h1>
-          {profile.username && (
-            <p className="text-muted-foreground">@{profile.username}</p>
-          )}
-          {!isPrivate && (
-            <StatusDot status={"status" in profile ? profile.status : null} showLabel />
-          )}
-          {nowPlaying.currentGameName && (
-            <p className="text-sm text-primary">🎮 {nowPlaying.currentGameName}</p>
-          )}
-          {isPrivate && (
-            <p className="text-sm text-muted-foreground">This profile is private.</p>
-          )}
-        </div>
-      </div>
+      <ProfileHeader
+        name={profile.name}
+        username={profile.username ?? null}
+        image={profile.image ?? null}
+        bio={"bio" in profile ? (profile.bio ?? null) : null}
+        status={"status" in profile ? (profile.status ?? null) : null}
+        currentGameName={nowPlaying.currentGameName}
+        isOwnProfile={isOwnProfile}
+        isPrivate={isPrivate}
+        stats={publicStats}
+      />
 
       {!isPrivate && (
         <>
-          {profile.bio ? (
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{profile.bio}</p>
-          ) : isOwnProfile ? (
-            <Link
-              href="/settings/profile"
-              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors group"
-            >
-              <Pencil size={13} className="shrink-0" />
-              <span className="group-hover:underline">Add a bio</span>
-            </Link>
-          ) : null}
-
           {/* Game library */}
           {profileGames.total > 0 && (
             <div className="space-y-3">

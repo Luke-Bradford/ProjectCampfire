@@ -630,4 +630,40 @@ export const friendsRouter = createTRPCRouter({
       )
       .limit(50);
   }),
+
+  // Public stat counts for a profile page — friend count, visible group count, game count.
+  // Only returns data for open profiles. Returns zeros for private profiles.
+  publicProfileStats: publicProcedure
+    .input(z.object({ userId: z.string() }))
+    .query(async ({ input }) => {
+      const profile = await db.query.user.findFirst({
+        where: eq(user.id, input.userId),
+        columns: { profileVisibility: true },
+      });
+      if (!profile || profile.profileVisibility !== "open") {
+        return { friendCount: 0, groupCount: 0, gameCount: 0 };
+      }
+      const [friendCount, groupCount, gameCount] = await Promise.all([
+        db.$count(
+          friendships,
+          and(
+            eq(friendships.status, "accepted"),
+            sql`(${friendships.requesterId} = ${input.userId} OR ${friendships.addresseeId} = ${input.userId})`
+          )
+        ),
+        db.$count(
+          groupMemberships,
+          and(
+            eq(groupMemberships.userId, input.userId),
+            // Only count standard (visible) groups
+            inArray(
+              groupMemberships.groupId,
+              db.select({ id: groups.id }).from(groups).where(eq(groups.visibility, "standard"))
+            )
+          )
+        ),
+        db.$count(gameOwnerships, and(eq(gameOwnerships.userId, input.userId), eq(gameOwnerships.hidden, false))),
+      ]);
+      return { friendCount, groupCount, gameCount };
+    }),
 });
