@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, gte, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -412,14 +412,17 @@ export const eventsRouter = createTRPCRouter({
       const groupIds = memberships.map((m) => m.groupId);
       const now = new Date();
 
-      // Only confirmed events with a start time are surfaced — open events without
-      // a confirmedStartsAt would be excluded by the gte check anyway (NULL fails
-      // the comparison), so we only match confirmed to keep the intent explicit.
+      // Show confirmed future events + open/draft events (TBD — no confirmed time yet).
+      // Confirmed events sort first (soonest first); open/draft events follow by creation date.
       return db.query.events.findMany({
         where: and(
           inArray(events.groupId, groupIds),
-          eq(events.status, "confirmed"),
-          gte(events.confirmedStartsAt, now)
+          or(
+            // Confirmed with a future start time
+            and(eq(events.status, "confirmed"), gte(events.confirmedStartsAt, now)),
+            // Open or draft — no confirmed time yet, still relevant
+            or(eq(events.status, "open"), eq(events.status, "draft"))
+          )
         ),
         with: {
           group: { columns: { id: true, name: true } },
@@ -428,7 +431,12 @@ export const eventsRouter = createTRPCRouter({
             columns: { status: true },
           },
         },
-        orderBy: (t, { asc }) => [asc(t.confirmedStartsAt)],
+        // Confirmed events (with a time) sort first; open/draft events after, by creation date
+        orderBy: (t, { asc, sql }) => [
+          sql`CASE WHEN ${t.status} = 'confirmed' AND ${t.confirmedStartsAt} IS NOT NULL THEN 0 ELSE 1 END`,
+          asc(t.confirmedStartsAt),
+          asc(t.createdAt),
+        ],
         limit: input.limit,
       });
     }),

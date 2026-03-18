@@ -61,10 +61,12 @@ export function UpcomingEventsPanel({ upcoming }: { upcoming: UpcomingEvent[] })
                   <span className="text-xs text-muted-foreground truncate">
                     {event.group.name}
                   </span>
-                  {dateLabel && !isImminent && (
+                  {(dateLabel ?? (event.status === "open" || event.status === "draft")) && !isImminent && (
                     <>
                       <span className="text-xs text-muted-foreground">·</span>
-                      <span className="text-xs text-muted-foreground">{dateLabel}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {dateLabel ?? "TBD"}
+                      </span>
                     </>
                   )}
                   {myRsvp && (
