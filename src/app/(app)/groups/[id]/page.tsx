@@ -107,9 +107,9 @@ function GroupSettings({
   const currentName = name ?? group.name;
   const currentDescription = description ?? (group.description ?? "");
   const currentDiscordUrl = discordUrl ?? (group.discordInviteUrl ?? "");
-  // The colour to highlight in the picker: explicit selection > persisted > deterministic fallback
-  // null selection = "Auto" pill is highlighted; undefined = user hasn't touched the picker yet
-  const activeColorKey = color !== undefined ? color : (group.color as GroupColorKey | null | undefined);
+  // The colour to highlight in the picker: explicit selection > persisted > null (Auto pill)
+  // null/undefined activeColorKey = "Auto" pill is highlighted
+  const activeColorKey = color !== undefined ? color : (group.color ? resolveGroupColor(group.color, group.name) : null);
 
   const dirtyFields: Partial<{ name: string; description: string; color: GroupColorKey | null; discordInviteUrl: string }> = {};
   if (currentName !== group.name) dirtyFields.name = currentName.trim();

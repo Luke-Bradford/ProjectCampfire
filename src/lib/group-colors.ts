@@ -46,6 +46,18 @@ export const GROUP_COLOR_SUBTLE: Record<GroupColorKey, string> = {
 /** Small dot / indicator colour — same classes as GROUP_COLOR_BG */
 export const GROUP_COLOR_DOT = GROUP_COLOR_BG;
 
+/** Text colour class for rendering the group name inline */
+export const GROUP_COLOR_TEXT: Record<GroupColorKey, string> = {
+  blue:    "text-blue-600 dark:text-blue-400",
+  violet:  "text-violet-600 dark:text-violet-400",
+  emerald: "text-emerald-600 dark:text-emerald-400",
+  orange:  "text-orange-600 dark:text-orange-400",
+  pink:    "text-pink-600 dark:text-pink-400",
+  cyan:    "text-cyan-600 dark:text-cyan-400",
+  amber:   "text-amber-600 dark:text-amber-400",
+  rose:    "text-rose-600 dark:text-rose-400",
+};
+
 /** Hex values for the swatch picker UI */
 export const GROUP_COLOR_HEX: Record<GroupColorKey, string> = {
   blue:    "#3b82f6",

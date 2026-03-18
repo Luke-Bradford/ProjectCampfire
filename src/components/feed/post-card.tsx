@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { GROUP_COLOR_DOT, resolveGroupColor } from "@/lib/group-colors";
+import { GROUP_COLOR_TEXT, resolveGroupColor } from "@/lib/group-colors";
 import { GifPicker, type GifResult } from "./gif-picker";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -449,11 +449,8 @@ export function PostCard({
               {post.group && (
                 <>
                   {" · "}
-                  <span className="inline-flex items-center gap-1">
-                    <span
-                      className={cn("inline-block h-2 w-2 rounded-full shrink-0", GROUP_COLOR_DOT[resolveGroupColor(post.group.color, post.group.name)])}
-                    />
-                    <span className="font-medium">{post.group.name}</span>
+                  <span className={cn("font-medium", GROUP_COLOR_TEXT[resolveGroupColor(post.group.color, post.group.name)])}>
+                    {post.group.name}
                   </span>
                 </>
               )}
