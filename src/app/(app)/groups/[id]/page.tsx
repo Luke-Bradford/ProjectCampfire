@@ -28,6 +28,7 @@ import { MoreHorizontal } from "lucide-react";
 import { StatusDot } from "@/components/ui/status-dot";
 import { GroupOverlapView } from "@/components/availability/group-overlap-view";
 import { RecurringTemplatesSection } from "@/components/groups/recurring-templates-section";
+import { GroupCommandCentre } from "@/components/groups/group-command-centre";
 import { GROUP_COLOR_KEYS, GROUP_COLOR_BG, GROUP_COLOR_HEX, resolveGroupColor, type GroupColorKey } from "@/lib/group-colors";
 
 function initials(name: string) {
@@ -323,6 +324,9 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           </Button>
         )}
       </div>
+
+      {/* Command centre — next session, active poll, members online */}
+      <GroupCommandCentre groupId={id} members={group.memberships} />
 
       <InviteSection groupId={id} />
 

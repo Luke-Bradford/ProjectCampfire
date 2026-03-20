@@ -399,6 +399,53 @@ export const eventsRouter = createTRPCRouter({
     }),
 
   // Next N upcoming events across all the user's groups (for feed sidebar panel)
+  /**
+   * Returns the single next upcoming event for a group, with RSVP counts and
+   * the caller's own RSVP. Used by the group command centre.
+   */
+  nextForGroup: protectedProcedure
+    .input(z.object({ groupId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertMember(input.groupId, ctx.user.id);
+
+      const now = new Date();
+
+      const event = await db.query.events.findFirst({
+        where: and(
+          eq(events.groupId, input.groupId),
+          or(
+            and(eq(events.status, "confirmed"), gte(events.confirmedStartsAt, now)),
+            eq(events.status, "open"),
+            eq(events.status, "draft")
+          )
+        ),
+        with: {
+          rsvps: { columns: { userId: true, status: true } },
+        },
+        orderBy: (t, { asc, sql }) => [
+          sql`CASE WHEN ${t.status} = 'confirmed' AND ${t.confirmedStartsAt} IS NOT NULL THEN 0 ELSE 1 END`,
+          asc(t.confirmedStartsAt),
+          asc(t.createdAt),
+        ],
+      });
+
+      if (!event) return null;
+
+      const goingCount = event.rsvps.filter((r) => r.status === "yes").length;
+      const maybeCount = event.rsvps.filter((r) => r.status === "maybe").length;
+      const myRsvp = event.rsvps.find((r) => r.userId === ctx.user.id)?.status ?? null;
+
+      return {
+        id: event.id,
+        title: event.title,
+        status: event.status,
+        confirmedStartsAt: event.confirmedStartsAt,
+        goingCount,
+        maybeCount,
+        myRsvp,
+      };
+    }),
+
   upcoming: protectedProcedure
     .input(z.object({ limit: z.number().int().min(1).max(10).default(3) }))
     .query(async ({ ctx, input }) => {
