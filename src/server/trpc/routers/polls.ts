@@ -303,4 +303,31 @@ export const pollsRouter = createTRPCRouter({
 
       return { id: input.id };
     }),
+
+  /**
+   * Returns the first open poll for a group (id + question only).
+   * Used by the group command centre to show a "Vote now" CTA.
+   */
+  activeForGroup: protectedProcedure
+    .input(z.object({ groupId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const membership = await db.query.groupMemberships.findFirst({
+        where: and(
+          eq(groupMemberships.groupId, input.groupId),
+          eq(groupMemberships.userId, ctx.user.id)
+        ),
+      });
+      if (!membership) throw new TRPCError({ code: "FORBIDDEN" });
+
+      const poll = await db.query.polls.findFirst({
+        where: and(
+          eq(polls.groupId, input.groupId),
+          eq(polls.status, "open")
+        ),
+        columns: { id: true, question: true, eventId: true },
+        orderBy: (t, { desc }) => [desc(t.createdAt), desc(t.id)],
+      });
+
+      return poll ?? null;
+    }),
 });

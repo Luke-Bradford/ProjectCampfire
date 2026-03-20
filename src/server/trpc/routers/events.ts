@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, gte, inArray, or } from "drizzle-orm";
+import { and, eq, gte, inArray, or, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -399,6 +399,69 @@ export const eventsRouter = createTRPCRouter({
     }),
 
   // Next N upcoming events across all the user's groups (for feed sidebar panel)
+  /**
+   * Returns the single next upcoming event for a group, with RSVP counts and
+   * the caller's own RSVP. Counts are computed server-side with SQL — no
+   * individual RSVP rows are returned to the client.
+   */
+  nextForGroup: protectedProcedure
+    .input(z.object({ groupId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertMember(input.groupId, ctx.user.id);
+
+      const now = new Date();
+
+      // Find the next upcoming event
+      const event = await db.query.events.findFirst({
+        where: and(
+          eq(events.groupId, input.groupId),
+          or(
+            and(eq(events.status, "confirmed"), gte(events.confirmedStartsAt, now)),
+            eq(events.status, "open"),
+            eq(events.status, "draft")
+          )
+        ),
+        columns: { id: true, title: true, status: true, confirmedStartsAt: true },
+        orderBy: (t, { asc, desc, sql: sqlFn }) => [
+          // Confirmed events with a time sort first (CASE = 0); open/draft without a time follow (CASE = 1)
+          sqlFn`CASE WHEN ${t.status} = 'confirmed' AND ${t.confirmedStartsAt} IS NOT NULL THEN 0 ELSE 1 END`,
+          asc(t.confirmedStartsAt),
+          // For open/draft events (confirmedStartsAt is NULL), use newest-first so the most
+          // recently created/updated event surfaces as the "next" session to plan around.
+          desc(t.createdAt),
+        ],
+      });
+
+      if (!event) return null;
+
+      // Compute RSVP counts server-side — only aggregates are returned, never individual rows
+      const [counts, myRsvpRow] = await Promise.all([
+        db
+          .select({
+            going: sql<number>`count(*) filter (where ${eventRsvps.status} = 'yes')`,
+            maybe: sql<number>`count(*) filter (where ${eventRsvps.status} = 'maybe')`,
+          })
+          .from(eventRsvps)
+          .where(eq(eventRsvps.eventId, event.id))
+          .then((r) => r[0] ?? { going: 0, maybe: 0 }),
+        db.query.eventRsvps.findFirst({
+          where: and(eq(eventRsvps.eventId, event.id), eq(eventRsvps.userId, ctx.user.id)),
+          columns: { status: true },
+        }),
+      ]);
+
+      return {
+        id: event.id,
+        title: event.title,
+        status: event.status,
+        confirmedStartsAt: event.confirmedStartsAt,
+        // pg driver returns bigint counts as strings; ?? 0 guards against unexpected null/undefined
+        goingCount: Number(counts.going ?? 0),
+        maybeCount: Number(counts.maybe ?? 0),
+        myRsvp: myRsvpRow?.status ?? null,
+      };
+    }),
+
   upcoming: protectedProcedure
     .input(z.object({ limit: z.number().int().min(1).max(10).default(3) }))
     .query(async ({ ctx, input }) => {
