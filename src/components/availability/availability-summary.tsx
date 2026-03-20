@@ -8,9 +8,11 @@ import type { WeeklySlots } from "@/server/db/schema/availability";
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 function formatTime(hhmm: string): string {
-  const [h, m] = hhmm.split(":").map(Number);
-  const period = h! >= 12 ? "pm" : "am";
-  const hour = h! % 12 === 0 ? 12 : h! % 12;
+  const parts = hhmm.split(":");
+  const h = Number(parts[0] ?? 0);
+  const m = Number(parts[1] ?? 0);
+  const period = h >= 12 ? "pm" : "am";
+  const hour = h % 12 === 0 ? 12 : h % 12;
   return m === 0 ? `${hour}${period}` : `${hour}:${String(m).padStart(2, "0")}${period}`;
 }
 
@@ -20,7 +22,7 @@ interface AvailabilitySummaryProps {
 }
 
 export function AvailabilitySummary({ slots, isOwn }: AvailabilitySummaryProps) {
-  const days = (Object.keys(slots) as unknown as number[])
+  const days = Object.keys(slots)
     .map(Number)
     .filter((d) => (slots[d]?.length ?? 0) > 0)
     .sort((a, b) => a - b);

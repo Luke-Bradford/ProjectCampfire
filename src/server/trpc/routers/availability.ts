@@ -42,7 +42,8 @@ export const availabilityRouter = createTRPCRouter({
   }),
 
   /**
-   * Get another user's weekly schedule for display on their profile.
+   * Get a user's weekly schedule for display on their profile.
+   * Returns only `{ slots }` to avoid leaking internal row metadata.
    * Visible to: the user themselves, or accepted friends.
    */
   getUserSchedule: protectedProcedure
@@ -50,11 +51,11 @@ export const availabilityRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       // Own schedule — always allowed
       if (input.userId === ctx.user.id) {
-        return (
-          (await db.query.availabilitySchedules.findFirst({
-            where: eq(availabilitySchedules.userId, ctx.user.id),
-          })) ?? null
-        );
+        const row = await db.query.availabilitySchedules.findFirst({
+          where: eq(availabilitySchedules.userId, ctx.user.id),
+          columns: { slots: true },
+        });
+        return row ? { slots: row.slots } : null;
       }
 
       // Must be an accepted friend to view another user's schedule
@@ -70,11 +71,11 @@ export const availabilityRouter = createTRPCRouter({
 
       if (!friendship) return null;
 
-      return (
-        (await db.query.availabilitySchedules.findFirst({
-          where: eq(availabilitySchedules.userId, input.userId),
-        })) ?? null
-      );
+      const row = await db.query.availabilitySchedules.findFirst({
+        where: eq(availabilitySchedules.userId, input.userId),
+        columns: { slots: true },
+      });
+      return row ? { slots: row.slots } : null;
     }),
 
   /** Create or update the user's weekly schedule */

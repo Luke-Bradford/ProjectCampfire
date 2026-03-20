@@ -103,7 +103,9 @@ export default async function UserProfilePage({
           {/* Availability — shown when viewer is a friend (or own profile) */}
           {availabilitySchedule !== null ? (
             <AvailabilitySummary slots={availabilitySchedule.slots} isOwn={isOwnProfile} />
-          ) : !isOwnProfile && (
+          ) : isOwnProfile ? (
+            <AvailabilitySummary slots={{}} isOwn />
+          ) : (
             <div className="rounded-xl border bg-card shadow-sm p-4 text-sm text-muted-foreground text-center">
               No availability shared
             </div>
