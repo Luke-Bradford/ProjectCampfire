@@ -1,4 +1,6 @@
-import { Gamepad2, Clock, TrendingUp } from "lucide-react";
+import Link from "next/link";
+import { Gamepad2, Clock, TrendingUp, ExternalLink } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 function formatPlaytime(minutes: number): string {
   const total = Math.round(Math.abs(minutes));
@@ -31,9 +33,70 @@ export type GamingStats = {
   recentlyPlayed: RecentEntry[];
 };
 
-export function GamingActivityCard({ stats }: { stats: GamingStats }) {
-  if (!stats.steamLinked || !stats.libraryPublic) return null;
+interface GamingActivityCardProps {
+  stats: GamingStats;
+  /** Campfire-native game count (from the user's owned games library). */
+  campfireGameCount?: number;
+  /** Whether this card is on the current user's own profile (shows Steam link prompt). */
+  isOwn?: boolean;
+}
 
+export function GamingActivityCard({ stats, campfireGameCount, isOwn }: GamingActivityCardProps) {
+  // No Steam linked — show Campfire-native stats + prompt
+  if (!stats.steamLinked) {
+    return (
+      <div className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
+        <p className="text-sm font-semibold">Gaming Activity</p>
+        {campfireGameCount !== undefined && (
+          <div className="rounded-lg bg-muted/50 p-3 flex items-center gap-3">
+            <Gamepad2 size={16} className="text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-lg font-bold tabular-nums">{campfireGameCount}</p>
+              <p className="text-xs text-muted-foreground">games in library</p>
+            </div>
+          </div>
+        )}
+        {isOwn && (
+          <div className="flex items-center justify-between rounded-lg border border-dashed p-3 gap-3">
+            <p className="text-xs text-muted-foreground">
+              Link Steam to track playtime, most played games, and recent activity.
+            </p>
+            <Button asChild variant="outline" size="sm" className="shrink-0 text-xs h-7 px-2">
+              <Link href="/settings">
+                <ExternalLink size={11} className="mr-1" />
+                Link Steam
+              </Link>
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Steam linked but library private
+  if (!stats.libraryPublic) {
+    return (
+      <div className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
+        <p className="text-sm font-semibold">Gaming Activity</p>
+        {campfireGameCount !== undefined && (
+          <div className="rounded-lg bg-muted/50 p-3 flex items-center gap-3">
+            <Gamepad2 size={16} className="text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-lg font-bold tabular-nums">{campfireGameCount}</p>
+              <p className="text-xs text-muted-foreground">games in library</p>
+            </div>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          {isOwn
+            ? "Your Steam library is set to private. Make it public in Steam settings to show playtime stats."
+            : "Steam library is private — playtime stats not available."}
+        </p>
+      </div>
+    );
+  }
+
+  // Full stats — Steam linked and library public
   return (
     <div className="rounded-xl border bg-card shadow-sm p-4 space-y-4">
       <p className="text-sm font-semibold">Gaming Activity</p>

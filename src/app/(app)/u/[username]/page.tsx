@@ -98,7 +98,13 @@ export default async function UserProfilePage({
             </div>
           )}
 
-          {gamingStats && <GamingActivityCard stats={gamingStats} />}
+          {gamingStats && (
+            <GamingActivityCard
+              stats={gamingStats}
+              campfireGameCount={publicStats?.gameCount}
+              isOwn={isOwnProfile}
+            />
+          )}
 
           {/* Availability — shown when viewer is a friend (or own profile) */}
           {availabilitySchedule !== null ? (

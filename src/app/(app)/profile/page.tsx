@@ -292,9 +292,13 @@ export default function MyProfilePage() {
             </div>
           )}
 
-          {/* Gaming stats — only shown when Steam is linked and library is public */}
+          {/* Gaming stats — always shown with graceful fallbacks */}
           {!gamingStatsLoading && gamingStats && (
-            <GamingActivityCard stats={gamingStats} />
+            <GamingActivityCard
+              stats={gamingStats}
+              campfireGameCount={stats?.gameCount}
+              isOwn
+            />
           )}
         </TabsContent>
 
