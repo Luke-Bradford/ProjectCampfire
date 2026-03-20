@@ -33,6 +33,15 @@ export type GamingStats = {
   recentlyPlayed: RecentEntry[];
 };
 
+export const EMPTY_GAMING_STATS: GamingStats = {
+  steamLinked: false,
+  libraryPublic: false,
+  totalMinutes: 0,
+  last2WeeksMinutes: 0,
+  mostPlayed: [],
+  recentlyPlayed: [],
+};
+
 interface GamingActivityCardProps {
   stats: GamingStats;
   /** Campfire-native game count (from the user's owned games library). */

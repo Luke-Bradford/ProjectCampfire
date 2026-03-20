@@ -5,7 +5,7 @@ import { trpc } from "@/trpc/server";
 import { AddFriendButton } from "./add-friend-button";
 import { ProfileGroups } from "./profile-groups";
 import { ProfilePosts } from "./profile-posts";
-import { GamingActivityCard } from "@/components/profile/gaming-activity-card";
+import { GamingActivityCard, EMPTY_GAMING_STATS } from "@/components/profile/gaming-activity-card";
 import { ProfileHeader } from "@/components/profile/profile-header";
 import { AvailabilitySummary } from "@/components/availability/availability-summary";
 
@@ -99,7 +99,7 @@ export default async function UserProfilePage({
           )}
 
           <GamingActivityCard
-            stats={gamingStats ?? { steamLinked: false, libraryPublic: false, totalMinutes: 0, last2WeeksMinutes: 0, mostPlayed: [], recentlyPlayed: [] }}
+            stats={gamingStats ?? EMPTY_GAMING_STATS}
             campfireGameCount={publicStats?.gameCount}
             isOwn={isOwnProfile}
           />

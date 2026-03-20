@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, Layers, Gamepad2, ExternalLink, Settings, ChevronRight } from "lucide-react";
 import { PostsTab } from "@/components/feed/posts-tab";
-import { GamingActivityCard } from "@/components/profile/gaming-activity-card";
+import { GamingActivityCard, EMPTY_GAMING_STATS } from "@/components/profile/gaming-activity-card";
 import { AvailabilitySummary } from "@/components/availability/availability-summary";
 
 function initials(name: string) {
@@ -295,7 +295,7 @@ export default function MyProfilePage() {
           {/* Gaming stats — always shown with graceful fallbacks */}
           {!gamingStatsLoading && (
             <GamingActivityCard
-              stats={gamingStats ?? { steamLinked: false, libraryPublic: false, totalMinutes: 0, last2WeeksMinutes: 0, mostPlayed: [], recentlyPlayed: [] }}
+              stats={gamingStats ?? EMPTY_GAMING_STATS}
               campfireGameCount={stats?.gameCount}
               isOwn
             />
