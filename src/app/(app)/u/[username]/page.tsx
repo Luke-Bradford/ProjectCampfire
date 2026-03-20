@@ -7,6 +7,7 @@ import { ProfileGroups } from "./profile-groups";
 import { ProfilePosts } from "./profile-posts";
 import { GamingActivityCard } from "@/components/profile/gaming-activity-card";
 import { ProfileHeader } from "@/components/profile/profile-header";
+import { AvailabilitySummary } from "@/components/availability/availability-summary";
 
 export default async function UserProfilePage({
   params,
@@ -25,8 +26,8 @@ export default async function UserProfilePage({
 
   const isPrivate = profile.profileVisibility === "private";
 
-  // Fetch game library, current user, gaming stats, now-playing, and profile stat counts in parallel.
-  const [me, profileGames, gamingStats, nowPlaying, publicStats] = await Promise.all([
+  // Fetch game library, current user, gaming stats, now-playing, profile stat counts, and availability in parallel.
+  const [me, profileGames, gamingStats, nowPlaying, publicStats, availabilitySchedule] = await Promise.all([
     trpc.user.me().catch(() => null),
     isPrivate
       ? Promise.resolve({ items: [], total: 0 })
@@ -39,6 +40,10 @@ export default async function UserProfilePage({
     isPrivate
       ? Promise.resolve(null)
       : trpc.friends.publicProfileStats({ userId: profile.id }).catch(() => null),
+    // Fetch availability schedule — returns null if not friends or no schedule set.
+    isPrivate
+      ? Promise.resolve(null)
+      : trpc.availability.getUserSchedule({ userId: profile.id }).catch(() => null),
   ]);
 
   const isOwnProfile = me?.id === profile.id;
@@ -94,6 +99,18 @@ export default async function UserProfilePage({
           )}
 
           {gamingStats && <GamingActivityCard stats={gamingStats} />}
+
+          {/* Availability — shown when viewer is a friend (or own profile) */}
+          {availabilitySchedule !== null ? (
+            <AvailabilitySummary slots={availabilitySchedule.slots} isOwn={isOwnProfile} />
+          ) : isOwnProfile ? (
+            <AvailabilitySummary slots={{}} isOwn />
+          ) : (
+            <div className="rounded-xl border bg-card shadow-sm p-4 text-sm text-muted-foreground text-center">
+              No availability shared
+            </div>
+          )}
+
           <ProfileGroups userId={profile.id} />
           {me && <ProfilePosts userId={profile.id} currentUserId={me.id} isOwnProfile={isOwnProfile} />}
           <AddFriendButton targetId={profile.id} />
