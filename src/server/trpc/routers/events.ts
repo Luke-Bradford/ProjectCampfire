@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, gte, inArray, or } from "drizzle-orm";
+import { and, eq, gte, inArray, or, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -401,7 +401,8 @@ export const eventsRouter = createTRPCRouter({
   // Next N upcoming events across all the user's groups (for feed sidebar panel)
   /**
    * Returns the single next upcoming event for a group, with RSVP counts and
-   * the caller's own RSVP. Used by the group command centre.
+   * the caller's own RSVP. Counts are computed server-side with SQL — no
+   * individual RSVP rows are returned to the client.
    */
   nextForGroup: protectedProcedure
     .input(z.object({ groupId: z.string() }))
@@ -410,6 +411,7 @@ export const eventsRouter = createTRPCRouter({
 
       const now = new Date();
 
+      // Find the next upcoming event
       const event = await db.query.events.findFirst({
         where: and(
           eq(events.groupId, input.groupId),
@@ -419,30 +421,40 @@ export const eventsRouter = createTRPCRouter({
             eq(events.status, "draft")
           )
         ),
-        with: {
-          rsvps: { columns: { userId: true, status: true } },
-        },
-        orderBy: (t, { asc, sql }) => [
-          sql`CASE WHEN ${t.status} = 'confirmed' AND ${t.confirmedStartsAt} IS NOT NULL THEN 0 ELSE 1 END`,
+        columns: { id: true, title: true, status: true, confirmedStartsAt: true },
+        orderBy: (t, { asc, desc, sql: sqlFn }) => [
+          sqlFn`CASE WHEN ${t.status} = 'confirmed' AND ${t.confirmedStartsAt} IS NOT NULL THEN 0 ELSE 1 END`,
           asc(t.confirmedStartsAt),
-          asc(t.createdAt),
+          desc(t.createdAt),
         ],
       });
 
       if (!event) return null;
 
-      const goingCount = event.rsvps.filter((r) => r.status === "yes").length;
-      const maybeCount = event.rsvps.filter((r) => r.status === "maybe").length;
-      const myRsvp = event.rsvps.find((r) => r.userId === ctx.user.id)?.status ?? null;
+      // Compute RSVP counts server-side — only aggregates are returned, never individual rows
+      const [counts, myRsvpRow] = await Promise.all([
+        db
+          .select({
+            going: sql<number>`count(*) filter (where ${eventRsvps.status} = 'yes')`,
+            maybe: sql<number>`count(*) filter (where ${eventRsvps.status} = 'maybe')`,
+          })
+          .from(eventRsvps)
+          .where(eq(eventRsvps.eventId, event.id))
+          .then((r) => r[0] ?? { going: 0, maybe: 0 }),
+        db.query.eventRsvps.findFirst({
+          where: and(eq(eventRsvps.eventId, event.id), eq(eventRsvps.userId, ctx.user.id)),
+          columns: { status: true },
+        }),
+      ]);
 
       return {
         id: event.id,
         title: event.title,
         status: event.status,
         confirmedStartsAt: event.confirmedStartsAt,
-        goingCount,
-        maybeCount,
-        myRsvp,
+        goingCount: Number(counts.going),
+        maybeCount: Number(counts.maybe),
+        myRsvp: myRsvpRow?.status ?? null,
       };
     }),
 
