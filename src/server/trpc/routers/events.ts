@@ -423,8 +423,11 @@ export const eventsRouter = createTRPCRouter({
         ),
         columns: { id: true, title: true, status: true, confirmedStartsAt: true },
         orderBy: (t, { asc, desc, sql: sqlFn }) => [
+          // Confirmed events with a time sort first (CASE = 0); open/draft without a time follow (CASE = 1)
           sqlFn`CASE WHEN ${t.status} = 'confirmed' AND ${t.confirmedStartsAt} IS NOT NULL THEN 0 ELSE 1 END`,
           asc(t.confirmedStartsAt),
+          // For open/draft events (confirmedStartsAt is NULL), use newest-first so the most
+          // recently created/updated event surfaces as the "next" session to plan around.
           desc(t.createdAt),
         ],
       });
@@ -452,8 +455,9 @@ export const eventsRouter = createTRPCRouter({
         title: event.title,
         status: event.status,
         confirmedStartsAt: event.confirmedStartsAt,
-        goingCount: Number(counts.going),
-        maybeCount: Number(counts.maybe),
+        // pg driver returns bigint counts as strings; ?? 0 guards against unexpected null/undefined
+        goingCount: Number(counts.going ?? 0),
+        maybeCount: Number(counts.maybe ?? 0),
         myRsvp: myRsvpRow?.status ?? null,
       };
     }),
