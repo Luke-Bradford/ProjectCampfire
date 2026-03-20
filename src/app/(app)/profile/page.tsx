@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Layers, Gamepad2, Calendar, ExternalLink, Settings, ChevronRight } from "lucide-react";
+import { Users, Layers, Gamepad2, ExternalLink, Settings, ChevronRight } from "lucide-react";
 import { PostsTab } from "@/components/feed/posts-tab";
 import { GamingActivityCard } from "@/components/profile/gaming-activity-card";
+import { AvailabilitySummary } from "@/components/availability/availability-summary";
 
 function initials(name: string) {
   return name
@@ -173,6 +174,7 @@ export default function MyProfilePage() {
   const { data: me, isLoading: meLoading } = api.user.me.useQuery();
   const { data: stats, isLoading: statsLoading } = api.user.profileStats.useQuery();
   const { data: gamingStats, isLoading: gamingStatsLoading } = api.games.gamingStats.useQuery();
+  const { data: schedule, isLoading: scheduleLoading } = api.availability.getSchedule.useQuery();
 
   const isLoading = meLoading || statsLoading;
 
@@ -308,21 +310,21 @@ export default function MyProfilePage() {
 
         {/* ── Availability ── */}
         <TabsContent value="availability" className="mt-4">
-          <div className="rounded-xl border bg-card shadow-sm p-6 flex flex-col items-center gap-3 text-center">
-            <Calendar size={32} className="text-muted-foreground" />
-            <div>
-              <p className="font-semibold">Your availability schedule</p>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Set recurring free hours and tweak them week by week.
-              </p>
+          {scheduleLoading ? (
+            <div className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
+              <div className="h-4 w-32 rounded bg-muted animate-pulse" />
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex gap-3">
+                    <div className="h-4 w-7 rounded bg-muted animate-pulse" />
+                    <div className="h-4 w-40 rounded-full bg-muted animate-pulse" />
+                  </div>
+                ))}
+              </div>
             </div>
-            <Button asChild size="sm">
-              <Link href="/availability">
-                <ExternalLink size={13} className="mr-1.5" />
-                Manage availability
-              </Link>
-            </Button>
-          </div>
+          ) : (
+            <AvailabilitySummary slots={schedule?.slots ?? {}} isOwn />
+          )}
         </TabsContent>
       </Tabs>
     </div>

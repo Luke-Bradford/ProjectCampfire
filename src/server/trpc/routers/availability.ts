@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, eq, gte, lte, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
 import { db } from "@/server/db";
-import { availabilitySchedules, availabilityOverrides } from "@/server/db/schema";
+import { availabilitySchedules, availabilityOverrides, friendships } from "@/server/db/schema";
 import { expandAvailability, isValidTimeSlot, hasNoOverlaps } from "@/lib/availability-utils";
 
 // ── Zod schemas ──────────────────────────────────────────────────────────────
@@ -40,6 +40,42 @@ export const availabilityRouter = createTRPCRouter({
       })) ?? null
     );
   }),
+
+  /**
+   * Get another user's weekly schedule for display on their profile.
+   * Visible to: the user themselves, or accepted friends.
+   */
+  getUserSchedule: protectedProcedure
+    .input(z.object({ userId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      // Own schedule — always allowed
+      if (input.userId === ctx.user.id) {
+        return (
+          (await db.query.availabilitySchedules.findFirst({
+            where: eq(availabilitySchedules.userId, ctx.user.id),
+          })) ?? null
+        );
+      }
+
+      // Must be an accepted friend to view another user's schedule
+      const friendship = await db.query.friendships.findFirst({
+        where: and(
+          or(
+            and(eq(friendships.requesterId, ctx.user.id), eq(friendships.addresseeId, input.userId)),
+            and(eq(friendships.requesterId, input.userId), eq(friendships.addresseeId, ctx.user.id))
+          ),
+          eq(friendships.status, "accepted")
+        ),
+      });
+
+      if (!friendship) return null;
+
+      return (
+        (await db.query.availabilitySchedules.findFirst({
+          where: eq(availabilitySchedules.userId, input.userId),
+        })) ?? null
+      );
+    }),
 
   /** Create or update the user's weekly schedule */
   upsertSchedule: protectedProcedure
