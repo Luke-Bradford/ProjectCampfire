@@ -1,4 +1,5 @@
 import {
+  index,
   pgEnum,
   pgTable,
   primaryKey,
@@ -26,7 +27,14 @@ export const friendships = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (t) => ({
-    pk: primaryKey({ columns: [t.requesterId, t.addresseeId] }),
-  })
+  (t) => [
+    primaryKey({ columns: [t.requesterId, t.addresseeId] }),
+    // Covers reverse-direction lookups (addressee → requester) with status filter.
+    // Used by getUserSchedule and any query that ORs both directions.
+    index("friendships_addressee_requester_status_idx").on(t.addresseeId, t.requesterId, t.status),
+    // Covers "list sent requests by status" queries (e.g. pending outgoing).
+    index("friendships_requester_status_idx").on(t.requesterId, t.status),
+    // Covers "list received requests by status" queries (e.g. pending incoming).
+    index("friendships_addressee_status_idx").on(t.addresseeId, t.status),
+  ]
 );
