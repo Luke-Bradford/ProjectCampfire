@@ -325,7 +325,7 @@ export const pollsRouter = createTRPCRouter({
           eq(polls.status, "open")
         ),
         columns: { id: true, question: true, eventId: true },
-        orderBy: (t, { desc }) => [desc(t.createdAt)],
+        orderBy: (t, { desc }) => [desc(t.createdAt), desc(t.id)],
       });
 
       return poll ?? null;
