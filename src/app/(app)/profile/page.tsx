@@ -293,9 +293,9 @@ export default function MyProfilePage() {
           )}
 
           {/* Gaming stats — always shown with graceful fallbacks */}
-          {!gamingStatsLoading && gamingStats && (
+          {!gamingStatsLoading && (
             <GamingActivityCard
-              stats={gamingStats}
+              stats={gamingStats ?? { steamLinked: false, libraryPublic: false, totalMinutes: 0, last2WeeksMinutes: 0, mostPlayed: [], recentlyPlayed: [] }}
               campfireGameCount={stats?.gameCount}
               isOwn
             />

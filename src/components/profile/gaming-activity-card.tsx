@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Gamepad2, Clock, TrendingUp, ExternalLink } from "lucide-react";
+import { Gamepad2, Clock, TrendingUp, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 function formatPlaytime(minutes: number): string {
@@ -63,7 +63,7 @@ export function GamingActivityCard({ stats, campfireGameCount, isOwn }: GamingAc
             </p>
             <Button asChild variant="outline" size="sm" className="shrink-0 text-xs h-7 px-2">
               <Link href="/settings">
-                <ExternalLink size={11} className="mr-1" />
+                <Settings size={11} className="mr-1" />
                 Link Steam
               </Link>
             </Button>
