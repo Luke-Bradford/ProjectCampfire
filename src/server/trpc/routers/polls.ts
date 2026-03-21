@@ -408,7 +408,7 @@ export const pollsRouter = createTRPCRouter({
     // winnerLabel is null when nobody voted on that poll.
     const recentlyClosed = closedPollRows.map((p) => {
       const options = voteCounts.filter((r) => r.pollId === p.id);
-      const winner = options.sort((a, b) => b.voteCount - a.voteCount)[0];
+      const winner = options.sort((a, b) => b.voteCount - a.voteCount || a.optionId.localeCompare(b.optionId))[0];
       return {
         id: p.id,
         question: p.question,
