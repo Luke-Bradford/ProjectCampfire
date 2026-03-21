@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -364,24 +364,34 @@ export const pollsRouter = createTRPCRouter({
     });
 
     // 3. Recently closed polls — last 2 across the user's groups
-    const closedPolls = await db.query.polls.findMany({
+    const closedPollRows = await db.query.polls.findMany({
       where: and(
         inArray(polls.groupId, groupIds),
         eq(polls.status, "closed")
       ),
       columns: { id: true, question: true, groupId: true, eventId: true },
-      with: {
-        group: { columns: { id: true, name: true } },
-        options: {
-          columns: { id: true, label: true },
-          // TODO(#411): replace with a SQL COUNT aggregate to avoid loading all
-          // vote rows into memory. Fine at MVP scale but should be fixed for large groups.
-          with: { votes: { columns: { pollOptionId: true } } },
-        },
-      },
+      with: { group: { columns: { id: true, name: true } } },
       orderBy: [desc(polls.createdAt)],
       limit: 2,
     });
+
+    // Fetch vote counts per option using a SQL COUNT aggregate — avoids loading
+    // individual vote rows into memory (resolves #411).
+    const closedPollIds = closedPollRows.map((p) => p.id);
+    const voteCounts =
+      closedPollIds.length > 0
+        ? await db
+            .select({
+              pollId: pollOptions.pollId,
+              optionId: pollOptions.id,
+              label: pollOptions.label,
+              voteCount: count(pollVotes.userId),
+            })
+            .from(pollOptions)
+            .leftJoin(pollVotes, eq(pollVotes.pollOptionId, pollOptions.id))
+            .where(inArray(pollOptions.pollId, closedPollIds))
+            .groupBy(pollOptions.pollId, pollOptions.id, pollOptions.label)
+        : [];
 
     // Annotate active polls with whether the user has already voted
     const active = activePolls.map((p) => ({
@@ -394,19 +404,18 @@ export const pollsRouter = createTRPCRouter({
       iVoted: p.options.some((o) => o.votes.length > 0),
     }));
 
-    // For closed polls, find the winning option by vote count.
-    // winner is undefined when a poll has no options (shouldn't occur in practice).
-    // winnerLabel is null when nobody voted (votes.length === 0 on the top option).
-    const recentlyClosed = closedPolls.map((p) => {
-      const sorted = [...p.options].sort((a, b) => b.votes.length - a.votes.length);
-      const winner = sorted[0]; // undefined only if poll has no options
+    // For each closed poll find the winning option from the aggregated counts.
+    // winnerLabel is null when nobody voted on that poll.
+    const recentlyClosed = closedPollRows.map((p) => {
+      const options = voteCounts.filter((r) => r.pollId === p.id);
+      const winner = options.sort((a, b) => b.voteCount - a.voteCount)[0];
       return {
         id: p.id,
         question: p.question,
         groupId: p.groupId,
         eventId: p.eventId,
         groupName: p.group?.name ?? null,
-        winnerLabel: winner && winner.votes.length > 0 ? winner.label : null,
+        winnerLabel: winner && winner.voteCount > 0 ? winner.label : null,
       };
     });
 
