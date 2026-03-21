@@ -6,6 +6,8 @@ import { CalendarDays } from "lucide-react";
 import { api } from "@/trpc/react";
 import { UpcomingEventsPanel } from "@/components/feed/upcoming-events-panel";
 import { OnlineFriendsWidget } from "@/components/nav/online-friends-widget";
+import { ActivePollsWidget } from "@/components/nav/active-polls-widget";
+import { RecentPollsWidget } from "@/components/nav/recent-polls-widget";
 
 // Pages where the right panel adds no contextual value.
 const HIDDEN_ON = ["/settings", "/notifications", "/people"];
@@ -26,6 +28,12 @@ export function RightPanel() {
   const { data: onlineFriends, isLoading: friendsLoading } = api.friends.onlineFriends.useQuery(
     undefined,
     { enabled: !hidden, refetchInterval: 60_000 }
+  );
+
+  // Cross-group polls for sidebar
+  const { data: sidebarPolls, isLoading: pollsLoading } = api.polls.forSidebar.useQuery(
+    undefined,
+    { enabled: !hidden }
   );
 
   // Always render the aside so its w-60 width is always reserved — prevents the
@@ -54,6 +62,16 @@ export function RightPanel() {
             </Link>
           </div>
         )
+      )}
+
+      {/* ── Active polls ─────────────────────────────────────────────────── */}
+      {!hidden && !pollsLoading && sidebarPolls && (
+        <ActivePollsWidget polls={sidebarPolls.active} />
+      )}
+
+      {/* ── Recently closed polls ────────────────────────────────────────── */}
+      {!hidden && !pollsLoading && sidebarPolls && (
+        <RecentPollsWidget polls={sidebarPolls.recentlyClosed} />
       )}
 
       {/* ── Online friends ───────────────────────────────────────────────── */}
