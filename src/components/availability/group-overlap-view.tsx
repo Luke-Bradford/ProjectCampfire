@@ -9,11 +9,9 @@
  *   the start/end time pre-filled, then navigates to the event page).
  * - Toggle individual members on/off to narrow the overlap.
  *
- * Note: the grid is rendered in UTC. Availability slots returned by the server
- * are already expressed as UTC ISO timestamps (expanded from the member's local
- * timezone by expandAvailability on the server). The times shown on the grid
- * are therefore UTC wall-clock times. This is a known MVP limitation — a future
- * improvement would convert slot positions to the viewing user's local timezone.
+ * The grid renders in the viewer's local timezone. Availability slots from the
+ * server are UTC ISO timestamps; we convert them to local time for display and
+ * convert proposed session times back to UTC ISO before storing.
  */
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
@@ -52,24 +50,53 @@ function initials(name: string) {
     .slice(0, 2);
 }
 
-/** Convert an ISO timestamp to a 30-min slot index relative to UTC midnight of dateStr */
-function isoToSlotIndex(iso: string, dateStr: string): number {
+/**
+ * Convert a UTC ISO timestamp to a 30-min slot index within the viewer's
+ * local day. Uses local hour/minute accessors directly, which are DST-safe:
+ * the JS engine applies the correct local offset for the instant `iso`
+ * represents, so no manual UTC-offset arithmetic is needed.
+ *
+ * The date context is not needed — callers already filter slots to the
+ * correct day before calling this function.
+ */
+function isoToSlotIndex(iso: string): number {
   const d = new Date(iso);
-  const base = new Date(`${dateStr}T00:00:00Z`);
-  const diffMs = d.getTime() - base.getTime();
-  return Math.floor(diffMs / (SLOT_MINUTES * 60 * 1000));
+  const localMins = d.getHours() * 60 + d.getMinutes();
+  return Math.floor(localMins / SLOT_MINUTES);
 }
 
+/** Format a slot index as a local HH:mm time string. Clamps to [0, SLOTS_PER_DAY). */
 function slotIndexToTime(idx: number): string {
-  const h = Math.floor((idx * SLOT_MINUTES) / 60);
-  const m = (idx * SLOT_MINUTES) % 60;
+  const clamped = Math.max(0, Math.min(SLOTS_PER_DAY - 1, idx));
+  const totalMinutes = clamped * SLOT_MINUTES;
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+/**
+ * Convert a slot index back to a UTC ISO string.
+ *
+ * The slot index represents a local time on dateStr. We construct a local
+ * Date, then verify the JS engine didn't silently shift the time due to a
+ * DST spring-forward gap (e.g. 02:00 → 03:00). If the constructed Date's
+ * local hours/minutes don't match what we asked for, we compensate by
+ * adding the delta so the stored UTC instant reflects the intended local time
+ * as closely as possible.
+ */
 function slotIndexToISO(dateStr: string, slotIdx: number): string {
-  const base = new Date(`${dateStr}T00:00:00Z`);
-  base.setUTCMinutes(base.getUTCMinutes() + slotIdx * SLOT_MINUTES);
-  return base.toISOString();
+  const [y, mo, day] = dateStr.split("-").map(Number) as [number, number, number];
+  const totalMinutes = slotIdx * SLOT_MINUTES;
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  const d = new Date(y, mo - 1, day, h, m, 0, 0);
+  // Detect DST gap: if the engine shifted the time, compensate.
+  const actualMins = d.getHours() * 60 + d.getMinutes();
+  const expectedMins = totalMinutes % (24 * 60);
+  if (actualMins !== expectedMins) {
+    d.setMinutes(d.getMinutes() + (expectedMins - actualMins));
+  }
+  return d.toISOString();
 }
 
 // ── Types derived from tRPC output (avoids unsafe `as` casts) ─────────────────
@@ -86,8 +113,8 @@ function buildMemberSlots(slots: ComputedSlot[]): MemberSlots {
     if (slot.type !== "available") continue;
     const dateStr = slot.date;
     if (!result[dateStr]) result[dateStr] = new Set();
-    const startIdx = Math.max(0, isoToSlotIndex(slot.start, dateStr));
-    const endIdx = Math.min(SLOTS_PER_DAY, isoToSlotIndex(slot.end, dateStr));
+    const startIdx = Math.max(0, isoToSlotIndex(slot.start));
+    const endIdx = Math.min(SLOTS_PER_DAY, isoToSlotIndex(slot.end));
     for (let i = startIdx; i < endIdx; i++) {
       result[dateStr].add(i);
     }
@@ -227,6 +254,7 @@ function ProposeDialog({
 
   const startLabel = format(new Date(startsAt), "EEE d MMM, HH:mm");
   const endLabel = format(new Date(endsAt), "HH:mm");
+  const tzLabel = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) { reset(); onClose(); } }}>
@@ -235,7 +263,7 @@ function ProposeDialog({
           <DialogTitle>Propose session</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          {startLabel} – {endLabel} (UTC)
+          {startLabel} – {endLabel} ({tzLabel})
         </p>
 
         {error && (
