@@ -2,6 +2,7 @@
 
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -265,17 +266,17 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
 
   const leave = api.groups.leave.useMutation({
     onSuccess: () => router.push("/groups"),
-    onError: (err) => alert(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
   const removeMember = api.groups.removeMember.useMutation({
     onSuccess: () => void utils.groups.get.invalidate({ id }),
-    onError: (err) => alert(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
   const transferOwnership = api.groups.transferOwnership.useMutation({
     onSuccess: () => void utils.groups.get.invalidate({ id }),
-    onError: (err) => alert(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
   if (isLoading || meLoading) return <p className="text-muted-foreground">Loading…</p>;
@@ -328,25 +329,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       {/* Command centre — next session, active poll, members online */}
       <GroupCommandCentre groupId={id} members={group.memberships} />
 
-      <InviteSection groupId={id} />
-
-      {isAdmin && (
-        <GroupSettings
-          group={{
-            id: group.id,
-            name: group.name,
-            description: group.description,
-            color: group.color ?? null,
-            discordInviteUrl: group.discordInviteUrl,
-            archivedAt: group.archivedAt ?? null,
-          }}
-          isOwner={isOwner}
-          onSaved={() => void refetch()}
-        />
-      )}
-
-      <RecurringTemplatesSection groupId={id} isAdmin={isAdmin} />
-
+      {/* ── Members & availability ─────────────────────────────────────────── */}
       <section className="space-y-3">
         <h2 className="font-semibold">Members ({group.memberships.length})</h2>
         <ul className="space-y-2">
@@ -422,6 +405,32 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         </p>
         <GroupOverlapView groupId={id} />
       </section>
+
+      {/* ── Group management ──────────────────────────────────────────────── */}
+      <div className="border-t pt-6 space-y-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Group management
+        </h2>
+
+        <InviteSection groupId={id} />
+
+        <RecurringTemplatesSection groupId={id} isAdmin={isAdmin} />
+
+        {isAdmin && (
+          <GroupSettings
+            group={{
+              id: group.id,
+              name: group.name,
+              description: group.description,
+              color: group.color ?? null,
+              discordInviteUrl: group.discordInviteUrl,
+              archivedAt: group.archivedAt ?? null,
+            }}
+            isOwner={isOwner}
+            onSaved={() => void refetch()}
+          />
+        )}
+      </div>
 
       {/* Confirmation dialog for remove / transfer ownership */}
       <AlertDialog open={!!confirmAction} onOpenChange={(open) => { if (!open) setConfirmAction(null); }}>
