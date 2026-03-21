@@ -48,6 +48,7 @@ function notifLink(type: string, data: NotifData): string | null {
       return data.postId ? `/feed/${data.postId}` : "/feed";
     case "group_invite_received":
       return "/groups";
+    case "event_proposed":
     case "event_confirmed":
     case "event_cancelled":
       return data.eventId ? `/events/${data.eventId}` : "/events";
@@ -70,6 +71,8 @@ function notifMessage(type: string, data: NotifData): string {
       return `${data.likerName ?? "Someone"} liked your post.`;
     case "comment_like":
       return `${data.likerName ?? "Someone"} liked your comment.`;
+    case "event_proposed":
+      return `${data.proposerName ?? "Someone"} proposed a session: "${data.eventTitle ?? "Untitled"}" in ${data.groupName ?? "your group"}.`;
     case "event_confirmed":
       return `"${data.eventTitle ?? "An event"}" in ${data.groupName ?? "your group"} has been confirmed.`;
     case "event_cancelled":

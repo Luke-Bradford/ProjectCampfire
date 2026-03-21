@@ -60,7 +60,7 @@ export const eventsRouter = createTRPCRouter({
       // Reject new events in archived groups
       const group = await db.query.groups.findFirst({
         where: eq(groups.id, input.groupId),
-        columns: { archivedAt: true },
+        columns: { archivedAt: true, name: true },
       });
       if (group?.archivedAt) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "This group is archived." });
@@ -86,6 +86,41 @@ export const eventsRouter = createTRPCRouter({
         confirmedStartsAt: input.confirmedStartsAt ? new Date(input.confirmedStartsAt) : null,
         confirmedEndsAt: input.confirmedEndsAt ? new Date(input.confirmedEndsAt) : null,
       });
+
+      // Notify all other group members that a session has been proposed.
+      // The entire block is fire-and-forget: any failure (including the member
+      // query) must not surface to the caller — the event was already created.
+      const proposerName = ctx.user.name ?? "Someone";
+      const groupName = group?.name ?? null;
+      void (async () => {
+        const members = await db.query.groupMemberships.findMany({
+          where: eq(groupMemberships.groupId, input.groupId),
+          columns: { userId: true },
+        });
+        const otherMembers = members.map((m) => m.userId).filter((uid) => uid !== ctx.user.id);
+        if (otherMembers.length === 0) return;
+        const notifData = {
+          eventId: id,
+          eventTitle: input.title,
+          groupName,
+          proposerName,
+        };
+        await db.insert(notifications)
+          .values(otherMembers.map((uid) => ({
+            id: createId(),
+            userId: uid,
+            type: "event_proposed" as const,
+            data: notifData,
+          })));
+        for (const uid of otherMembers) {
+          void enqueuePush(uid, {
+            title: `New session proposed: ${input.title}`,
+            body: `${proposerName} proposed a session in ${groupName || "your group"}.`,
+            url: `/events/${id}`,
+          }).catch(() => undefined);
+        }
+      })().catch((err: unknown) => log.error("event_proposed notification failed", { err: String(err) }));
+
       return { id };
     }),
 
