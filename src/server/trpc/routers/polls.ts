@@ -374,7 +374,8 @@ export const pollsRouter = createTRPCRouter({
         group: { columns: { id: true, name: true } },
         options: {
           columns: { id: true, label: true },
-          // Fetch only the id for vote counting — we only need the count, not user identity.
+          // TODO(#411): replace with a SQL COUNT aggregate to avoid loading all
+          // vote rows into memory. Fine at MVP scale but should be fixed for large groups.
           with: { votes: { columns: { pollOptionId: true } } },
         },
       },
@@ -393,10 +394,12 @@ export const pollsRouter = createTRPCRouter({
       iVoted: p.options.some((o) => o.votes.length > 0),
     }));
 
-    // For closed polls, find the winning option(s) by vote count
+    // For closed polls, find the winning option by vote count.
+    // winner is undefined when a poll has no options (shouldn't occur in practice).
+    // winnerLabel is null when nobody voted (votes.length === 0 on the top option).
     const recentlyClosed = closedPolls.map((p) => {
       const sorted = [...p.options].sort((a, b) => b.votes.length - a.votes.length);
-      const winner = sorted[0];
+      const winner = sorted[0]; // undefined only if poll has no options
       return {
         id: p.id,
         question: p.question,
