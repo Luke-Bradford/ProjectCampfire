@@ -211,6 +211,13 @@
       "when": 1774098799922,
       "tag": "0029_friendly_norman_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1774099575019,
+      "tag": "0030_hard_moon_knight",
+      "breakpoints": true
     }
   ]
 }

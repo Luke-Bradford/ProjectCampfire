@@ -24,6 +24,20 @@ const EVENT_STATUS_LABEL: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
+// ── Steam achievements ────────────────────────────────────────────────────────
+
+function AchievementsSection({ gameId }: { gameId: string }) {
+  const { data, isLoading } = api.games.achievements.useQuery({ gameId });
+  if (isLoading) return <span className="text-xs text-muted-foreground">Loading achievements…</span>;
+  if (!data) return null;
+  const pct = data.total > 0 ? Math.round((data.unlocked / data.total) * 100) : 0;
+  return (
+    <div className="flex items-center gap-2 pt-0.5 text-xs text-muted-foreground">
+      <span>🏆 {data.unlocked}/{data.total} achievements ({pct}%)</span>
+    </div>
+  );
+}
+
 // ── SteamSpy stats ────────────────────────────────────────────────────────────
 
 function SteamSpyStats({ metadataJson }: { metadataJson: unknown }) {
@@ -206,6 +220,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ id: strin
             <p className="text-sm text-muted-foreground">{game.description}</p>
           )}
           <SteamSpyStats metadataJson={game.metadataJson} />
+          {game.myPlatforms.includes("pc") && <AchievementsSection gameId={id} />}
           {game.priceDataJson && (
             <div className="flex items-center gap-2 pt-0.5">
               {game.priceDataJson.discountPercent > 0 ? (

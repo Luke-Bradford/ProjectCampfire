@@ -77,6 +77,9 @@ export const gameOwnerships = pgTable(
     source: ownershipSourceEnum("source").notNull().default("manual"),
     hidden: boolean("hidden").notNull().default(false),
     isFavourite: boolean("is_favourite").notNull().default(false),
+    // Steam achievement counts — null = not yet fetched or not applicable.
+    achievementsUnlocked: integer("achievements_unlocked"),
+    achievementsTotal: integer("achievements_total"),
     // Steam playtime data — null means never launched or pre-migration row.
     playtimeMinutes: integer("playtime_minutes"),
     lastPlayedAt: timestamp("last_played_at"),

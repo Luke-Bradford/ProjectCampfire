@@ -264,6 +264,7 @@ export default function MyProfilePage() {
   const { data: me, isLoading: meLoading } = api.user.me.useQuery();
   const { data: stats, isLoading: statsLoading } = api.user.profileStats.useQuery();
   const { data: gamingStats, isLoading: gamingStatsLoading } = api.games.gamingStats.useQuery();
+  const { data: totalAchievements } = api.games.totalAchievements.useQuery();
   const { data: schedule, isLoading: scheduleLoading } = api.availability.getSchedule.useQuery();
 
   const isLoading = meLoading || statsLoading;
@@ -361,19 +362,26 @@ export default function MyProfilePage() {
                 </Button>
               </div>
               {me?.steamId ? (
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-                  <span className="text-sm text-muted-foreground">Account linked</span>
-                  {me.steamProfileUrl && (
-                    <a
-                      href={me.steamProfileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      View profile
-                      <ExternalLink size={11} />
-                    </a>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                    <span className="text-sm text-muted-foreground">Account linked</span>
+                    {me.steamProfileUrl && (
+                      <a
+                        href={me.steamProfileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        View profile
+                        <ExternalLink size={11} />
+                      </a>
+                    )}
+                  </div>
+                  {totalAchievements && (
+                    <p className="text-xs text-muted-foreground">
+                      🏆 {totalAchievements.unlocked.toLocaleString()} / {totalAchievements.total.toLocaleString()} achievements unlocked
+                    </p>
                   )}
                 </div>
               ) : (
