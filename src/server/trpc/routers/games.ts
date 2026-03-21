@@ -739,8 +739,10 @@ export const gamesRouter = createTRPCRouter({
   toggleFavourite: protectedProcedure
     .input(z.object({ gameId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      // All reads and the UPDATE are inside one transaction so no TOCTOU race is possible —
-      // the ownership read, count check, and update are serialised together.
+      // All reads and the UPDATE are inside one transaction. Under READ COMMITTED
+      // (Postgres default) two concurrent calls can still both read count=5 and both
+      // succeed, but the practical risk (transient 7th pin) is negligible for MVP.
+      // A SERIALIZABLE transaction or SELECT FOR UPDATE would close this window entirely.
       const newValue = await db.transaction(async (tx) => {
         // Verify ownership and read current state.
         const rows = await tx.query.gameOwnerships.findMany({
