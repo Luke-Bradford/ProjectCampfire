@@ -378,7 +378,7 @@ export default function MyProfilePage() {
                       </a>
                     )}
                   </div>
-                  {totalAchievements && (
+                  {totalAchievements && totalAchievements.unlocked > 0 && (
                     <p className="text-xs text-muted-foreground">
                       🏆 {new Intl.NumberFormat("en").format(totalAchievements.unlocked)} / {new Intl.NumberFormat("en").format(totalAchievements.total)} achievements unlocked
                     </p>
