@@ -500,7 +500,7 @@ function CreatePollDialog({ eventId, groupId, onCreated, forceOpen, onForceOpenC
                             type="button"
                             disabled={alreadyAdded || gameOptions.length >= 20}
                             onClick={() => {
-                              if (alreadyAdded) return;
+                              if (alreadyAdded || gameOptions.length >= 20) return;
                               // Fill the first empty slot, or append a new one
                               const emptyIdx = gameOptions.findIndex((o) => !o.gameId && !o.label.trim());
                               if (emptyIdx >= 0) {
