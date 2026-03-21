@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, Layers, Gamepad2, ExternalLink, Settings, ChevronRight, Star } from "lucide-react";
+import { toast } from "sonner";
 import { PostsTab } from "@/components/feed/posts-tab";
 import { GamingActivityCard, EMPTY_GAMING_STATS } from "@/components/profile/gaming-activity-card";
 import { AvailabilitySummary } from "@/components/availability/availability-summary";
@@ -70,6 +71,7 @@ function PinnedGamesSection() {
       void utils.games.myFavouriteGames.invalidate();
       void utils.games.myGames.invalidate();
     },
+    onError: (err) => toast.error(err.message),
   });
 
   if (isLoading) {
