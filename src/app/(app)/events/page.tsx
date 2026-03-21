@@ -144,7 +144,7 @@ function GroupEvents({ groupId, groupName }: { groupId: string; groupName: strin
                   {/* Date column */}
                   {dateLabel ? (
                     <div className="flex flex-col items-center justify-center w-16 shrink-0 text-center">
-                      <span className="text-base font-bold leading-none tabular-nums">
+                      <span className="text-sm font-bold leading-tight">
                         {dateLabel}
                       </span>
                       {timeLabel && (
