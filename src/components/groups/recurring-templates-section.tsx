@@ -148,13 +148,12 @@ function TemplateForm({
 
       <div className="space-y-2">
         <Label htmlFor="rt-tz">Timezone</Label>
-        <input
+        <Input
           id="rt-tz"
           list="rt-tz-list"
           value={form.timezone}
           onChange={(e) => set("timezone", e.target.value)}
           placeholder="Europe/London"
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring"
         />
         <datalist id="rt-tz-list">
           {ALL_TIMEZONES.map((tz) => <option key={tz} value={tz} />)}
