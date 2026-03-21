@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -330,4 +330,86 @@ export const pollsRouter = createTRPCRouter({
 
       return poll ?? null;
     }),
+
+  /**
+   * Returns active polls (needing the user's vote) and recently closed polls
+   * across all groups the user belongs to. Used by the right-panel sidebar.
+   */
+  forSidebar: protectedProcedure.query(async ({ ctx }) => {
+    // 1. Find all groups the user is a member of
+    const memberships = await db.query.groupMemberships.findMany({
+      where: eq(groupMemberships.userId, ctx.user.id),
+      columns: { groupId: true },
+    });
+    if (memberships.length === 0) return { active: [], recentlyClosed: [] };
+
+    const groupIds = memberships.map((m) => m.groupId);
+
+    // 2. Active polls — open, in any of the user's groups
+    const activePolls = await db.query.polls.findMany({
+      where: and(
+        inArray(polls.groupId, groupIds),
+        eq(polls.status, "open")
+      ),
+      columns: { id: true, question: true, groupId: true, eventId: true, closesAt: true },
+      with: {
+        group: { columns: { id: true, name: true } },
+        options: {
+          columns: { id: true },
+          with: { votes: { where: eq(pollVotes.userId, ctx.user.id), columns: { userId: true } } },
+        },
+      },
+      orderBy: [desc(polls.createdAt)],
+      limit: 10,
+    });
+
+    // 3. Recently closed polls — last 2 across the user's groups
+    const closedPolls = await db.query.polls.findMany({
+      where: and(
+        inArray(polls.groupId, groupIds),
+        eq(polls.status, "closed")
+      ),
+      columns: { id: true, question: true, groupId: true, eventId: true },
+      with: {
+        group: { columns: { id: true, name: true } },
+        options: {
+          columns: { id: true, label: true },
+          // TODO(#411): replace with a SQL COUNT aggregate to avoid loading all
+          // vote rows into memory. Fine at MVP scale but should be fixed for large groups.
+          with: { votes: { columns: { pollOptionId: true } } },
+        },
+      },
+      orderBy: [desc(polls.createdAt)],
+      limit: 2,
+    });
+
+    // Annotate active polls with whether the user has already voted
+    const active = activePolls.map((p) => ({
+      id: p.id,
+      question: p.question,
+      groupId: p.groupId,
+      eventId: p.eventId,
+      closesAt: p.closesAt,
+      groupName: p.group?.name ?? null,
+      iVoted: p.options.some((o) => o.votes.length > 0),
+    }));
+
+    // For closed polls, find the winning option by vote count.
+    // winner is undefined when a poll has no options (shouldn't occur in practice).
+    // winnerLabel is null when nobody voted (votes.length === 0 on the top option).
+    const recentlyClosed = closedPolls.map((p) => {
+      const sorted = [...p.options].sort((a, b) => b.votes.length - a.votes.length);
+      const winner = sorted[0]; // undefined only if poll has no options
+      return {
+        id: p.id,
+        question: p.question,
+        groupId: p.groupId,
+        eventId: p.eventId,
+        groupName: p.group?.name ?? null,
+        winnerLabel: winner && winner.votes.length > 0 ? winner.label : null,
+      };
+    });
+
+    return { active, recentlyClosed };
+  }),
 });
