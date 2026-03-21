@@ -455,7 +455,16 @@ export function PostCard({
                 </>
               )}
               {post.event && (
-                <> · <span className="font-medium">{post.event.title}</span></>
+                <>
+                  {" · "}
+                  <Link
+                    href={`/events/${post.event.id}`}
+                    className="font-medium hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Re: {post.event.title}
+                  </Link>
+                </>
               )}
             </p>
           </div>

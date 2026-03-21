@@ -113,8 +113,26 @@ export const feedRouter = createTRPCRouter({
         ? not(inArray(posts.authorId, blockedIds))
         : undefined;
 
+      // For group:x — include posts directly in the group AND posts scoped to
+      // events that belong to this group (event posts have groupId=null, eventId=<id>).
+      const groupVisibilityFilter = groupFilter
+        ? and(
+            or(
+              eq(posts.groupId, groupFilter),
+              and(
+                not(isNull(posts.eventId)),
+                inArray(
+                  posts.eventId,
+                  db.select({ id: events.id }).from(events).where(eq(events.groupId, groupFilter))
+                )
+              )
+            ),
+            blockedExclusion
+          )
+        : undefined;
+
       const visibilityFilter = groupFilter
-        ? and(eq(posts.groupId, groupFilter), blockedExclusion)
+        ? groupVisibilityFilter
         : filter === "friends"
           // isNull(posts.groupId) scopes to non-group posts only (direct feed).
           ? and(inArray(posts.authorId, visibleAuthorIds), isNull(posts.groupId))
