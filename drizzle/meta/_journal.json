@@ -204,6 +204,13 @@
       "when": 1774013922405,
       "tag": "0028_tidy_monster_badoon",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1774098799922,
+      "tag": "0029_friendly_norman_osborn",
+      "breakpoints": true
     }
   ]
 }

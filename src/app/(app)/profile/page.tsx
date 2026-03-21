@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Layers, Gamepad2, ExternalLink, Settings, ChevronRight } from "lucide-react";
+import { Users, Layers, Gamepad2, ExternalLink, Settings, ChevronRight, Star } from "lucide-react";
 import { PostsTab } from "@/components/feed/posts-tab";
 import { GamingActivityCard, EMPTY_GAMING_STATS } from "@/components/profile/gaming-activity-card";
 import { AvailabilitySummary } from "@/components/availability/availability-summary";
@@ -52,6 +52,78 @@ const PLATFORM_LABELS: Record<string, string> = {
   nintendo: "NS",
   other: "Other",
 };
+
+function formatPlaytime(minutes: number): string {
+  const total = Math.round(Math.abs(minutes));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+function PinnedGamesSection() {
+  const { data: pinned, isLoading } = api.games.myFavouriteGames.useQuery();
+  const utils = api.useUtils();
+  const toggleFavourite = api.games.toggleFavourite.useMutation({
+    onSuccess: () => {
+      void utils.games.myFavouriteGames.invalidate();
+      void utils.games.myGames.invalidate();
+    },
+  });
+
+  if (isLoading || !pinned || pinned.length === 0) return null;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Star size={14} className="text-yellow-500 fill-yellow-500" />
+        <h3 className="text-sm font-semibold">Pinned games</h3>
+        <span className="text-xs text-muted-foreground ml-auto">{pinned.length}/6</span>
+      </div>
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+        {pinned.map((g) => (
+          <div key={g.id} className="group relative flex flex-col gap-1">
+            <div className="relative">
+              <Link href={`/games/${g.id}`} className="block">
+                <div className="aspect-[3/4] rounded-lg overflow-hidden bg-muted border">
+                  {g.coverUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={g.coverUrl}
+                      alt={g.title}
+                      className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Gamepad2 size={20} className="text-muted-foreground/40" />
+                    </div>
+                  )}
+                </div>
+              </Link>
+              {/* Unpin button — visible on hover */}
+              <button
+                className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 backdrop-blur-sm rounded p-0.5 text-yellow-500 hover:text-muted-foreground"
+                onClick={() => toggleFavourite.mutate({ gameId: g.id })}
+                disabled={toggleFavourite.isPending && toggleFavourite.variables?.gameId === g.id}
+                aria-label="Unpin"
+                title="Unpin"
+              >
+                <Star size={12} fill="currentColor" />
+              </button>
+            </div>
+            <p className="text-[11px] leading-snug truncate text-muted-foreground group-hover:text-foreground transition-colors">
+              {g.title}
+            </p>
+            {g.playtimeMinutes != null && g.playtimeMinutes > 0 && (
+              <p className="text-[10px] text-muted-foreground/70">{formatPlaytime(g.playtimeMinutes)}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function GamesTab() {
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
@@ -308,7 +380,8 @@ export default function MyProfilePage() {
         </TabsContent>
 
         {/* ── Games ── */}
-        <TabsContent value="games" className="mt-4">
+        <TabsContent value="games" className="mt-4 space-y-6">
+          <PinnedGamesSection />
           <GamesTab />
         </TabsContent>
 

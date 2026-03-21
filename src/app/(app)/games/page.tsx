@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { GamesListSkeleton } from "@/components/ui/skeletons";
+import { Star } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -521,6 +522,13 @@ export default function GamesPage() {
     onSuccess: () => void utils.games.myGames.invalidate(),
   });
 
+  const toggleFavourite = api.games.toggleFavourite.useMutation({
+    onSuccess: () => {
+      void utils.games.myGames.invalidate();
+      void utils.games.myFavouriteGames.invalidate();
+    },
+  });
+
   function setView(mode: ViewMode) {
     setViewMode(mode);
     localStorage.setItem("games-view-mode", mode);
@@ -735,14 +743,27 @@ export default function GamesPage() {
                   <Link href={`/games/${g.id}`} className="text-xs font-medium leading-tight line-clamp-2 hover:underline flex-1">
                     {g.title}
                   </Link>
-                  <button
-                    className="text-xs text-muted-foreground hover:text-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={() => setGameHidden.mutate({ gameId: g.id, hidden: !g.hidden })}
-                    disabled={setGameHidden.isPending && setGameHidden.variables?.gameId === g.id}
-                    aria-label={g.hidden ? "Unhide" : "Hide"}
-                  >
-                    {g.hidden ? "↩" : "✕"}
-                  </button>
+                  <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {!g.hidden && (
+                      <button
+                        className={`p-0.5 transition-colors ${g.isFavourite ? "text-yellow-500" : "text-muted-foreground hover:text-yellow-500"}`}
+                        onClick={() => toggleFavourite.mutate({ gameId: g.id })}
+                        disabled={toggleFavourite.isPending && toggleFavourite.variables?.gameId === g.id}
+                        aria-label={g.isFavourite ? "Unpin favourite" : "Pin as favourite"}
+                        title={g.isFavourite ? "Unpin favourite" : "Pin as favourite"}
+                      >
+                        <Star size={11} fill={g.isFavourite ? "currentColor" : "none"} />
+                      </button>
+                    )}
+                    <button
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => setGameHidden.mutate({ gameId: g.id, hidden: !g.hidden })}
+                      disabled={setGameHidden.isPending && setGameHidden.variables?.gameId === g.id}
+                      aria-label={g.hidden ? "Unhide" : "Hide"}
+                    >
+                      {g.hidden ? "↩" : "✕"}
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -802,15 +823,30 @@ export default function GamesPage() {
                     )}
                   </div>
                 </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-muted-foreground hover:text-foreground shrink-0"
-                  onClick={() => setGameHidden.mutate({ gameId: g.id, hidden: !g.hidden })}
-                  disabled={setGameHidden.isPending && setGameHidden.variables?.gameId === g.id}
-                >
-                  {g.hidden ? "Unhide" : "Hide"}
-                </Button>
+                <div className="flex items-center gap-1 shrink-0">
+                  {!g.hidden && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className={`px-2 ${g.isFavourite ? "text-yellow-500" : "text-muted-foreground hover:text-yellow-500"}`}
+                      onClick={() => toggleFavourite.mutate({ gameId: g.id })}
+                      disabled={toggleFavourite.isPending && toggleFavourite.variables?.gameId === g.id}
+                      aria-label={g.isFavourite ? "Unpin favourite" : "Pin as favourite"}
+                      title={g.isFavourite ? "Unpin favourite" : "Pin as favourite"}
+                    >
+                      <Star size={14} fill={g.isFavourite ? "currentColor" : "none"} />
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => setGameHidden.mutate({ gameId: g.id, hidden: !g.hidden })}
+                    disabled={setGameHidden.isPending && setGameHidden.variables?.gameId === g.id}
+                  >
+                    {g.hidden ? "Unhide" : "Hide"}
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>
