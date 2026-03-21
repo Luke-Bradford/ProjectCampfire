@@ -15,7 +15,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { format, isToday, isTomorrow } from "date-fns";
+import { format } from "date-fns";
+import { formatEventDate } from "@/lib/format-date";
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
@@ -41,11 +42,6 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-function formatEventDate(date: Date): { label: string; sub: string | null } {
-  if (isToday(date))    return { label: "Today",    sub: format(date, "HH:mm") };
-  if (isTomorrow(date)) return { label: "Tomorrow", sub: format(date, "HH:mm") };
-  return { label: format(date, "d MMM"), sub: format(date, "HH:mm") };
-}
 
 // ── Create event dialog ───────────────────────────────────────────────────────
 
@@ -134,7 +130,8 @@ function GroupEvents({ groupId, groupName }: { groupId: string; groupName: strin
         <ul className="space-y-2">
           {eventList.map((ev) => {
             const date = ev.confirmedStartsAt ? new Date(ev.confirmedStartsAt) : null;
-            const dateInfo = date ? formatEventDate(date) : null;
+            const dateLabel = date ? formatEventDate(date, { includeTime: false }) : null;
+            const timeLabel = date ? format(date, "HH:mm") : null;
             // rsvps is pre-filtered server-side to the current user's own RSVP only.
             const myRsvp = ev.rsvps[0]?.status ?? null;
 
@@ -145,13 +142,13 @@ function GroupEvents({ groupId, groupName }: { groupId: string; groupName: strin
                   className="flex items-stretch gap-4 rounded-xl border bg-card shadow-sm px-4 py-3 hover:shadow-md transition-shadow"
                 >
                   {/* Date column */}
-                  {dateInfo ? (
+                  {dateLabel ? (
                     <div className="flex flex-col items-center justify-center w-16 shrink-0 text-center">
                       <span className="text-base font-bold leading-none tabular-nums">
-                        {dateInfo.label}
+                        {dateLabel}
                       </span>
-                      {dateInfo.sub && (
-                        <span className="text-xs text-muted-foreground mt-0.5">{dateInfo.sub}</span>
+                      {timeLabel && (
+                        <span className="text-xs text-muted-foreground mt-0.5">{timeLabel}</span>
                       )}
                     </div>
                   ) : (

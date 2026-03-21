@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { format, isToday, isTomorrow } from "date-fns";
+import { format } from "date-fns";
+import { formatEventDate } from "@/lib/format-date";
 import { Calendar, Vote } from "lucide-react";
 import { api } from "@/trpc/react";
 import { rsvpStatusEnum } from "@/server/db/schema";
@@ -55,7 +56,7 @@ function RsvpButtons({
               : "border-border text-muted-foreground hover:bg-accent"
           }`}
         >
-          {s === "yes" ? "Going" : "Skip"}
+          {s === "yes" ? "Going" : "Can't"}
         </button>
       ))}
     </div>
@@ -135,11 +136,6 @@ function CreateGroupDialog({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-function formatEventDate(d: Date): string {
-  if (isToday(d)) return `Today ${format(d, "h:mm a")}`;
-  if (isTomorrow(d)) return `Tomorrow ${format(d, "h:mm a")}`;
-  return format(d, "EEE d MMM, h:mm a");
-}
 
 export default function GroupsPage() {
   const { data: myGroups = [], isLoading, refetch } = api.groups.list.useQuery();
