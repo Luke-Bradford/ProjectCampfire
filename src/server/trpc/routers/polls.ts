@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createId } from "@paralleldrive/cuid2";
 import { createTRPCRouter, protectedProcedure } from "@/server/trpc/trpc";
@@ -367,14 +367,15 @@ export const pollsRouter = createTRPCRouter({
     const closedPolls = await db.query.polls.findMany({
       where: and(
         inArray(polls.groupId, groupIds),
-        ne(polls.status, "open")
+        eq(polls.status, "closed")
       ),
       columns: { id: true, question: true, groupId: true, eventId: true },
       with: {
         group: { columns: { id: true, name: true } },
         options: {
           columns: { id: true, label: true },
-          with: { votes: { columns: { userId: true } } },
+          // Fetch only the id for vote counting — we only need the count, not user identity.
+          with: { votes: { columns: { pollOptionId: true } } },
         },
       },
       orderBy: [desc(polls.createdAt)],

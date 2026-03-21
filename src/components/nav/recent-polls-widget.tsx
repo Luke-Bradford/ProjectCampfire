@@ -3,15 +3,9 @@
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import type { RouterOutputs } from "@/trpc/react";
+import { pollHref } from "@/lib/poll-href";
 
-type SidebarData = RouterOutputs["polls"]["forSidebar"];
-type ClosedPoll = SidebarData["recentlyClosed"][number];
-
-function pollHref(poll: Pick<ClosedPoll, "groupId" | "eventId">) {
-  if (poll.eventId) return `/events/${poll.eventId}`;
-  if (poll.groupId) return `/groups/${poll.groupId}`;
-  return "/";
-}
+type ClosedPoll = RouterOutputs["polls"]["forSidebar"]["recentlyClosed"][number];
 
 export function RecentPollsWidget({ polls }: { polls: ClosedPoll[] }) {
   if (polls.length === 0) return null;

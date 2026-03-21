@@ -3,15 +3,9 @@
 import Link from "next/link";
 import { Vote } from "lucide-react";
 import type { RouterOutputs } from "@/trpc/react";
+import { pollHref } from "@/lib/poll-href";
 
-type SidebarData = RouterOutputs["polls"]["forSidebar"];
-type ActivePoll = SidebarData["active"][number];
-
-function pollHref(poll: Pick<ActivePoll, "groupId" | "eventId">) {
-  if (poll.eventId) return `/events/${poll.eventId}`;
-  if (poll.groupId) return `/groups/${poll.groupId}`;
-  return "/";
-}
+type ActivePoll = RouterOutputs["polls"]["forSidebar"]["active"][number];
 
 export function ActivePollsWidget({ polls }: { polls: ActivePoll[] }) {
   if (polls.length === 0) return null;
