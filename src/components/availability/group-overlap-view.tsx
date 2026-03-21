@@ -581,15 +581,22 @@ export function GroupOverlapView({ groupId }: { groupId: string }) {
   // Propose dialog state
   const [proposal, setProposal] = useState<{ startsAt: string; endsAt: string } | null>(null);
 
-  // Scroll to current time on mount (offset 1 hour up so "now" isn't flush with top)
+  // Scroll to current time once data is ready.
+  // Firing on [] (mount) is too early — the grid hasn't rendered its full
+  // height yet while data is loading, so scrollTop has nothing to scroll
+  // against. We depend on memberAvailability so the scroll fires after the
+  // grid renders. The hasScrolled ref prevents re-scrolling on refetches.
   const gridScrollRef = useRef<HTMLDivElement>(null);
+  const hasScrolled = useRef(false);
   useEffect(() => {
+    if (!memberAvailability || hasScrolled.current) return;
     const el = gridScrollRef.current;
     if (!el) return;
+    hasScrolled.current = true;
     const now = new Date();
     const nowPx = (now.getHours() * 60 + now.getMinutes()) / 60 * HOUR_HEIGHT_PX;
     requestAnimationFrame(() => { el.scrollTop = Math.max(0, nowPx - HOUR_HEIGHT_PX); });
-  }, []);
+  }, [memberAvailability]);
 
   // Compute per-member slot sets — typed via RouterOutputs, no unsafe casts
   const memberSlotData = useMemo(() => {
