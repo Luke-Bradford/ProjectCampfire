@@ -7,6 +7,7 @@ import { db } from "@/server/db";
 import { games, gameOwnerships, groupMemberships, pollOptions, polls, user } from "@/server/db/schema";
 import type { RecentlyPlayedEntry } from "@/server/db/schema";
 import { assertRateLimit } from "@/server/ratelimit";
+import { fetchAndCacheAchievements } from "@/server/lib/steam-achievements";
 import {
   igdbEnabled,
   searchIgdbGames,
@@ -817,5 +818,48 @@ export const gamesRouter = createTRPCRouter({
 
     // toggleFavourite enforces a max of 6 distinct games; the map has at most 6 entries.
     return [...gameMap.values()];
+  }),
+
+  /**
+   * Returns Steam achievement counts (unlocked / total) for a specific game
+   * owned by the current user. Fetches from Steam on first call and caches
+   * the result in the gameOwnerships row. Returns null when:
+   *   - Steam is not linked / library is private
+   *   - Not a Steam game (no steamAppId)
+   *   - Game has no achievements
+   *   - STEAM_API_KEY not configured
+   */
+  achievements: protectedProcedure
+    .input(z.object({ gameId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      return fetchAndCacheAchievements(ctx.user.id, input.gameId);
+    }),
+
+  /**
+   * Returns the total achievement count across all Steam games in the user's
+   * library where achievement data has been fetched. Used for the profile stat row.
+   * Only counts games where achievementsTotal > 0 (i.e. the game has achievements).
+   */
+  totalAchievements: protectedProcedure.query(async ({ ctx }) => {
+    // Sum achievementsUnlocked across PC ownership rows for this user where data exists.
+    const [row] = await db
+      .select({
+        unlocked: sql<number>`COALESCE(SUM(${gameOwnerships.achievementsUnlocked}), 0)::int`,
+        total: sql<number>`COALESCE(SUM(${gameOwnerships.achievementsTotal}), 0)::int`,
+      })
+      .from(gameOwnerships)
+      .where(
+        and(
+          eq(gameOwnerships.userId, ctx.user.id),
+          eq(gameOwnerships.platform, "pc"),
+          isNotNull(gameOwnerships.achievementsUnlocked),
+          isNotNull(gameOwnerships.achievementsTotal),
+        )
+      );
+
+    const unlocked = row?.unlocked ?? 0;
+    const total = row?.total ?? 0;
+    if (total === 0) return null;
+    return { unlocked, total };
   }),
 });
