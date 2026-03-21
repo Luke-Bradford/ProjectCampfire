@@ -72,7 +72,23 @@ function PinnedGamesSection() {
     },
   });
 
-  if (isLoading || !pinned || pinned.length === 0) return null;
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Star size={14} className="text-yellow-500 fill-yellow-500" />
+          <h3 className="text-sm font-semibold">Pinned games</h3>
+        </div>
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="aspect-[3/4] rounded-lg" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!pinned || pinned.length === 0) return null;
 
   return (
     <div className="space-y-3">

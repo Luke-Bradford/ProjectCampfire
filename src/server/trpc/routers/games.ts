@@ -739,22 +739,22 @@ export const gamesRouter = createTRPCRouter({
   toggleFavourite: protectedProcedure
     .input(z.object({ gameId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      // Verify the user actually owns this game and read current state.
-      const rows = await db.query.gameOwnerships.findMany({
-        where: and(
-          eq(gameOwnerships.userId, ctx.user.id),
-          eq(gameOwnerships.gameId, input.gameId)
-        ),
-        columns: { isFavourite: true },
-      });
-      if (rows.length === 0) throw new TRPCError({ code: "FORBIDDEN", message: "Game not in library." });
+      // All reads and the UPDATE are inside one transaction so no TOCTOU race is possible —
+      // the ownership read, count check, and update are serialised together.
+      const newValue = await db.transaction(async (tx) => {
+        // Verify ownership and read current state.
+        const rows = await tx.query.gameOwnerships.findMany({
+          where: and(
+            eq(gameOwnerships.userId, ctx.user.id),
+            eq(gameOwnerships.gameId, input.gameId)
+          ),
+          columns: { isFavourite: true },
+        });
+        if (rows.length === 0) throw new TRPCError({ code: "FORBIDDEN", message: "Game not in library." });
 
-      const currentlyFavourite = rows[0]!.isFavourite;
-      const newValue = !currentlyFavourite;
+        const currentlyFavourite = rows[0]!.isFavourite;
 
-      // Wrap the count-check and UPDATE in a transaction to prevent a TOCTOU race
-      // where two concurrent calls both read count=5 and both succeed, exceeding the limit.
-      await db.transaction(async (tx) => {
+        // Enforce max 6 distinct pinned games when adding a new one.
         if (!currentlyFavourite) {
           const [distinctCount] = await tx
             .select({ n: countDistinct(gameOwnerships.gameId) })
@@ -765,16 +765,18 @@ export const gamesRouter = createTRPCRouter({
           }
         }
 
+        const next = !currentlyFavourite;
         // Apply to all ownership rows for this user+game (all platforms).
         await tx
           .update(gameOwnerships)
-          .set({ isFavourite: newValue })
+          .set({ isFavourite: next })
           .where(
             and(
               eq(gameOwnerships.userId, ctx.user.id),
               eq(gameOwnerships.gameId, input.gameId)
             )
           );
+        return next;
       });
 
       return { isFavourite: newValue };
