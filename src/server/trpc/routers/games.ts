@@ -588,6 +588,38 @@ export const gamesRouter = createTRPCRouter({
       return result;
     }),
 
+  // Returns games owned by 2+ members of a group, ordered by ownership count desc.
+  // Used to seed game poll options from the group's shared library (CAMP-421).
+  groupSharedLibrary: protectedProcedure
+    .input(z.object({ groupId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const members = await db.query.groupMemberships.findMany({
+        where: eq(groupMemberships.groupId, input.groupId),
+        columns: { userId: true },
+      });
+      const memberIds = members.map((m) => m.userId);
+      if (!memberIds.includes(ctx.user.id)) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      const rows = await db
+        .select({
+          gameId: gameOwnerships.gameId,
+          ownerCount: count(gameOwnerships.userId),
+          title: games.title,
+          coverUrl: games.coverUrl,
+        })
+        .from(gameOwnerships)
+        .innerJoin(games, eq(games.id, gameOwnerships.gameId))
+        .where(inArray(gameOwnerships.userId, memberIds))
+        .groupBy(gameOwnerships.gameId, games.title, games.coverUrl)
+        .having(gt(count(gameOwnerships.userId), 1))
+        .orderBy(desc(count(gameOwnerships.userId)), asc(games.title))
+        .limit(20);
+
+      return rows;
+    }),
+
   // Poll history for a game within a group (CAMP-105).
   // Returns polls (with event context) where any option references this gameId,
   // scoped to the given group. Sorted newest first.

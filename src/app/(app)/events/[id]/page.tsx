@@ -432,6 +432,11 @@ function CreatePollDialog({ eventId, groupId, onCreated, forceOpen, onForceOpenC
     onError: (e) => setError(e.message),
   });
 
+  const { data: sharedLibrary } = api.games.groupSharedLibrary.useQuery(
+    { groupId },
+    { enabled: open && type === "game" }
+  );
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -483,6 +488,41 @@ function CreatePollDialog({ eventId, groupId, onCreated, forceOpen, onForceOpenC
             <Label>Options</Label>
             {type === "game" ? (
               <>
+                {sharedLibrary && sharedLibrary.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-muted-foreground">Suggest from group library</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {sharedLibrary.map((g) => {
+                        const alreadyAdded = gameOptions.some((o) => o.gameId === g.gameId);
+                        return (
+                          <button
+                            key={g.gameId}
+                            type="button"
+                            disabled={alreadyAdded || gameOptions.length >= 20}
+                            onClick={() => {
+                              if (alreadyAdded) return;
+                              // Fill the first empty slot, or append a new one
+                              const emptyIdx = gameOptions.findIndex((o) => !o.gameId && !o.label.trim());
+                              if (emptyIdx >= 0) {
+                                setGameOptions(gameOptions.map((o, i) => i === emptyIdx ? { ...o, label: g.title, gameId: g.gameId } : o));
+                              } else {
+                                setGameOptions([...gameOptions, { uid: crypto.randomUUID(), label: g.title, gameId: g.gameId }]);
+                              }
+                            }}
+                            className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${alreadyAdded ? "opacity-40 cursor-default" : "hover:bg-muted cursor-pointer"}`}
+                          >
+                            {g.coverUrl && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={g.coverUrl} alt="" className="h-4 w-3 rounded-sm object-cover shrink-0" />
+                            )}
+                            {g.title}
+                            <span className="text-muted-foreground">{g.ownerCount}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {gameOptions.map((opt, i) => (
                   <GameOptionSlot
                     key={opt.uid}
