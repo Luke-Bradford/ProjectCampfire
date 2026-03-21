@@ -91,7 +91,7 @@ export const eventsRouter = createTRPCRouter({
       // The entire block is fire-and-forget: any failure (including the member
       // query) must not surface to the caller — the event was already created.
       const proposerName = ctx.user.name ?? "Someone";
-      const groupName = group?.name ?? "";
+      const groupName = group?.name ?? null;
       void (async () => {
         const members = await db.query.groupMemberships.findMany({
           where: eq(groupMemberships.groupId, input.groupId),
