@@ -9,11 +9,9 @@
  *   the start/end time pre-filled, then navigates to the event page).
  * - Toggle individual members on/off to narrow the overlap.
  *
- * Note: the grid is rendered in UTC. Availability slots returned by the server
- * are already expressed as UTC ISO timestamps (expanded from the member's local
- * timezone by expandAvailability on the server). The times shown on the grid
- * are therefore UTC wall-clock times. This is a known MVP limitation — a future
- * improvement would convert slot positions to the viewing user's local timezone.
+ * The grid renders in the viewer's local timezone. Availability slots from the
+ * server are UTC ISO timestamps; we convert them to local time for display and
+ * convert proposed session times back to UTC ISO before storing.
  */
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
@@ -52,24 +50,38 @@ function initials(name: string) {
     .slice(0, 2);
 }
 
-/** Convert an ISO timestamp to a 30-min slot index relative to UTC midnight of dateStr */
+/**
+ * Convert a UTC ISO timestamp to a 30-min slot index relative to local
+ * midnight of dateStr (yyyy-MM-dd in the viewer's local timezone).
+ */
 function isoToSlotIndex(iso: string, dateStr: string): number {
   const d = new Date(iso);
-  const base = new Date(`${dateStr}T00:00:00Z`);
+  // Local midnight: parse dateStr as a local date (no time zone suffix)
+  const [y, mo, day] = dateStr.split("-").map(Number) as [number, number, number];
+  const base = new Date(y, mo - 1, day, 0, 0, 0, 0);
   const diffMs = d.getTime() - base.getTime();
   return Math.floor(diffMs / (SLOT_MINUTES * 60 * 1000));
 }
 
+/** Format a slot index as a local HH:mm time string. */
 function slotIndexToTime(idx: number): string {
-  const h = Math.floor((idx * SLOT_MINUTES) / 60);
-  const m = (idx * SLOT_MINUTES) % 60;
+  const totalMinutes = idx * SLOT_MINUTES;
+  const h = Math.floor(totalMinutes / 60) % 24;
+  const m = totalMinutes % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+/**
+ * Convert a slot index back to a UTC ISO string.
+ * The slot index is relative to local midnight of dateStr, so we construct
+ * the local datetime and let the Date constructor handle the UTC conversion.
+ */
 function slotIndexToISO(dateStr: string, slotIdx: number): string {
-  const base = new Date(`${dateStr}T00:00:00Z`);
-  base.setUTCMinutes(base.getUTCMinutes() + slotIdx * SLOT_MINUTES);
-  return base.toISOString();
+  const [y, mo, day] = dateStr.split("-").map(Number) as [number, number, number];
+  const totalMinutes = slotIdx * SLOT_MINUTES;
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return new Date(y, mo - 1, day, h, m, 0, 0).toISOString();
 }
 
 // ── Types derived from tRPC output (avoids unsafe `as` casts) ─────────────────
@@ -227,6 +239,7 @@ function ProposeDialog({
 
   const startLabel = format(new Date(startsAt), "EEE d MMM, HH:mm");
   const endLabel = format(new Date(endsAt), "HH:mm");
+  const tzLabel = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) { reset(); onClose(); } }}>
@@ -235,7 +248,7 @@ function ProposeDialog({
           <DialogTitle>Propose session</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          {startLabel} – {endLabel} (UTC)
+          {startLabel} – {endLabel} ({tzLabel})
         </p>
 
         {error && (
