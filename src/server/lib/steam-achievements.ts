@@ -108,10 +108,17 @@ export async function fetchAndCacheAchievements(
   // Require player data — if it's null (private profile, API error) we don't know
   // the unlocked count, so caching 0/total would be misleading. Return null instead.
   if (playerAchievements === null) return null;
+  // If schema is unavailable and the player array is empty, we can't distinguish
+  // "genuinely 0 achievements" from "API returned no data" — skip caching to avoid
+  // a permanent null cache that masks real data on future visits. The `if (total === 0)`
+  // guard below handles the legitimate "game has no achievements" case when schema is available.
   if (schemaAchievements === null && playerAchievements.length === 0) return null;
 
   const unlocked = playerAchievements.filter((a) => a.achieved === 1).length;
-  // Prefer schema count (authoritative total); fall back to player achievements array length
+  // Prefer schema count (authoritative total); fall back to player array length.
+  // Known limitation: when schema is unavailable, the player array may not be exhaustive
+  // for all games — `unlocked` could equal `total` in edge cases. Acceptable at MVP;
+  // schema is available for the vast majority of Steam titles.
   const total = schemaAchievements ?? playerAchievements.length;
 
   if (total === 0) return null; // game has no achievements
