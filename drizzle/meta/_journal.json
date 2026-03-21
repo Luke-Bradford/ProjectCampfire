@@ -225,6 +225,13 @@
       "when": 1774104260964,
       "tag": "0031_furry_sister_grimm",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1774104927593,
+      "tag": "0032_chemical_lily_hollister",
+      "breakpoints": true
     }
   ]
 }
