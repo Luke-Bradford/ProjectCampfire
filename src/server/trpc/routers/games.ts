@@ -336,6 +336,10 @@ export const gamesRouter = createTRPCRouter({
           if (r.lastPlayedAt != null && (existing.lastPlayedAt == null || r.lastPlayedAt > existing.lastPlayedAt)) {
             existing.lastPlayedAt = r.lastPlayedAt;
           }
+          // Defensive OR-merge: toggleFavourite bulk-updates all rows, but if rows
+          // somehow diverge (race / partial failure), treat the game as favourite if
+          // any row says so.
+          if (r.isFavourite) existing.isFavourite = true;
         } else {
           gameMap.set(r.gameId, {
             ...r.game,
@@ -746,29 +750,33 @@ export const gamesRouter = createTRPCRouter({
       if (rows.length === 0) throw new TRPCError({ code: "FORBIDDEN", message: "Game not in library." });
 
       const currentlyFavourite = rows[0]!.isFavourite;
-
-      // Enforce max 6 pinned games when adding a new one.
-      if (!currentlyFavourite) {
-        const [distinctCount] = await db
-          .select({ n: countDistinct(gameOwnerships.gameId) })
-          .from(gameOwnerships)
-          .where(and(eq(gameOwnerships.userId, ctx.user.id), eq(gameOwnerships.isFavourite, true)));
-        if ((distinctCount?.n ?? 0) >= 6) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "You can pin at most 6 favourite games." });
-        }
-      }
-
       const newValue = !currentlyFavourite;
-      // Apply to all ownership rows for this user+game (all platforms).
-      await db
-        .update(gameOwnerships)
-        .set({ isFavourite: newValue })
-        .where(
-          and(
-            eq(gameOwnerships.userId, ctx.user.id),
-            eq(gameOwnerships.gameId, input.gameId)
-          )
-        );
+
+      // Wrap the count-check and UPDATE in a transaction to prevent a TOCTOU race
+      // where two concurrent calls both read count=5 and both succeed, exceeding the limit.
+      await db.transaction(async (tx) => {
+        if (!currentlyFavourite) {
+          const [distinctCount] = await tx
+            .select({ n: countDistinct(gameOwnerships.gameId) })
+            .from(gameOwnerships)
+            .where(and(eq(gameOwnerships.userId, ctx.user.id), eq(gameOwnerships.isFavourite, true)));
+          if ((distinctCount?.n ?? 0) >= 6) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "You can pin at most 6 favourite games." });
+          }
+        }
+
+        // Apply to all ownership rows for this user+game (all platforms).
+        await tx
+          .update(gameOwnerships)
+          .set({ isFavourite: newValue })
+          .where(
+            and(
+              eq(gameOwnerships.userId, ctx.user.id),
+              eq(gameOwnerships.gameId, input.gameId)
+            )
+          );
+      });
+
       return { isFavourite: newValue };
     }),
 
@@ -803,6 +811,7 @@ export const gamesRouter = createTRPCRouter({
       }
     }
 
-    return [...gameMap.values()].slice(0, 6);
+    // toggleFavourite enforces a max of 6 distinct games; the map has at most 6 entries.
+    return [...gameMap.values()];
   }),
 });

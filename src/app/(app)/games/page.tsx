@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { GamesListSkeleton } from "@/components/ui/skeletons";
 import { Star } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -527,6 +528,7 @@ export default function GamesPage() {
       void utils.games.myGames.invalidate();
       void utils.games.myFavouriteGames.invalidate();
     },
+    onError: (err) => toast.error(err.message),
   });
 
   function setView(mode: ViewMode) {
