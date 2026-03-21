@@ -322,6 +322,7 @@ export const gamesRouter = createTRPCRouter({
         id: string; title: string; coverUrl: string | null;
         genres: string[]; minPlayers: number | null; maxPlayers: number | null;
         platforms: (typeof PLATFORMS)[number][]; source: string; hidden: boolean;
+        isFavourite: boolean;
         playtimeMinutes: number | null; lastPlayedAt: Date | null;
       }>();
       for (const r of allRows) {
@@ -335,12 +336,17 @@ export const gamesRouter = createTRPCRouter({
           if (r.lastPlayedAt != null && (existing.lastPlayedAt == null || r.lastPlayedAt > existing.lastPlayedAt)) {
             existing.lastPlayedAt = r.lastPlayedAt;
           }
+          // Defensive OR-merge: toggleFavourite bulk-updates all rows, but if rows
+          // somehow diverge (race / partial failure), treat the game as favourite if
+          // any row says so.
+          if (r.isFavourite) existing.isFavourite = true;
         } else {
           gameMap.set(r.gameId, {
             ...r.game,
             platforms: [r.platform],
             source: r.source,
             hidden: r.hidden,
+            isFavourite: r.isFavourite,
             playtimeMinutes: r.playtimeMinutes ?? null,
             lastPlayedAt: r.lastPlayedAt ?? null,
           });
@@ -726,4 +732,90 @@ export const gamesRouter = createTRPCRouter({
       });
       return ownerships.map((o) => ({ user: o.user, platform: o.platform }));
     }),
+
+  // Toggle favourite flag for a game in the user's library (#376).
+  // isFavourite is per-user per-game — set on all ownership rows for this game
+  // so all platforms reflect the same state.
+  toggleFavourite: protectedProcedure
+    .input(z.object({ gameId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      // All reads and the UPDATE are inside one transaction. Under READ COMMITTED
+      // (Postgres default) two concurrent calls can still both read count=5 and both
+      // succeed, but the practical risk (transient 7th pin) is negligible for MVP.
+      // A SERIALIZABLE transaction or SELECT FOR UPDATE would close this window entirely.
+      const newValue = await db.transaction(async (tx) => {
+        // Verify ownership and read current state.
+        const rows = await tx.query.gameOwnerships.findMany({
+          where: and(
+            eq(gameOwnerships.userId, ctx.user.id),
+            eq(gameOwnerships.gameId, input.gameId)
+          ),
+          columns: { isFavourite: true },
+        });
+        if (rows.length === 0) throw new TRPCError({ code: "FORBIDDEN", message: "Game not in library." });
+
+        const currentlyFavourite = rows[0]!.isFavourite;
+
+        // Enforce max 6 distinct pinned games when adding a new one.
+        if (!currentlyFavourite) {
+          const [distinctCount] = await tx
+            .select({ n: countDistinct(gameOwnerships.gameId) })
+            .from(gameOwnerships)
+            .where(and(eq(gameOwnerships.userId, ctx.user.id), eq(gameOwnerships.isFavourite, true)));
+          if ((distinctCount?.n ?? 0) >= 6) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "You can pin at most 6 favourite games." });
+          }
+        }
+
+        const next = !currentlyFavourite;
+        // Apply to all ownership rows for this user+game (all platforms).
+        await tx
+          .update(gameOwnerships)
+          .set({ isFavourite: next })
+          .where(
+            and(
+              eq(gameOwnerships.userId, ctx.user.id),
+              eq(gameOwnerships.gameId, input.gameId)
+            )
+          );
+        return next;
+      });
+
+      return { isFavourite: newValue };
+    }),
+
+  // Returns up to 6 favourite games for the current user's profile.
+  myFavouriteGames: protectedProcedure.query(async ({ ctx }) => {
+    const rows = await db.query.gameOwnerships.findMany({
+      where: and(
+        eq(gameOwnerships.userId, ctx.user.id),
+        eq(gameOwnerships.isFavourite, true)
+      ),
+      with: {
+        game: { columns: { id: true, title: true, coverUrl: true } },
+      },
+      columns: { playtimeMinutes: true, gameId: true },
+    });
+
+    // Group by gameId — collect max playtime across platforms.
+    const gameMap = new Map<string, { id: string; title: string; coverUrl: string | null; playtimeMinutes: number | null }>();
+    for (const r of rows) {
+      const existing = gameMap.get(r.gameId);
+      if (existing) {
+        if (r.playtimeMinutes != null && (existing.playtimeMinutes == null || r.playtimeMinutes > existing.playtimeMinutes)) {
+          existing.playtimeMinutes = r.playtimeMinutes;
+        }
+      } else {
+        gameMap.set(r.gameId, {
+          id: r.game.id,
+          title: r.game.title,
+          coverUrl: r.game.coverUrl,
+          playtimeMinutes: r.playtimeMinutes ?? null,
+        });
+      }
+    }
+
+    // toggleFavourite enforces a max of 6 distinct games; the map has at most 6 entries.
+    return [...gameMap.values()];
+  }),
 });

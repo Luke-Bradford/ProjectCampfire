@@ -1,0 +1,1 @@
+ALTER TABLE "game_ownerships" ADD COLUMN "is_favourite" boolean DEFAULT false NOT NULL;
