@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+
+const ALL_TIMEZONES: string[] = (() => {
+  try { return Intl.supportedValuesOf("timeZone"); }
+  catch { return ["UTC", "Europe/London", "America/New_York", "America/Los_Angeles"]; }
+})();
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -142,15 +148,17 @@ function TemplateForm({
 
       <div className="space-y-2">
         <Label htmlFor="rt-tz">Timezone</Label>
-        <Input
+        <input
           id="rt-tz"
+          list="rt-tz-list"
           value={form.timezone}
           onChange={(e) => set("timezone", e.target.value)}
           placeholder="Europe/London"
+          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring"
         />
-        <p className="text-xs text-muted-foreground">
-          IANA timezone name (e.g. America/New_York, Europe/London)
-        </p>
+        <datalist id="rt-tz-list">
+          {ALL_TIMEZONES.map((tz) => <option key={tz} value={tz} />)}
+        </datalist>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -214,7 +222,7 @@ export function RecurringTemplatesSection({
       void utils.recurring.list.invalidate({ groupId });
       setCreateOpen(false);
     },
-    onError: (err) => alert(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
   const update = api.recurring.update.useMutation({
@@ -222,12 +230,12 @@ export function RecurringTemplatesSection({
       void utils.recurring.list.invalidate({ groupId });
       setEditId(null);
     },
-    onError: (err) => alert(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
   const del = api.recurring.delete.useMutation({
     onSuccess: () => void utils.recurring.list.invalidate({ groupId }),
-    onError: (err) => alert(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
   const toggleActive = (id: string, active: boolean) => {
