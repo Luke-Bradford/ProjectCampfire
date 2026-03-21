@@ -206,7 +206,7 @@ async function maybeCreateGamePoll(
       groupId,
       type: "game",
       question: "What should we play?",
-      allowMultipleVotes: "false",
+      allowMultipleVotes: false,
       status: "open",
       createdBy,
     });

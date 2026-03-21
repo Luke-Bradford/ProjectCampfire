@@ -84,7 +84,7 @@ export const pollsRouter = createTRPCRouter({
         groupId: input.groupId ?? null,
         type: input.type,
         question: input.question,
-        allowMultipleVotes: input.allowMultipleVotes ? "true" : "false",
+        allowMultipleVotes: input.allowMultipleVotes,
         closesAt: input.closesAt ? new Date(input.closesAt) : null,
         status: "open",
         createdBy: ctx.user.id,
@@ -198,7 +198,7 @@ export const pollsRouter = createTRPCRouter({
 
       return {
         ...full,
-        allowMultipleVotes: full.allowMultipleVotes === "true",
+        allowMultipleVotes: full.allowMultipleVotes,
         options: full.options.map((o) => ({
           ...o,
           voteCount: o.votes.length,
@@ -242,7 +242,7 @@ export const pollsRouter = createTRPCRouter({
       }
 
       // If single-vote poll, remove any existing votes on other options first
-      if (poll.allowMultipleVotes !== "true") {
+      if (!poll.allowMultipleVotes) {
         const siblings = await db.query.pollOptions.findMany({
           where: eq(pollOptions.pollId, option.pollId),
           columns: { id: true },

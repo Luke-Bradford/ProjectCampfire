@@ -661,7 +661,7 @@ async function main() {
         eventId: "seed-event-next-2",
         type: "game",
         question: "What should we play on Saturday?",
-        allowMultipleVotes: "false",
+        allowMultipleVotes: false,
         status: "open",
         createdBy: "seed-user-bob",
         closesAt: setHour(nextSaturday, 17),
