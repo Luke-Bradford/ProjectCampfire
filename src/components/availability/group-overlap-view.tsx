@@ -51,37 +51,52 @@ function initials(name: string) {
 }
 
 /**
- * Convert a UTC ISO timestamp to a 30-min slot index relative to local
- * midnight of dateStr (yyyy-MM-dd in the viewer's local timezone).
+ * Convert a UTC ISO timestamp to a 30-min slot index within the viewer's
+ * local day. Uses local hour/minute accessors directly, which are DST-safe:
+ * the JS engine applies the correct local offset for the instant `iso`
+ * represents, so no manual UTC-offset arithmetic is needed.
+ *
+ * The date context is not needed — callers already filter slots to the
+ * correct day before calling this function.
  */
-function isoToSlotIndex(iso: string, dateStr: string): number {
+function isoToSlotIndex(iso: string): number {
   const d = new Date(iso);
-  // Local midnight: parse dateStr as a local date (no time zone suffix)
-  const [y, mo, day] = dateStr.split("-").map(Number) as [number, number, number];
-  const base = new Date(y, mo - 1, day, 0, 0, 0, 0);
-  const diffMs = d.getTime() - base.getTime();
-  return Math.floor(diffMs / (SLOT_MINUTES * 60 * 1000));
+  const localMins = d.getHours() * 60 + d.getMinutes();
+  return Math.floor(localMins / SLOT_MINUTES);
 }
 
-/** Format a slot index as a local HH:mm time string. */
+/** Format a slot index as a local HH:mm time string. Clamps to [0, SLOTS_PER_DAY). */
 function slotIndexToTime(idx: number): string {
-  const totalMinutes = idx * SLOT_MINUTES;
-  const h = Math.floor(totalMinutes / 60) % 24;
+  const clamped = Math.max(0, Math.min(SLOTS_PER_DAY - 1, idx));
+  const totalMinutes = clamped * SLOT_MINUTES;
+  const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
 /**
  * Convert a slot index back to a UTC ISO string.
- * The slot index is relative to local midnight of dateStr, so we construct
- * the local datetime and let the Date constructor handle the UTC conversion.
+ *
+ * The slot index represents a local time on dateStr. We construct a local
+ * Date, then verify the JS engine didn't silently shift the time due to a
+ * DST spring-forward gap (e.g. 02:00 → 03:00). If the constructed Date's
+ * local hours/minutes don't match what we asked for, we compensate by
+ * adding the delta so the stored UTC instant reflects the intended local time
+ * as closely as possible.
  */
 function slotIndexToISO(dateStr: string, slotIdx: number): string {
   const [y, mo, day] = dateStr.split("-").map(Number) as [number, number, number];
   const totalMinutes = slotIdx * SLOT_MINUTES;
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
-  return new Date(y, mo - 1, day, h, m, 0, 0).toISOString();
+  const d = new Date(y, mo - 1, day, h, m, 0, 0);
+  // Detect DST gap: if the engine shifted the time, compensate.
+  const actualMins = d.getHours() * 60 + d.getMinutes();
+  const expectedMins = totalMinutes % (24 * 60);
+  if (actualMins !== expectedMins) {
+    d.setMinutes(d.getMinutes() + (expectedMins - actualMins));
+  }
+  return d.toISOString();
 }
 
 // ── Types derived from tRPC output (avoids unsafe `as` casts) ─────────────────
@@ -98,8 +113,8 @@ function buildMemberSlots(slots: ComputedSlot[]): MemberSlots {
     if (slot.type !== "available") continue;
     const dateStr = slot.date;
     if (!result[dateStr]) result[dateStr] = new Set();
-    const startIdx = Math.max(0, isoToSlotIndex(slot.start, dateStr));
-    const endIdx = Math.min(SLOTS_PER_DAY, isoToSlotIndex(slot.end, dateStr));
+    const startIdx = Math.max(0, isoToSlotIndex(slot.start));
+    const endIdx = Math.min(SLOTS_PER_DAY, isoToSlotIndex(slot.end));
     for (let i = startIdx; i < endIdx; i++) {
       result[dateStr].add(i);
     }
