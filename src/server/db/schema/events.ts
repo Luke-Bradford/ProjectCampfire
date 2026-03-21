@@ -85,7 +85,7 @@ export const polls = pgTable("polls", {
   groupId: text("group_id").references(() => groups.id, { onDelete: "cascade" }),
   type: pollTypeEnum("type").notNull(),
   question: text("question").notNull(),
-  allowMultipleVotes: text("allow_multiple_votes").notNull().default("false"),
+  allowMultipleVotes: boolean("allow_multiple_votes").notNull().default(false),
   closesAt: timestamp("closes_at"),
   status: pollStatusEnum("status").notNull().default("open"),
   createdBy: text("created_by")

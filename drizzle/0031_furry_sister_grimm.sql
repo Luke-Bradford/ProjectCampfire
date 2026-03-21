@@ -1,0 +1,1 @@
+ALTER TABLE "polls" ALTER COLUMN "allow_multiple_votes" SET DATA TYPE boolean;

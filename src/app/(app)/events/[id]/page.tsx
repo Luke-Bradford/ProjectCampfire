@@ -96,7 +96,7 @@ function PollCard({
     id: string;
     question: string;
     status: string;
-    allowMultipleVotes: string;
+    allowMultipleVotes: boolean;
     createdBy: string;
     type: string;
     options: {
@@ -138,7 +138,7 @@ function PollCard({
           <p className="font-medium">{poll.question}</p>
           <p className="text-xs text-muted-foreground mt-0.5">
             {totalVotes} vote{totalVotes === 1 ? "" : "s"} ·{" "}
-            {poll.allowMultipleVotes === "true" ? "Multiple choice" : "Single choice"}
+            {poll.allowMultipleVotes ? "Multiple choice" : "Single choice"}
           </p>
         </div>
         {isClosed ? (
