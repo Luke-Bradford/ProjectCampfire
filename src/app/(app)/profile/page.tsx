@@ -380,7 +380,7 @@ export default function MyProfilePage() {
                   </div>
                   {totalAchievements && (
                     <p className="text-xs text-muted-foreground">
-                      🏆 {totalAchievements.unlocked.toLocaleString()} / {totalAchievements.total.toLocaleString()} achievements unlocked
+                      🏆 {new Intl.NumberFormat("en").format(totalAchievements.unlocked)} / {new Intl.NumberFormat("en").format(totalAchievements.total)} achievements unlocked
                     </p>
                   )}
                 </div>

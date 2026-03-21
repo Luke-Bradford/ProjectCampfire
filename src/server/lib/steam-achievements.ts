@@ -61,6 +61,7 @@ export async function fetchAndCacheAchievements(
     log.warn("STEAM_API_KEY not configured");
     return null;
   }
+  const apiKey = env.STEAM_API_KEY; // narrowed to string after the guard above
 
   // Load user Steam data + the PC ownership row (achievements come from Steam, always PC)
   const [userRow, ownershipRow] = await Promise.all([
@@ -80,8 +81,11 @@ export async function fetchAndCacheAchievements(
 
   if (!userRow?.steamId || !userRow.steamLibraryPublic) return null;
 
+  // No PC ownership row means the user doesn't own this game on Steam — skip.
+  if (!ownershipRow) return null;
+
   // Return cached values if present
-  if (ownershipRow?.achievementsUnlocked != null && ownershipRow?.achievementsTotal != null) {
+  if (ownershipRow.achievementsUnlocked != null && ownershipRow.achievementsTotal != null) {
     return { unlocked: ownershipRow.achievementsUnlocked, total: ownershipRow.achievementsTotal };
   }
 
@@ -94,18 +98,21 @@ export async function fetchAndCacheAchievements(
 
   // Fetch achievement data from Steam in parallel
   const [playerRes, schemaRes] = await Promise.allSettled([
-    fetchPlayerAchievements(userRow.steamId, gameRow.steamAppId),
-    fetchGameSchema(gameRow.steamAppId),
+    fetchPlayerAchievements(userRow.steamId, gameRow.steamAppId, apiKey),
+    fetchGameSchema(gameRow.steamAppId, apiKey),
   ]);
 
   const playerAchievements = playerRes.status === "fulfilled" ? playerRes.value : null;
   const schemaAchievements = schemaRes.status === "fulfilled" ? schemaRes.value : null;
 
-  if (playerAchievements === null && schemaAchievements === null) return null;
+  // Require player data — if it's null (private profile, API error) we don't know
+  // the unlocked count, so caching 0/total would be misleading. Return null instead.
+  if (playerAchievements === null) return null;
+  if (schemaAchievements === null && playerAchievements.length === 0) return null;
 
-  const unlocked = playerAchievements?.filter((a) => a.achieved === 1).length ?? 0;
-  // Prefer schema count (authoritative total); fall back to player count length
-  const total = schemaAchievements ?? playerAchievements?.length ?? 0;
+  const unlocked = playerAchievements.filter((a) => a.achieved === 1).length;
+  // Prefer schema count (authoritative total); fall back to player achievements array length
+  const total = schemaAchievements ?? playerAchievements.length;
 
   if (total === 0) return null; // game has no achievements
 
@@ -128,16 +135,18 @@ export async function fetchAndCacheAchievements(
 async function fetchPlayerAchievements(
   steamId: string,
   appId: string,
+  apiKey: string,
 ): Promise<PlayerAchievement[] | null> {
   const url = new URL("https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/");
-  url.searchParams.set("key", env.STEAM_API_KEY!);
+  url.searchParams.set("key", apiKey);
   url.searchParams.set("steamid", steamId);
   url.searchParams.set("appid", appId);
   url.searchParams.set("l", "english");
 
   const res = await fetch(url, { signal: AbortSignal.timeout(8_000) });
   if (!res.ok) {
-    // 400/403 = private or no achievements — not an error worth throwing
+    // 400/403 = private profile or game has no achievements — not an error worth throwing.
+    // Consume body to release the underlying socket before returning.
     await res.text();
     log.info("GetPlayerAchievements non-ok", { status: res.status, appId });
     return null;
@@ -148,13 +157,14 @@ async function fetchPlayerAchievements(
   return json.playerstats.achievements;
 }
 
-async function fetchGameSchema(appId: string): Promise<number | null> {
+async function fetchGameSchema(appId: string, apiKey: string): Promise<number | null> {
   const url = new URL("https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/");
-  url.searchParams.set("key", env.STEAM_API_KEY!);
+  url.searchParams.set("key", apiKey);
   url.searchParams.set("appid", appId);
 
   const res = await fetch(url, { signal: AbortSignal.timeout(8_000) });
   if (!res.ok) {
+    // Consume body to release the underlying socket before returning.
     await res.text();
     log.info("GetSchemaForGame non-ok", { status: res.status, appId });
     return null;

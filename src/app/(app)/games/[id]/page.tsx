@@ -220,7 +220,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ id: strin
             <p className="text-sm text-muted-foreground">{game.description}</p>
           )}
           <SteamSpyStats metadataJson={game.metadataJson} />
-          {game.myPlatforms.includes("pc") && <AchievementsSection gameId={id} />}
+          {game.myPlatforms?.includes("pc") && <AchievementsSection gameId={id} />}
           {game.priceDataJson && (
             <div className="flex items-center gap-2 pt-0.5">
               {game.priceDataJson.discountPercent > 0 ? (
