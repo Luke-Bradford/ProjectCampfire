@@ -88,35 +88,38 @@ export const eventsRouter = createTRPCRouter({
       });
 
       // Notify all other group members that a session has been proposed.
-      // Fire-and-forget: notification failure must not block the create response.
-      const members = await db.query.groupMemberships.findMany({
-        where: eq(groupMemberships.groupId, input.groupId),
-        columns: { userId: true },
-      });
-      const otherMembers = members.map((m) => m.userId).filter((uid) => uid !== ctx.user.id);
-      if (otherMembers.length > 0) {
+      // The entire block is fire-and-forget: any failure (including the member
+      // query) must not surface to the caller — the event was already created.
+      const proposerName = ctx.user.name ?? "Someone";
+      const groupName = group?.name ?? "";
+      void (async () => {
+        const members = await db.query.groupMemberships.findMany({
+          where: eq(groupMemberships.groupId, input.groupId),
+          columns: { userId: true },
+        });
+        const otherMembers = members.map((m) => m.userId).filter((uid) => uid !== ctx.user.id);
+        if (otherMembers.length === 0) return;
         const notifData = {
           eventId: id,
           eventTitle: input.title,
-          groupName: group?.name ?? "",
-          proposerName: ctx.user.name,
+          groupName,
+          proposerName,
         };
-        void db.insert(notifications)
+        await db.insert(notifications)
           .values(otherMembers.map((uid) => ({
             id: createId(),
             userId: uid,
             type: "event_proposed" as const,
             data: notifData,
-          })))
-          .catch((err: unknown) => log.error("notification insert(event_proposed) failed", { err: String(err) }));
+          })));
         for (const uid of otherMembers) {
           void enqueuePush(uid, {
             title: `New session proposed: ${input.title}`,
-            body: `${ctx.user.name} proposed a session in ${group?.name ?? "your group"}.`,
+            body: `${proposerName} proposed a session in ${groupName || "your group"}.`,
             url: `/events/${id}`,
           }).catch(() => undefined);
         }
-      }
+      })().catch((err: unknown) => log.error("event_proposed notification failed", { err: String(err) }));
 
       return { id };
     }),
