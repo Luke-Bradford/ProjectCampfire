@@ -4,6 +4,8 @@
 
 ProjectCampfire is a self-hostable platform that helps friend groups decide what to play, know who is free, see who already owns a game, and keep session planning plus conversation in one place — without scattering everything across Discord, WhatsApp, and Steam chat.
 
+**[See what it looks like →](docs/USER_GUIDE.md)**
+
 ---
 
 ## What it does
@@ -45,7 +47,7 @@ ProjectCampfire is a self-hostable platform that helps friend groups decide what
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/projectcampfire.git
+git clone https://github.com/Luke-Bradford/ProjectCampfire.git
 cd projectcampfire
 
 # First-time setup (checks prereqs, creates .env, starts Docker, runs migrations)
@@ -80,11 +82,13 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full self-hosting guide
 
 | Document | Description |
 |---|---|
-| [Product Brief](docs/PRODUCT_BRIEF.md) | Vision, personas, MVP scope and boundaries |
+| [User Guide](docs/USER_GUIDE.md) | Feature walkthrough with screenshots |
+| [Product Brief](docs/PRODUCT_BRIEF.md) | Vision, personas, and feature goals |
+| [MVP Boundaries](docs/MVP_BOUNDARIES.md) | What is and isn't in scope for the MVP |
 | [Architecture](docs/ARCHITECTURE.md) | Stack decisions, service diagram, hosting guide |
 | [Domain Model](docs/DOMAIN_MODEL.md) | Entity definitions, relationships, and business rules |
 | [Roadmap](docs/ROADMAP.md) | Phase 0–3 with goals and exit criteria |
-| [Backlog](docs/BACKLOG.md) | Full epic and story list |
+| [GitHub Issues](https://github.com/Luke-Bradford/ProjectCampfire/issues) | Active backlog, epics, and stories |
 | [Contributing](CONTRIBUTING.md) | Branch strategy, commit format, PR process |
 
 ---
