@@ -83,7 +83,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full self-hosting guide
 | Document | Description |
 |---|---|
 | [User Guide](docs/USER_GUIDE.md) | Feature walkthrough with screenshots |
-| [Product Brief](docs/PRODUCT_BRIEF.md) | Vision, personas, MVP scope and boundaries |
+| [Product Brief](docs/PRODUCT_BRIEF.md) | Vision, personas, and feature goals |
 | [MVP Boundaries](docs/MVP_BOUNDARIES.md) | What is and isn't in scope for the MVP |
 | [Architecture](docs/ARCHITECTURE.md) | Stack decisions, service diagram, hosting guide |
 | [Domain Model](docs/DOMAIN_MODEL.md) | Entity definitions, relationships, and business rules |
